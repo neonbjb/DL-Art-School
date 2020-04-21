@@ -9,6 +9,7 @@ class BaseModel():
     def __init__(self, opt):
         self.opt = opt
         self.device = torch.device('cuda' if opt['gpu_ids'] is not None else 'cpu')
+        self.amp_level = 'O0' if opt['amp_opt_level'] is None else opt['amp_opt_level']
         self.is_train = opt['is_train']
         self.schedulers = []
         self.optimizers = []
