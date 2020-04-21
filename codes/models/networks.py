@@ -32,11 +32,12 @@ def define_G(opt):
 
 # Discriminator
 def define_D(opt):
+    img_sz = opt['datasets']['train']['GT_size']
     opt_net = opt['network_D']
     which_model = opt_net['which_model_D']
 
     if which_model == 'discriminator_vgg_128':
-        netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'])
+        netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD

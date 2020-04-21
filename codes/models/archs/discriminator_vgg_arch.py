@@ -4,7 +4,8 @@ import torchvision
 
 
 class Discriminator_VGG_128(nn.Module):
-    def __init__(self, in_nc, nf):
+    # input_img_factor = multiplier to support images over 128x128. Only certain factors are supported.
+    def __init__(self, in_nc, nf, input_img_factor=1):
         super(Discriminator_VGG_128, self).__init__()
         # [64, 128, 128]
         self.conv0_0 = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
@@ -31,7 +32,7 @@ class Discriminator_VGG_128(nn.Module):
         self.conv4_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
         self.bn4_1 = nn.BatchNorm2d(nf * 8, affine=True)
 
-        self.linear1 = nn.Linear(512 * 4 * 4, 100)
+        self.linear1 = nn.Linear(512 * 4 * input_img_factor * 4 * input_img_factor, 100)
         self.linear2 = nn.Linear(100, 1)
 
         # activation function
