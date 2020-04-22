@@ -4,28 +4,28 @@ use_tb_logger: true
 model: srgan
 distortion: sr
 scale: 4
-gpu_ids: [2]
+gpu_ids: [0]
 
 #### datasets
 datasets:
   train:
     name: DIV2K
     mode: LQGT
-    dataroot_GT: ../datasets/DIV2K/DIV2K800_sub.lmdb
-    dataroot_LQ: ../datasets/DIV2K/DIV2K800_sub_bicLRx4.lmdb
+    dataroot_GT: ../datasets/div2k/DIV2K800_sub
+    dataroot_LQ: ../datasets/div2k/DIV2K800_sub_bicLRx4
 
     use_shuffle: true
-    n_workers: 6  # per GPU
+    n_workers: 16  # per GPU
     batch_size: 16
-    GT_size: 128
+    target_size: 128
     use_flip: true
     use_rot: true
     color: RGB
   val:
-    name: val_set14
+    name: div2kval
     mode: LQGT
-    dataroot_GT: ../datasets/val_set14/Set14
-    dataroot_LQ: ../datasets/val_set14/Set14_bicLRx4
+    dataroot_GT: ../datasets/div2k/div2k_valid_hr
+    dataroot_LQ: ../datasets/div2k/div2k_valid_lr_bicubic
 
 #### network structures
 network_G:
@@ -41,7 +41,7 @@ network_D:
 
 #### path
 path:
-  pretrain_model_G: ../experiments/pretrained_models/RRDB_PSNR_x4.pth
+  pretrain_model_G: ../experiments/RRDB_PSNR_x4.pth
   strict_load: true
   resume_state: ~
 
@@ -73,9 +73,9 @@ train:
   D_init_iters: 0
 
   manual_seed: 10
-  val_freq: !!float 5e3
+  val_freq: !!float 5e2
 
 #### logger
 logger:
-  print_freq: 100
-  save_checkpoint_freq: !!float 5e3
+  print_freq: 50
+  save_checkpoint_freq: !!float 5e2

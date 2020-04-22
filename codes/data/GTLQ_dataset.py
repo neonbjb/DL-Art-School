@@ -43,7 +43,7 @@ class LQGTDataset(data.Dataset):
             self._init_lmdb()
         GT_path, LQ_path = None, None
         scale = self.opt['scale']
-        GT_size = self.opt['target_size']
+        GT_size = self.opt['GT_size']
 
         # get GT image
         GT_path = self.paths_GT[index]

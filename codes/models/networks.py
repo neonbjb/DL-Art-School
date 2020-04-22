@@ -3,20 +3,23 @@ import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.EDVR_arch as EDVR_arch
-
+import math
 
 # Generator
 def define_G(opt):
     opt_net = opt['network_G']
     which_model = opt_net['which_model_G']
+    scale = opt['scale']
 
     # image restoration
     if which_model == 'MSRResNet':
         netG = SRResNet_arch.MSRResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                        nf=opt_net['nf'], nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == 'RRDBNet':
+        # RRDB does scaling in two steps, so take the sqrt of the scale we actually want to achieve and feed it to RRDB.
+        scale_per_step = math.sqrt(scale)
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'])
+                                    nf=opt_net['nf'], nb=opt_net['nb'], interpolation_scale_factor=scale_per_step)
     # video restoration
     elif which_model == 'EDVR':
         netG = EDVR_arch.EDVR(nf=opt_net['nf'], nframes=opt_net['nframes'],
@@ -24,6 +27,7 @@ def define_G(opt):
                               back_RBs=opt_net['back_RBs'], center=opt_net['center'],
                               predeblur=opt_net['predeblur'], HR_in=opt_net['HR_in'],
                               w_TSA=opt_net['w_TSA'])
+
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
 
@@ -32,7 +36,7 @@ def define_G(opt):
 
 # Discriminator
 def define_D(opt):
-    img_sz = opt['datasets']['train']['GT_size']
+    img_sz = opt['datasets']['train']['target_size']
     opt_net = opt['network_D']
     which_model = opt_net['which_model_D']
 

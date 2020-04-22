@@ -23,7 +23,7 @@ def main():
         opt['use_shuffle'] = True
         opt['n_workers'] = 8
         opt['batch_size'] = 16
-        opt['GT_size'] = 256
+        opt['target_size'] = 256
         opt['LQ_size'] = 64
         opt['scale'] = 4
         opt['use_flip'] = True
@@ -43,7 +43,7 @@ def main():
         opt['use_shuffle'] = True
         opt['n_workers'] = 8
         opt['batch_size'] = 16
-        opt['GT_size'] = 256
+        opt['target_size'] = 256
         opt['LQ_size'] = 64
         opt['scale'] = 4
         opt['use_flip'] = True
@@ -62,7 +62,7 @@ def main():
         opt['use_shuffle'] = True
         opt['n_workers'] = 8
         opt['batch_size'] = 16
-        opt['GT_size'] = 128
+        opt['target_size'] = 128
         opt['scale'] = 4
         opt['use_flip'] = True
         opt['use_rot'] = True

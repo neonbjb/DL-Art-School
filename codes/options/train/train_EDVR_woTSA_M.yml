@@ -22,7 +22,7 @@ datasets:
     use_shuffle: true
     n_workers: 3  # per GPU
     batch_size: 32
-    GT_size: 256
+    target_size: 256
     LQ_size: 64
     use_flip: true
     use_rot: true

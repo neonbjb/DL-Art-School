@@ -41,7 +41,7 @@ class REDSDataset(data.Dataset):
         self.half_N_frames = opt['N_frames'] // 2
         self.GT_root, self.LQ_root = opt['dataroot_GT'], opt['dataroot_LQ']
         self.data_type = self.opt['data_type']
-        self.LR_input = False if opt['GT_size'] == opt['LQ_size'] else True  # low resolution inputs
+        self.LR_input = False if opt['target_size'] == opt['LQ_size'] else True  # low resolution inputs
         #### directly load image keys
         if self.data_type == 'lmdb':
             self.paths_GT, _ = util.get_image_paths(self.data_type, opt['dataroot_GT'])
@@ -107,7 +107,7 @@ class REDSDataset(data.Dataset):
             self._init_lmdb()
 
         scale = self.opt['scale']
-        GT_size = self.opt['GT_size']
+        GT_size = self.opt['target_size']
         key = self.paths_GT[index]
         name_a, name_b = key.split('_')
         center_frame_idx = int(name_b)
