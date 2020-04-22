@@ -7,14 +7,14 @@ import torch.utils.data as data
 import data.util as util
 
 
-class LQGTDataset(data.Dataset):
+class GTLQDataset(data.Dataset):
     """
-    Read LQ (Low Quality, e.g. LR (Low Resolution), blurry, etc) and GT image pairs.
-    If only GT images are provided, generate LQ images on-the-fly.
+    Reads unpaired high-resolution and low resolution images. Downsampled, LR images matching the provided high res
+     images are produced and fed to the downstream model, which can be used in a pixel loss.
     """
 
     def __init__(self, opt):
-        super(LQGTDataset, self).__init__()
+        super(GTLQDataset, self).__init__()
         self.opt = opt
         self.data_type = self.opt['data_type']
         self.paths_LQ, self.paths_GT = None, None
@@ -43,7 +43,7 @@ class LQGTDataset(data.Dataset):
             self._init_lmdb()
         GT_path, LQ_path = None, None
         scale = self.opt['scale']
-        GT_size = self.opt['GT_size']
+        GT_size = self.opt['target_size']
 
         # get GT image
         GT_path = self.paths_GT[index]
