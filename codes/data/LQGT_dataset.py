@@ -23,6 +23,8 @@ class LQGTDataset(data.Dataset):
 
         self.paths_GT, self.sizes_GT = util.get_image_paths(self.data_type, opt['dataroot_GT'])
         self.paths_LQ, self.sizes_LQ = util.get_image_paths(self.data_type, opt['dataroot_LQ'])
+        if 'dataroot_PIX' in opt:
+            self.paths_PIX, self.sizes_PIX = util.get_image_paths(self.data_type, opt['dataroot_PIX'])
         assert self.paths_GT, 'Error: GT path is empty.'
         if self.paths_LQ and self.paths_GT:
             assert len(self.paths_LQ) == len(
@@ -37,6 +39,9 @@ class LQGTDataset(data.Dataset):
                                 meminit=False)
         self.LQ_env = lmdb.open(self.opt['dataroot_LQ'], readonly=True, lock=False, readahead=False,
                                 meminit=False)
+        if 'dataroot_PIX' in self.opt:
+            self.PIX_env = lmdb.open(self.opt['dataroot_PIX'], readonly=True, lock=False, readahead=False,
+                                    meminit=False)
 
     def __getitem__(self, index):
         if self.data_type == 'lmdb' and (self.GT_env is None or self.LQ_env is None):
@@ -54,6 +59,14 @@ class LQGTDataset(data.Dataset):
             img_GT = util.modcrop(img_GT, scale)
         if self.opt['color']:  # change color space if necessary
             img_GT = util.channel_convert(img_GT.shape[2], self.opt['color'], [img_GT])[0]
+
+        # get the pix image
+        if self.PIX_path is not None:
+            PIX_path = self.PIX_path[index]
+            img_PIX = util.read_img(self.PIX_env, PIX_path, resolution)
+            if self.opt['color']:  # change color space if necessary
+                img_PIX = util.channel_convert(img_PIX.shape[2], self.opt['color'], [img_PIX])[0]
+
 
         # get LQ image
         if self.paths_LQ:

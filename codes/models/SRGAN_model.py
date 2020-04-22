@@ -140,6 +140,10 @@ class SRGANModel(BaseModel):
             self.var_H = data['GT'].to(self.device)  # GT
             input_ref = data['ref'] if 'ref' in data else data['GT']
             self.var_ref = input_ref.to(self.device)
+        if 'PIX' in data:
+            self.pix = data['PIX']
+        else:
+            self.pix = self.var_H
 
     def optimize_parameters(self, step):
 
@@ -147,7 +151,6 @@ class SRGANModel(BaseModel):
             for i in range(self.var_L.shape[0]):
                 utils.save_image(self.var_H[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\hr", "%05i_%02i.png" % (step, i)))
                 utils.save_image(self.var_L[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\\lr", "%05i_%02i.png" % (step, i)))
-
 
         # G
         for p in self.netD.parameters():
@@ -159,7 +162,7 @@ class SRGANModel(BaseModel):
         l_g_total = 0
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
             if self.cri_pix:  # pixel loss
-                l_g_pix = self.l_pix_w * self.cri_pix(self.fake_H, self.var_H)
+                l_g_pix = self.l_pix_w * self.cri_pix(self.fake_H, self.pix)
                 l_g_total += l_g_pix
             if self.cri_fea:  # feature loss
                 real_fea = self.netF(self.var_H).detach()
