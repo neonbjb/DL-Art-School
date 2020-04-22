@@ -19,17 +19,17 @@ def main():
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = '../../datasets/DIV2K/DIV2K_train_HR'
-        opt['save_folder'] = '../../datasets/DIV2K/DIV2K800_sub'
+        opt['input_folder'] = '../../datasets/div2k/DIV2K_train_HR'
+        opt['save_folder'] = '../../datasets/div2k/DIV2K800_sub'
         opt['crop_sz'] = 480  # the size of each sub-image
         opt['step'] = 240  # step of the sliding crop window
         opt['thres_sz'] = 48  # size threshold
         extract_signle(opt)
     elif mode == 'pair':
-        GT_folder = '../../datasets/DIV2K/DIV2K_train_HR'
-        LR_folder = '../../datasets/DIV2K/DIV2K_train_LR_bicubic/X4'
-        save_GT_folder = '../../datasets/DIV2K/DIV2K800_sub'
-        save_LR_folder = '../../datasets/DIV2K/DIV2K800_sub_bicLRx4'
+        GT_folder = '../../datasets/div2k/DIV2K_train_HR'
+        LR_folder = '../../datasets/div2k/DIV2K_train_LR_bicubic/X4'
+        save_GT_folder = '../../datasets/div2k/DIV2K800_sub'
+        save_LR_folder = '../../datasets/div2k/DIV2K800_sub_bicLRx4'
         scale_ratio = 4
         crop_sz = 480  # the size of each sub-image (GT)
         step = 240  # step of the sliding crop window (GT)

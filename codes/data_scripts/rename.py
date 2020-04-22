@@ -3,7 +3,7 @@ import glob
 
 
 def main():
-    folder = '../../datasets/DIV2K/DIV2K_train_LR_bicubic/X4'
+    folder = 'datasets/div2k/DIV2K_valid_LR_bicubic/X4'
     DIV2K(folder)
     print('Finished.')
 
