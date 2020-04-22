@@ -1,5 +1,5 @@
 #### general settings
-name: ESRGANx4_blacked_ft
+name: ESRGANx4_blacked_lqprn
 use_tb_logger: true
 model: srgan
 distortion: sr
@@ -13,7 +13,8 @@ datasets:
     name: blacked
     mode: LQGT
     dataroot_GT: ../datasets/blacked/train/hr
-    dataroot_LQ: ../datasets/blacked/train/lr
+    dataroot_LQ: ../datasets/lqprn/train/lr
+    dataroot_PIX: ../datasets/lqprn/train/hr
 
     use_shuffle: true
     n_workers: 4  # per GPU
@@ -42,10 +43,10 @@ network_D:
 
 #### path
 path:
-  pretrain_model_G: ../experiments/ESRGANx4_blacked_ft/models/31500_G.pth
-  pretrain_model_D: ../experiments/ESRGANx4_blacked_ft/models/31500_D.pth
+  pretrain_model_G: ../experiments/blacked_gen_20000_epochs.pth
+  pretrain_model_D: ../experiments/blacked_disc_20000_epochs.pth
+  resume_state: ~
   strict_load: true
-  resume_state: ../experiments/ESRGANx4_blacked_ft/training_state/31500.state
 
 #### training settings: learning rate scheme, loss
 train:
@@ -65,7 +66,7 @@ train:
   lr_gamma: 0.5
 
   pixel_criterion: l1
-  pixel_weight: !!float 1e-2
+  pixel_weight: !!float 5e-3
   feature_criterion: l1
   feature_weight: 1
   gan_type: ragan  # gan | ragan
