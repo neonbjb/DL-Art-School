@@ -21,7 +21,7 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
                                            num_workers=num_workers, sampler=sampler, drop_last=True,
                                            pin_memory=False)
     else:
-        return torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
+        return torch.utils.data.DataLoader(dataset, batch_size=12, shuffle=False, num_workers=3,
                                            pin_memory=False)
 
 
@@ -32,8 +32,9 @@ def create_dataset(dataset_opt):
         from data.LQ_dataset import LQDataset as D
     elif mode == 'LQGT':
         from data.LQGT_dataset import LQGTDataset as D
-    elif mode == 'GTLQ':
-        from data.GTLQ_dataset import GTLQDataset as D
+    # datasets for image corruption
+    elif mode == 'downsample':
+        from data.Downsample_dataset import DownsampleDataset as D
     # datasets for video restoration
     elif mode == 'REDS':
         from data.REDS_dataset import REDSDataset as D
