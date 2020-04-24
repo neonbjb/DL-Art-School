@@ -1,0 +1,29 @@
+name: RRDB_ESRGAN_x4
+suffix: ~  # add suffix to saved images
+model: corruptgan
+distortion: downsample
+scale: 4
+crop_border: ~  # crop border when evaluation. If None(~), crop the scale pixels
+gpu_ids: [0]
+
+datasets:
+  test_1:  # the 1st test dataset
+    name: vixen
+    mode: downsample
+    dataroot_GT: K:\4k6k\vixen4k\hr
+    dataroot_LQ: K:\4k6k\vixen4k\lr
+    batch_size: 100
+    n_workers: 4  # per GPU
+    target_size: 64
+
+#### network structures
+network_G:
+  which_model_G: HighToLowResNet
+  in_nc: 3
+  out_nc: 3
+  nf: 128
+  nb: 30
+
+#### path
+path:
+  pretrain_model_G: ../experiments/blacked_adrianna_corrupt_G.pth

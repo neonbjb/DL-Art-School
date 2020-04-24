@@ -1,8 +1,8 @@
 #### general settings
-name: ESRGANx4_blacked_ramped_feat
+name: ESRGAN_blacked_corrupt_lqprn
 use_tb_logger: true
-model: srgan
-distortion: sr
+model: corruptgan
+distortion: downsample
 scale: 4
 gpu_ids: [0]
 amp_opt_level: O1
@@ -11,40 +11,39 @@ amp_opt_level: O1
 datasets:
   train:
     name: blacked
-    mode: LQGT
+    mode: downsample
     dataroot_GT: ../datasets/blacked/train/hr
     dataroot_LQ: ../datasets/lqprn/train/lr
-    dataroot_PIX: ../datasets/lqprn/train/hr
-
+    mismatched_Data_OK: false
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 12
-    target_size: 256
+    batch_size: 16
+    target_size: 64
     use_flip: false
     use_rot: false
     color: RGB
   val:
     name: blacked_val
-    mode: LQGT
-    dataroot_GT: ../datasets/vrp/validation/hr
-    dataroot_LQ: ../datasets/vrp/validation/lr
+    mode: downsample
+    target_size: 64
+    dataroot_GT: ../datasets/blacked/val/hr
+    dataroot_LQ: ../datasets/blacked/val/lr
 
 #### network structures
 network_G:
-  which_model_G: RRDBNet
+  which_model_G: HighToLowResNet
   in_nc: 3
   out_nc: 3
-  nf: 64
-  nb: 23
+  nf: 128
+  nb: 30
 network_D:
   which_model_D: discriminator_vgg_128
   in_nc: 3
-  nf: 64
+  nf: 96
 
 #### path
 path:
-  pretrain_model_G: ../experiments/blacked_ft_G.pth
-  pretrain_model_D: ../experiments/blacked_ft_D.pth
+  pretrain_model_G: ~
   resume_state: ~
   strict_load: true
 
@@ -62,17 +61,14 @@ train:
 
   niter: 400000
   warmup_iter: -1  # no warm up
-  lr_steps: [10000, 20000, 30000, 40000, 50000]
+  lr_steps: [1000, 2000, 3500, 5000, 6500]
   lr_gamma: 0.5
 
   pixel_criterion: l1
   pixel_weight: !!float 1e-2
   feature_criterion: l1
-  feature_weight: !!float 1e0
-  feature_weight_decay: .95
-  feature_weight_decay_steps: 2500
-  feature_weight_minimum: !!float 1e-3
-  gan_type: ragan  # gan | ragan
+  feature_weight: 0
+  gan_type: gan  # gan | ragan
   gan_weight: !!float 1e-1
 
   D_update_ratio: 1

@@ -1,5 +1,5 @@
 #### general settings
-name: ESRGANx4_blacked_ramped_feat
+name: ESRGANx4_blacked_for_adrianna
 use_tb_logger: true
 model: srgan
 distortion: sr
@@ -10,12 +10,10 @@ amp_opt_level: O1
 #### datasets
 datasets:
   train:
-    name: blacked
+    name: vixen
     mode: LQGT
-    dataroot_GT: ../datasets/blacked/train/hr
-    dataroot_LQ: ../datasets/lqprn/train/lr
-    dataroot_PIX: ../datasets/lqprn/train/hr
-
+    dataroot_GT: K:\4k6k\vixen4k\hr
+    dataroot_LQ: E:\4k6k\mmsr\results\RRDB_ESRGAN_x4\vixen
     use_shuffle: true
     n_workers: 4  # per GPU
     batch_size: 12
@@ -24,10 +22,10 @@ datasets:
     use_rot: false
     color: RGB
   val:
-    name: blacked_val
+    name: adrianna_val
     mode: LQGT
-    dataroot_GT: ../datasets/vrp/validation/hr
-    dataroot_LQ: ../datasets/vrp/validation/lr
+    dataroot_GT: ../datasets/adrianna/val/hr
+    dataroot_LQ: ../datasets/adrianna/val/lr
 
 #### network structures
 network_G:
@@ -69,11 +67,11 @@ train:
   pixel_weight: !!float 1e-2
   feature_criterion: l1
   feature_weight: !!float 1e0
-  feature_weight_decay: .95
+  feature_weight_decay: 1
   feature_weight_decay_steps: 2500
   feature_weight_minimum: !!float 1e-3
   gan_type: ragan  # gan | ragan
-  gan_weight: !!float 1e-1
+  gan_weight: !!float 1e-2
 
   D_update_ratio: 1
   D_init_iters: 0
