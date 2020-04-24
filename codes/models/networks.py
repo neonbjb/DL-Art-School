@@ -3,6 +3,7 @@ import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.EDVR_arch as EDVR_arch
+import models.archs.HighToLowResNet as HighToLowResNet
 import math
 
 # Generator
@@ -20,6 +21,10 @@ def define_G(opt):
         scale_per_step = math.sqrt(scale)
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], interpolation_scale_factor=scale_per_step)
+    # image corruption
+    elif which_model == 'HighToLowResNet':
+        netG = HighToLowResNet.HighToLowResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                                nf=opt_net['nf'], nb=opt_net['nb'], downscale=opt_net['scale'])
     # video restoration
     elif which_model == 'EDVR':
         netG = EDVR_arch.EDVR(nf=opt_net['nf'], nframes=opt_net['nframes'],

@@ -7,7 +7,7 @@ def create_model(opt):
     # image restoration
     if model == 'sr':  # PSNR-oriented super resolution
         from .SR_model import SRModel as M
-    elif model == 'srgan':  # GAN-based super resolution, SRGAN / ESRGAN
+    elif model == 'srgan' or model == 'corruptgan':  # GAN-based super resolution(SRGAN / ESRGAN), or corruption use same logic
         from .SRGAN_model import SRGANModel as M
     # video restoration
     elif model == 'video_base':

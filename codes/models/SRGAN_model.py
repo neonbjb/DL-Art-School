@@ -55,6 +55,9 @@ class SRGANModel(BaseModel):
                 else:
                     raise NotImplementedError('Loss type [{:s}] not recognized.'.format(l_fea_type))
                 self.l_fea_w = train_opt['feature_weight']
+                self.l_fea_w_decay = train_opt['feature_weight_decay']
+                self.l_fea_w_decay_steps = train_opt['feature_weight_decay_steps']
+                self.l_fea_w_minimum = train_opt['feature_weight_minimum']
             else:
                 logger.info('Remove feature loss.')
                 self.cri_fea = None
@@ -143,19 +146,19 @@ class SRGANModel(BaseModel):
             self.pix = data['PIX'].to(self.device)
 
     def optimize_parameters(self, step):
-
-        if step % 50 == 0:
-            for i in range(self.var_L.shape[0]):
-                utils.save_image(self.var_H[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\hr", "%05i_%02i.png" % (step, i)))
-                utils.save_image(self.var_L[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\\lr", "%05i_%02i.png" % (step, i)))
-                utils.save_image(self.pix[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\\pix", "%05i_%02i.png" % (step, i)))
-
         # G
         for p in self.netD.parameters():
             p.requires_grad = False
 
         self.optimizer_G.zero_grad()
         self.fake_H = self.netG(self.var_L)
+
+        if step % 50 == 0:
+            for i in range(self.var_L.shape[0]):
+                utils.save_image(self.var_H[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\hr", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.var_L[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\\lr", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.pix[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\\pix", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.fake_H[i].cpu().detach(), os.path.join("E:\\4k6k\\temp\\gen", "%05i_%02i.png" % (step, i)))
 
         l_g_total = 0
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -167,6 +170,11 @@ class SRGANModel(BaseModel):
                 fake_fea = self.netF(self.fake_H)
                 l_g_fea = self.l_fea_w * self.cri_fea(fake_fea, real_fea)
                 l_g_total += l_g_fea
+
+                # Decay the influence of the feature loss. As the model trains, the GAN will play a stronger role
+                # in the resultant image.
+                if step % self.l_fea_w_decay_steps == 0:
+                    self.l_fea_w = max(self.l_fea_w_minimum, self.l_fea_w * self.l_fea_w_decay)
 
             if self.opt['train']['gan_type'] == 'gan':
                 pred_g_fake = self.netD(self.fake_H)
@@ -193,7 +201,8 @@ class SRGANModel(BaseModel):
             # real
             pred_d_real = self.netD(self.var_ref)
             l_d_real = self.cri_gan(pred_d_real, True)
-            l_d_real.backward()
+            with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
+                l_d_real_scaled.backward()
             # fake
             pred_d_fake = self.netD(self.fake_H.detach())  # detach to avoid BP to G
             l_d_fake = self.cri_gan(pred_d_fake, False)
@@ -222,12 +231,13 @@ class SRGANModel(BaseModel):
             if self.cri_pix:
                 self.log_dict['l_g_pix'] = l_g_pix.item()
             if self.cri_fea:
+                self.log_dict['feature_weight'] = self.l_fea_w
                 self.log_dict['l_g_fea'] = l_g_fea.item()
             self.log_dict['l_g_gan'] = l_g_gan.item()
-        self.log_dict['l_g_total'] = l_g_total.item()
-        self.log_dict['l_d_real'] = l_d_real.item()
-        self.log_dict['l_d_fake'] = l_d_fake.item()
-        self.log_dict['D_fake'] = torch.mean(pred_d_fake.detach())
+            self.log_dict['l_g_total'] = l_g_total.item()
+            self.log_dict['l_d_real'] = l_d_real.item()
+            self.log_dict['l_d_fake'] = l_d_fake.item()
+            self.log_dict['D_fake'] = torch.mean(pred_d_fake.detach())
 
     def test(self):
         self.netG.eval()

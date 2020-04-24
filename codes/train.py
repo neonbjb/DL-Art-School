@@ -29,7 +29,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='options/train/finetune_ESRGAN_blacked.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='options/train/finetune_corruptGAN_adrianna.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -176,7 +176,7 @@ def main():
                     logger.info(message)
             #### validation
             if opt['datasets'].get('val', None) and current_step % opt['train']['val_freq'] == 0:
-                if opt['model'] in ['sr', 'srgan'] and rank <= 0:  # image restoration validation
+                if opt['model'] in ['sr', 'srgan', 'corruptgan'] and rank <= 0:  # image restoration validation
                     # does not support multi-GPU validation
                     pbar = util.ProgressBar(len(val_loader))
                     avg_psnr = 0.

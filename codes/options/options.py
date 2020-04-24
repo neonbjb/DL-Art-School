@@ -15,14 +15,14 @@ def parse(opt_path, is_train=True):
     print('export CUDA_VISIBLE_DEVICES=' + gpu_list)
 
     opt['is_train'] = is_train
-    if opt['distortion'] == 'sr':
+    if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
         scale = opt['scale']
 
     # datasets
     for phase, dataset in opt['datasets'].items():
         phase = phase.split('_')[0]
         dataset['phase'] = phase
-        if opt['distortion'] == 'sr':
+        if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
             dataset['scale'] = scale
         is_lmdb = False
         if dataset.get('dataroot_GT', None) is not None:
@@ -62,7 +62,7 @@ def parse(opt_path, is_train=True):
         opt['path']['log'] = results_root
 
     # network
-    if opt['distortion'] == 'sr':
+    if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
         opt['network_G']['scale'] = scale
 
     return opt
