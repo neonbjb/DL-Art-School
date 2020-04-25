@@ -22,9 +22,9 @@ class HighToLowResNet(nn.Module):
         # The first will be applied against the hi-res inputs and will have only 4 layers.
         # The second will be applied after half of the downscaling and will also have only 6 layers.
         # The final will be applied against the final resolution and will have all of the remaining layers.
-        self.trunk_hires = arch_util.make_layer(basic_block, 4)
-        self.trunk_medres = arch_util.make_layer(basic_block, 6)
-        self.trunk_lores = arch_util.make_layer(basic_block2, nb - 10)
+        self.trunk_hires = arch_util.make_layer(basic_block, 5)
+        self.trunk_medres = arch_util.make_layer(basic_block, 10)
+        self.trunk_lores = arch_util.make_layer(basic_block2, nb - 15)
 
         # downsampling
         if self.downscale == 4:

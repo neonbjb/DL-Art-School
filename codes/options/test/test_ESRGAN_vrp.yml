@@ -23,4 +23,4 @@ network_G:
 
 #### path
 path:
-  pretrain_model_G: ../experiments/ESRGANx4_blacked_ramped_feat/models/35000_G.pth
+  pretrain_model_G: ../experiments/ESRGANx4_blacked_for_adrianna/models/19500_G.pth

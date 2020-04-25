@@ -1,5 +1,5 @@
 #### general settings
-name: ESRGAN_blacked_corrupt_lqprn
+name: corruptGAN_4k_lqprn_closeup
 use_tb_logger: true
 model: corruptgan
 distortion: downsample
@@ -12,9 +12,9 @@ datasets:
   train:
     name: blacked
     mode: downsample
-    dataroot_GT: ../datasets/blacked/train/hr
-    dataroot_LQ: ../datasets/lqprn/train/lr
-    mismatched_Data_OK: false
+    dataroot_GT: K:\\4k6k\\4k_closeup\\hr
+    dataroot_LQ: E:\\4k6k\\adrianna\\for_training\\lr
+    mismatched_Data_OK: true
     use_shuffle: true
     n_workers: 4  # per GPU
     batch_size: 16
@@ -34,12 +34,12 @@ network_G:
   which_model_G: HighToLowResNet
   in_nc: 3
   out_nc: 3
-  nf: 128
-  nb: 30
+  nf: 64
+  nb: 64
 network_D:
   which_model_D: discriminator_vgg_128
   in_nc: 3
-  nf: 96
+  nf: 64
 
 #### path
 path:
@@ -61,7 +61,7 @@ train:
 
   niter: 400000
   warmup_iter: -1  # no warm up
-  lr_steps: [1000, 2000, 3500, 5000, 6500]
+  lr_steps: [4000, 8000, 12000, 15000, 20000]
   lr_gamma: 0.5
 
   pixel_criterion: l1
@@ -71,8 +71,8 @@ train:
   gan_type: gan  # gan | ragan
   gan_weight: !!float 1e-1
 
-  D_update_ratio: 1
-  D_init_iters: 0
+  D_update_ratio: 2
+  D_init_iters: 500
 
   manual_seed: 10
   val_freq: !!float 5e2

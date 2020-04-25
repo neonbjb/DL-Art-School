@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.nn.parallel import DataParallel, DistributedDataParallel
 import models.networks as networks
 import models.lr_scheduler as lr_scheduler
-from .base_model import BaseModel
+from models.base_model import BaseModel
 from models.loss import GANLoss
 from apex import amp
 
@@ -150,8 +150,11 @@ class SRGANModel(BaseModel):
         for p in self.netD.parameters():
             p.requires_grad = False
 
-        self.optimizer_G.zero_grad()
-        self.fake_H = self.netG(self.var_L)
+        if step > self.D_init_iters:
+            self.optimizer_G.zero_grad()
+            self.fake_H = self.netG(self.var_L)
+        else:
+            self.fake_H = self.pix
 
         if step % 50 == 0:
             for i in range(self.var_L.shape[0]):
@@ -235,9 +238,9 @@ class SRGANModel(BaseModel):
                 self.log_dict['l_g_fea'] = l_g_fea.item()
             self.log_dict['l_g_gan'] = l_g_gan.item()
             self.log_dict['l_g_total'] = l_g_total.item()
-            self.log_dict['l_d_real'] = l_d_real.item()
-            self.log_dict['l_d_fake'] = l_d_fake.item()
-            self.log_dict['D_fake'] = torch.mean(pred_d_fake.detach())
+        self.log_dict['l_d_real'] = l_d_real.item()
+        self.log_dict['l_d_fake'] = l_d_fake.item()
+        self.log_dict['D_fake'] = torch.mean(pred_d_fake.detach())
 
     def test(self):
         self.netG.eval()

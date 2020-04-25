@@ -41,9 +41,9 @@ network_D:
 
 #### path
 path:
-  pretrain_model_G: ../experiments/blacked_ft_G.pth
-  pretrain_model_D: ../experiments/blacked_ft_D.pth
-  resume_state: ~
+  pretrain_model_G: ../experiments/ESRGANx4_blacked_for_adrianna/models/15500_G.pth
+  pretrain_model_D: ../experiments/ESRGANx4_blacked_for_adrianna/models/15500_D.pth
+  resume_state: ../experiments/ESRGANx4_blacked_for_adrianna/training_state/15500.state
   strict_load: true
 
 #### training settings: learning rate scheme, loss
@@ -71,7 +71,7 @@ train:
   feature_weight_decay_steps: 2500
   feature_weight_minimum: !!float 1e-3
   gan_type: ragan  # gan | ragan
-  gan_weight: !!float 1e-2
+  gan_weight: !!float 1e-1
 
   D_update_ratio: 1
   D_init_iters: 0
