@@ -30,6 +30,28 @@ def make_layer(block, n_layers):
         layers.append(block())
     return nn.Sequential(*layers)
 
+class ResidualBlock(nn.Module):
+    '''Residual block with BN
+    ---Conv-BN-ReLU-Conv-+-
+     |________________|
+    '''
+
+    def __init__(self, nf=64):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
+        self.BN1 = nn.BatchNorm2d(nf)
+        self.conv2 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
+        self.BN2 = nn.BatchNorm2d(nf)
+
+        # initialization
+        initialize_weights([self.conv1, self.conv2], 0.1)
+
+    def forward(self, x):
+        identity = x
+        out = F.relu(self.BN1(self.conv1(x)), inplace=True)
+        out = self.BN2(self.conv2(out))
+        return identity + out
+
 
 class ResidualBlock_noBN(nn.Module):
     '''Residual block w/o BN
