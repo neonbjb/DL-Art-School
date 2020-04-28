@@ -5,7 +5,7 @@ model: corruptgan
 distortion: downsample
 scale: 1
 gpu_ids: [0]
-amp_opt_level: O1
+amp_opt_level: O0
 
 #### datasets
 datasets:
@@ -15,6 +15,7 @@ datasets:
     dataroot_GT: K:\\4k6k\\4k_closeup\\hr
     dataroot_LQ: E:\\4k6k\\adrianna\\for_training\\hr
     mismatched_Data_OK: true
+    doCrop: false
     use_shuffle: true
     n_workers: 4  # per GPU
     batch_size: 16
@@ -34,12 +35,11 @@ network_G:
   which_model_G: HighToLowResNet
   in_nc: 3
   out_nc: 3
-  nf: 64
-  nb: 56
+  nf: 16
 network_D:
   which_model_D: discriminator_vgg_128
   in_nc: 3
-  nf: 128
+  nf: 96
 
 #### path
 path:
@@ -71,7 +71,7 @@ train:
   gan_type: ragan  # gan | ragan
   gan_weight: !!float 1e-1
 
-  D_update_ratio: 2
+  D_update_ratio: 1
   D_init_iters: 0
 
   manual_seed: 10

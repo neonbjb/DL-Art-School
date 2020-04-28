@@ -22,21 +22,21 @@ class HighToLowResNet(nn.Module):
 
         # All sub-modules must be explicit members. Make it so. Then add them to a list.
         self.trunk1 = arch_util.make_layer(functools.partial(arch_util.ResidualBlock_noBN, nf=nf), 4)
-        self.trunk2 = arch_util.make_layer(functools.partial(arch_util.ResidualBlock_noBN, nf=nf*4), 8)
-        self.trunk3 = arch_util.make_layer(functools.partial(arch_util.ResidualBlock_noBN, nf=nf*8), 16)
-        self.trunk4 = arch_util.make_layer(functools.partial(arch_util.ResidualBlock_noBN, nf=nf*16), 32)
+        self.trunk2 = arch_util.make_layer(functools.partial(arch_util.ResidualBlock_noBN, nf=nf*2), 6)
+        self.trunk3 = arch_util.make_layer(functools.partial(arch_util.ResidualBlock_noBN, nf=nf*4), 12)
+        self.trunk4 = arch_util.make_layer(functools.partial(arch_util.ResidualBlock_noBN, nf=nf*8), 12)
         self.trunks = [self.trunk1, self.trunk2, self.trunk3, self.trunk4]
-        self.trunkshapes = [4, 8, 16, 32]
+        self.trunkshapes = [4, 6, 12, 12]
 
-        self.r1 = nn.Conv2d(nf, nf*4, 3, stride=2, padding=1, bias=True)
-        self.r2 = nn.Conv2d(nf*4, nf*8, 3, stride=2, padding=1, bias=True)
-        self.r3 = nn.Conv2d(nf*8, nf*16, 3, stride=2, padding=1, bias=True)
+        self.r1 = nn.Conv2d(nf, nf*2, 3, stride=2, padding=1, bias=True)
+        self.r2 = nn.Conv2d(nf*2, nf*4, 3, stride=2, padding=1, bias=True)
+        self.r3 = nn.Conv2d(nf*4, nf*8, 3, stride=2, padding=1, bias=True)
         self.reducers = [self.r1, self.r2, self.r3]
 
         self.pixel_shuffle = nn.PixelShuffle(2)
 
-        self.a1 = nn.Conv2d(nf*4, nf*8, 3, stride=1, padding=1, bias=True)
-        self.a2 = nn.Conv2d(nf*2, nf*4, 3, stride=1, padding=1, bias=True)
+        self.a1 = nn.Conv2d(nf*2, nf*4, 3, stride=1, padding=1, bias=True)
+        self.a2 = nn.Conv2d(nf, nf*4, 3, stride=1, padding=1, bias=True)
         self.a3 = nn.Conv2d(nf, nf, 3, stride=1, padding=1, bias=True)
         self.assemblers = [self.a1, self.a2, self.a3]
 
@@ -45,7 +45,7 @@ class HighToLowResNet(nn.Module):
         elif self.downscale == 2:
             nf_last = nf * 4
         elif self.downscale == 4:
-            nf_last = nf * 8
+            nf_last = nf * 4
 
         self.conv_last = nn.Conv2d(nf_last, out_nc, 3, stride=1, padding=1, bias=True)
 
