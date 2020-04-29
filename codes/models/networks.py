@@ -1,6 +1,7 @@
 import torch
 import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
+import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.EDVR_arch as EDVR_arch
 import models.archs.HighToLowResNet as HighToLowResNet
@@ -52,6 +53,9 @@ def define_D(opt):
 
     if which_model == 'discriminator_vgg_128':
         netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
+    elif which_model == 'discriminator_resnet':
+        netD = DiscriminatorResnet_arch.DiscriminatorResnet(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_size=img_sz,
+                                                            trunk_resblocks=opt_net['trunk_resblocks'], skip_resblocks=opt_net['skip_resblocks'])
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD
