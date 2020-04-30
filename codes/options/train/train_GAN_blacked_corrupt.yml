@@ -16,8 +16,8 @@ datasets:
     dataroot_LQ: E:\\4k6k\\datasets\\ultra_lowq\\for_training
     mismatched_Data_OK: true
     use_shuffle: true
-    n_workers: 8 # per GPU
-    batch_size: 32
+    n_workers: 0 # per GPU
+    batch_size: 16
     target_size: 64
     use_flip: false
     use_rot: false
@@ -34,31 +34,29 @@ network_G:
   which_model_G: FlatProcessorNet
   in_nc: 3
   out_nc: 3
-  nf: 32
-  ra_blocks: 3
-  assembler_blocks: 2
+  nf: 48
+  ra_blocks: 4
+  assembler_blocks: 3
 
 network_D:
   which_model_D: discriminator_resnet
   in_nc: 3
-  nf: 32
-  trunk_resblocks: 3
-  skip_resblocks: 2
+  nf: 64
 
 #### path
 path:
   pretrain_model_G: ~
-  pretrain_model_D: ~
+  pretrain_model_D: ~ #../experiments/resnet_corrupt_discriminator_fixup.pth
   resume_state: ~
   strict_load: true
 
 #### training settings: learning rate scheme, loss
 train:
-  lr_G: !!float 1e-5
+  lr_G: !!float 1e-4
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
-  lr_D: !!float 1e-5
+  lr_D: !!float 1e-4
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
@@ -66,18 +64,18 @@ train:
 
   niter: 400000
   warmup_iter: -1  # no warm up
-  lr_steps: [4000, 8000, 12000, 15000, 20000]
+  lr_steps: [12000, 24000, 36000, 48000, 64000]
   lr_gamma: 0.5
 
-  pixel_criterion: l1
+  pixel_criterion: l2
   pixel_weight: !!float 1e-2
   feature_criterion: l1
   feature_weight: 0
-  gan_type: gan  # gan | ragan
+  gan_type: ragan  # gan | ragan
   gan_weight: !!float 1e-1
 
-  D_update_ratio: 1
-  D_init_iters: 1500
+  D_update_ratio: 2
+  D_init_iters: 1200
 
   manual_seed: 10
   val_freq: !!float 5e2
