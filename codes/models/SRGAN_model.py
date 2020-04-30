@@ -150,16 +150,9 @@ class SRGANModel(BaseModel):
         for p in self.netD.parameters():
             p.requires_grad = False
 
-        disc_passthrough = None
         if step > self.D_init_iters:
             self.optimizer_G.zero_grad()
-            genOut = self.netG(self.var_L)
-            if type(genOut) is tuple:
-                self.fake_H = genOut[0]
-                disc_passthrough = genOut[1]
-            else:
-                self.fake_H = genOut
-                disc_passthrough = None
+            self.fake_H = self.netG(self.var_L)
         else:
             self.fake_H = self.pix
 
@@ -186,14 +179,12 @@ class SRGANModel(BaseModel):
                 if step % self.l_fea_w_decay_steps == 0:
                     self.l_fea_w = max(self.l_fea_w_minimum, self.l_fea_w * self.l_fea_w_decay)
 
-            if disc_passthrough is not None:
-                pred_g_fake = self.netD(self.fake_H, disc_passthrough)
-            else:
-                pred_g_fake = self.netD(self.fake_H)
             if self.opt['train']['gan_type'] == 'gan':
+                pred_g_fake = self.netD(self.fake_H)
                 l_g_gan = self.l_gan_w * self.cri_gan(pred_g_fake, True)
             elif self.opt['train']['gan_type'] == 'ragan':
                 pred_d_real = self.netD(self.var_ref).detach()
+                pred_g_fake = self.netD(self.fake_H)
                 l_g_gan = self.l_gan_w * (
                     self.cri_gan(pred_d_real - torch.mean(pred_g_fake), False) +
                     self.cri_gan(pred_g_fake - torch.mean(pred_d_real), True)) / 2
@@ -208,21 +199,15 @@ class SRGANModel(BaseModel):
             p.requires_grad = True
 
         self.optimizer_D.zero_grad()
-        if disc_passthrough is not None:
-            dp = {}
-            for k, v in disc_passthrough.items():
-                dp[k] = v.detach()
-            pred_d_fake = self.netD(self.fake_H.detach(), dp)
-        else:
-            pred_d_fake = self.netD(self.fake_H.detach())
         if self.opt['train']['gan_type'] == 'gan':
             # need to forward and backward separately, since batch norm statistics differ
-            # reald
+            # real
             pred_d_real = self.netD(self.var_ref)
             l_d_real = self.cri_gan(pred_d_real, True)
             with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
                 l_d_real_scaled.backward()
             # fake
+            pred_d_fake = self.netD(self.fake_H.detach())  # detach to avoid BP to G
             l_d_fake = self.cri_gan(pred_d_fake, False)
             with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                 l_d_fake_scaled.backward()
@@ -233,10 +218,12 @@ class SRGANModel(BaseModel):
             # l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real), False)
             # l_d_total = (l_d_real + l_d_fake) / 2
             # l_d_total.backward()
+            pred_d_fake = self.netD(self.fake_H.detach()).detach()
             pred_d_real = self.netD(self.var_ref)
-            l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake.detach()), True) * 0.5
+            l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake), True) * 0.5
             with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
                 l_d_real_scaled.backward()
+            pred_d_fake = self.netD(self.fake_H.detach())
             l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real.detach()), False) * 0.5
             with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                 l_d_fake_scaled.backward()
@@ -258,11 +245,7 @@ class SRGANModel(BaseModel):
     def test(self):
         self.netG.eval()
         with torch.no_grad():
-            genOut = self.netG(self.var_L)
-            if type(genOut) is tuple:
-                self.fake_H = genOut[0]
-            else:
-                self.fake_H = genOut
+            self.fake_H = self.netG(self.var_L)
         self.netG.train()
 
     def get_current_log(self):

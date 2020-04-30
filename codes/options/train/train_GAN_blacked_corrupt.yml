@@ -16,8 +16,8 @@ datasets:
     dataroot_LQ: E:\\4k6k\\datasets\\ultra_lowq\\for_training
     mismatched_Data_OK: true
     use_shuffle: true
-    n_workers: 8 # per GPU
-    batch_size: 32
+    n_workers: 0 # per GPU
+    batch_size: 16
     target_size: 64
     use_flip: false
     use_rot: false
@@ -34,17 +34,14 @@ network_G:
   which_model_G: FlatProcessorNet
   in_nc: 3
   out_nc: 3
-  nf: 32
-  ra_blocks: 6
-  assembler_blocks: 4
+  nf: 48
+  ra_blocks: 4
+  assembler_blocks: 3
 
 network_D:
-  which_model_D: discriminator_vgg_128
+  which_model_D: discriminator_resnet
   in_nc: 3
   nf: 64
-  #which_model_D: discriminator_resnet
-  #in_nc: 3
-  #nf: 32
 
 #### path
 path:
@@ -59,7 +56,7 @@ train:
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
-  lr_D: !!float 2e-4
+  lr_D: !!float 1e-4
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
@@ -74,11 +71,11 @@ train:
   pixel_weight: !!float 1e-2
   feature_criterion: l1
   feature_weight: 0
-  gan_type: gan  # gan | ragan
+  gan_type: ragan  # gan | ragan
   gan_weight: !!float 1e-1
 
-  D_update_ratio: 1
-  D_init_iters: -1
+  D_update_ratio: 2
+  D_init_iters: 1200
 
   manual_seed: 10
   val_freq: !!float 5e2

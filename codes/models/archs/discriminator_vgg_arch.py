@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torchvision
-import torch.nn.functional as F
 
 
 class Discriminator_VGG_128(nn.Module):
@@ -12,17 +11,11 @@ class Discriminator_VGG_128(nn.Module):
         self.conv0_0 = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
         self.conv0_1 = nn.Conv2d(nf, nf, 4, 2, 1, bias=False)
         self.bn0_1 = nn.BatchNorm2d(nf, affine=True)
-
-        self.skipconv0 = nn.Conv2d(3, nf, 3, 1, 1, bias=True)
-
         # [64, 64, 64]
         self.conv1_0 = nn.Conv2d(nf, nf * 2, 3, 1, 1, bias=False)
         self.bn1_0 = nn.BatchNorm2d(nf * 2, affine=True)
         self.conv1_1 = nn.Conv2d(nf * 2, nf * 2, 4, 2, 1, bias=False)
         self.bn1_1 = nn.BatchNorm2d(nf * 2, affine=True)
-
-        self.skipconv1 = nn.Conv2d(3, nf*2, 3, 1, 1, bias=True)
-
         # [128, 32, 32]
         self.conv2_0 = nn.Conv2d(nf * 2, nf * 4, 3, 1, 1, bias=False)
         self.bn2_0 = nn.BatchNorm2d(nf * 4, affine=True)
@@ -45,22 +38,13 @@ class Discriminator_VGG_128(nn.Module):
         # activation function
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
-    def forward(self, x, gen_skips=None):
-        x_dim = x.size(-1)
-        if gen_skips is None:
-            gen_skips = {
-                int(x_dim/2): F.interpolate(x, scale_factor=1/2, mode='bilinear', align_corners=False),
-                int(x_dim/4): F.interpolate(x, scale_factor=1/4, mode='bilinear', align_corners=False),
-            }
-
+    def forward(self, x):
         fea = self.lrelu(self.conv0_0(x))
         fea = self.lrelu(self.bn0_1(self.conv0_1(fea)))
 
-        fea = (fea + self.skipconv0(gen_skips[x_dim/2])) / 2
         fea = self.lrelu(self.bn1_0(self.conv1_0(fea)))
         fea = self.lrelu(self.bn1_1(self.conv1_1(fea)))
 
-        fea = (fea + self.skipconv1(gen_skips[x_dim/4])) / 2
         fea = self.lrelu(self.bn2_0(self.conv2_0(fea)))
         fea = self.lrelu(self.bn2_1(self.conv2_1(fea)))
 
