@@ -3,6 +3,7 @@ import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.DiscriminatorResnetBN_arch as DiscriminatorResnetBN_arch
+import models.archs.FlatProcessorNetNew_arch as FlatProcessorNetNew_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.EDVR_arch as EDVR_arch
 import models.archs.HighToLowResNet as HighToLowResNet
@@ -30,9 +31,10 @@ def define_G(opt):
         netG = HighToLowResNet.HighToLowResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                 nf=opt_net['nf'], nb=opt_net['nb'], downscale=opt_net['scale'])
     elif which_model == 'FlatProcessorNet':
-        netG = FlatProcessorNet_arch.FlatProcessorNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+        '''netG = FlatProcessorNet_arch.FlatProcessorNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                 nf=opt_net['nf'], downscale=opt_net['scale'], reduce_anneal_blocks=opt_net['ra_blocks'],
-                                assembler_blocks=opt_net['assembler_blocks'])
+                                assembler_blocks=opt_net['assembler_blocks'])'''
+        netG = FlatProcessorNetNew_arch.fixup_resnet34(num_filters=opt_net['nf'])
     # video restoration
     elif which_model == 'EDVR':
         netG = EDVR_arch.EDVR(nf=opt_net['nf'], nframes=opt_net['nframes'],
@@ -56,7 +58,7 @@ def define_D(opt):
     if which_model == 'discriminator_vgg_128':
         netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
     elif which_model == 'discriminator_resnet':
-        netD = DiscriminatorResnetBN_arch.resnet32(num_filters=opt_net['nf'], num_classes=1)
+        netD = DiscriminatorResnet_arch.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1)
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD

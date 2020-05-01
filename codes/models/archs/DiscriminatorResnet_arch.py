@@ -94,21 +94,20 @@ class FixupBottleneck(nn.Module):
 
 class FixupResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, num_filters=64, num_classes=1000):
         super(FixupResNet, self).__init__()
         self.num_layers = sum(layers)
-        self.inplanes = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+        self.inplanes = num_filters
+        self.conv1 = nn.Conv2d(3, num_filters, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bias1 = nn.Parameter(torch.zeros(1))
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.layer1 = self._make_layer(block, num_filters, layers[0], stride=2)
+        self.layer2 = self._make_layer(block, num_filters*2, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, num_filters*4, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, num_filters*8, layers[3], stride=2)
         self.bias2 = nn.Parameter(torch.zeros(1))
-        self.fc1 = nn.Linear(512 * 2 * 2, 100)
+        self.fc1 = nn.Linear(num_filters * 8 * 2 * 2, 100)
         self.fc2 = nn.Linear(100, num_classes)
 
         for m in self.modules():
@@ -123,9 +122,10 @@ class FixupResNet(nn.Module):
                 nn.init.constant_(m.conv3.weight, 0)
                 if m.downsample is not None:
                     nn.init.normal_(m.downsample.weight, mean=0, std=np.sqrt(2 / (m.downsample.weight.shape[0] * np.prod(m.downsample.weight.shape[2:]))))
+            '''
             elif isinstance(m, nn.Linear):
                 nn.init.constant_(m.weight, 0)
-                nn.init.constant_(m.bias, 0)
+                nn.init.constant_(m.bias, 0)'''
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -143,7 +143,6 @@ class FixupResNet(nn.Module):
     def forward(self, x):
         x = self.conv1(x)
         x = self.lrelu(x + self.bias1)
-        x = self.maxpool(x)
 
         x = self.layer1(x)
         x = self.layer2(x)
