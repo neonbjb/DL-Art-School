@@ -20,10 +20,11 @@ class LQGTDataset(data.Dataset):
         self.paths_LQ, self.paths_GT = None, None
         self.sizes_LQ, self.sizes_GT = None, None
         self.paths_PIX, self.sizes_PIX = None, None
-        self.LQ_env, self.GT_env, self.PIX_env = None, None, None  # environments for lmdb
+        self.LQ_env, self.GT_env, self.PIX_env = None, None, None  # environments for lmdbs
 
         self.paths_GT, self.sizes_GT = util.get_image_paths(self.data_type, opt['dataroot_GT'])
         self.paths_LQ, self.sizes_LQ = util.get_image_paths(self.data_type, opt['dataroot_LQ'])
+        self.doCrop = opt['doCrop']
         if 'dataroot_PIX' in opt.keys():
             self.paths_PIX, self.sizes_PIX = util.get_image_paths(self.data_type, opt['dataroot_PIX'])
 
@@ -107,13 +108,18 @@ class LQGTDataset(data.Dataset):
             H, W, C = img_LQ.shape
             LQ_size = GT_size // scale
 
-            # randomly crop
-            rnd_h = random.randint(0, max(0, H - LQ_size))
-            rnd_w = random.randint(0, max(0, W - LQ_size))
-            img_LQ = img_LQ[rnd_h:rnd_h + LQ_size, rnd_w:rnd_w + LQ_size, :]
-            rnd_h_GT, rnd_w_GT = int(rnd_h * scale), int(rnd_w * scale)
-            img_GT = img_GT[rnd_h_GT:rnd_h_GT + GT_size, rnd_w_GT:rnd_w_GT + GT_size, :]
-            img_PIX = img_PIX[rnd_h_GT:rnd_h_GT + GT_size, rnd_w_GT:rnd_w_GT + GT_size, :]
+            if self.doCrop:
+                # randomly crop
+                rnd_h = random.randint(0, max(0, H - LQ_size))
+                rnd_w = random.randint(0, max(0, W - LQ_size))
+                img_LQ = img_LQ[rnd_h:rnd_h + LQ_size, rnd_w:rnd_w + LQ_size, :]
+                rnd_h_GT, rnd_w_GT = int(rnd_h * scale), int(rnd_w * scale)
+                img_GT = img_GT[rnd_h_GT:rnd_h_GT + GT_size, rnd_w_GT:rnd_w_GT + GT_size, :]
+                img_PIX = img_PIX[rnd_h_GT:rnd_h_GT + GT_size, rnd_w_GT:rnd_w_GT + GT_size, :]
+            else:
+                img_LQ = cv2.resize(img_LQ, (LQ_size, LQ_size), interpolation=cv2.INTER_LINEAR)
+                img_GT = cv2.resize(img_GT, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
+                img_PIX = cv2.resize(img_PIX, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
 
             # augmentation - flip, rotate
             img_LQ, img_GT, img_PIX = util.augment([img_LQ, img_GT, img_PIX], self.opt['use_flip'],
