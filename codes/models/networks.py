@@ -5,7 +5,7 @@ import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.DiscriminatorResnetBN_arch as DiscriminatorResnetBN_arch
 import models.archs.FlatProcessorNetNew_arch as FlatProcessorNetNew_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
-import models.archs.EDVR_arch as EDVR_arch
+#import models.archs.EDVR_arch as EDVR_arch
 import models.archs.HighToLowResNet as HighToLowResNet
 import models.archs.FlatProcessorNet_arch as FlatProcessorNet_arch
 import models.archs.arch_util as arch_utils
