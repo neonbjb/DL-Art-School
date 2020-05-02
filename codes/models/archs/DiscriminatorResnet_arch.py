@@ -94,7 +94,7 @@ class FixupBottleneck(nn.Module):
 
 class FixupResNet(nn.Module):
 
-    def __init__(self, block, layers, num_filters=64, num_classes=1000):
+    def __init__(self, block, layers, num_filters=64, num_classes=1000, input_img_size=64):
         super(FixupResNet, self).__init__()
         self.num_layers = sum(layers)
         self.inplanes = num_filters
@@ -107,7 +107,8 @@ class FixupResNet(nn.Module):
         self.layer3 = self._make_layer(block, num_filters*4, layers[2], stride=2)
         self.layer4 = self._make_layer(block, num_filters*8, layers[3], stride=2)
         self.bias2 = nn.Parameter(torch.zeros(1))
-        self.fc1 = nn.Linear(num_filters * 8 * 2 * 2, 100)
+        reduced_img_sz = int(input_img_size / 32)
+        self.fc1 = nn.Linear(num_filters * 8 * reduced_img_sz * reduced_img_sz, 100)
         self.fc2 = nn.Linear(100, num_classes)
 
         for m in self.modules():

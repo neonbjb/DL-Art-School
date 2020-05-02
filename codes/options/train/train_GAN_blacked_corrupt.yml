@@ -21,6 +21,7 @@ datasets:
     target_size: 64
     use_flip: false
     use_rot: false
+    doCrop: false
     color: RGB
   val:
     name: blacked_val
@@ -48,18 +49,18 @@ network_D:
 
 #### path
 path:
-  pretrain_model_G: ~
-  pretrain_model_D: ~ #../experiments/resnet_corrupt_discriminator_fixup.pth
-  resume_state: ~
+  pretrain_model_G: ../experiments/corruptGAN_4k_lqprn_closeup_flat_net/models/29000_G.pth
+  pretrain_model_D: ../experiments/corruptGAN_4k_lqprn_closeup_flat_net/models/29000_D.pth
+  resume_state: ../experiments/corruptGAN_4k_lqprn_closeup_flat_net/training_state/29000.state
   strict_load: true
 
 #### training settings: learning rate scheme, loss
 train:
-  lr_G: !!float 1e-4
+  lr_G: !!float 5e-5
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
-  lr_D: !!float 2e-4
+  lr_D: !!float 1e-4
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
@@ -77,8 +78,8 @@ train:
   gan_type: gan  # gan | ragan
   gan_weight: !!float 1e-1
 
-  D_update_ratio: 2
-  D_init_iters: 0
+  D_update_ratio: 1
+  D_init_iters: -1
 
   manual_seed: 10
   val_freq: !!float 5e2

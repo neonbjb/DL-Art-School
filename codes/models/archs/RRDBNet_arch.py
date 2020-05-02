@@ -50,13 +50,13 @@ class RRDBNet(nn.Module):
         super(RRDBNet, self).__init__()
         RRDB_block_f = functools.partial(RRDB, nf=nf, gc=gc)
 
-        self.conv_first = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
+        self.conv_first = nn.Conv2d(in_nc, nf, 7, 1, padding=3, bias=True)
         self.RRDB_trunk = arch_util.make_layer(RRDB_block_f, nb)
         self.trunk_conv = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         #### upsampling
-        self.upconv1 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
-        self.upconv2 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
-        self.HRconv = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
+        self.upconv1 = nn.Conv2d(nf, nf, 5, 1, padding=2, bias=True)
+        self.upconv2 = nn.Conv2d(nf, nf, 5, 1, padding=2, bias=True)
+        self.HRconv = nn.Conv2d(nf, nf, 5, 1, padding=2, bias=True)
         self.conv_last = nn.Conv2d(nf, out_nc, 3, 1, 1, bias=True)
 
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)

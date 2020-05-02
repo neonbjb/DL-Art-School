@@ -1,58 +1,56 @@
 #### general settings
-name: ESRGANx4_VRP
+name: blacked_fix_and_upconv
 use_tb_logger: true
 model: srgan
 distortion: sr
 scale: 4
 gpu_ids: [0]
+amp_opt_level: O1
 
 #### datasets
 datasets:
   train:
-    name: VRP
+    name: vixcloseup
     mode: LQGT
-    dataroot_GT: ../datasets/vrp/train/hr
-    dataroot_LQ: ../datasets/vrp/train/lr
+    dataroot_GT: K:\4k6k\4k_closeup\hr
+    dataroot_LQ: K:\4k6k\4k_closeup\lr_corrupted
 
     use_shuffle: true
-    n_workers: 0  # per GPU
-    batch_size: 16
-    target_size: 128
-    use_flip: true
-    use_rot: true
+    n_workers: 12  # per GPU
+    batch_size: 12
+    target_size: 256
     color: RGB
   val:
-    name: VRP_val
+    name: adrianna_val
     mode: LQGT
-    dataroot_GT: ../datasets/vrp/validation/hr
-    dataroot_LQ: ../datasets/vrp/validation/lr
+    dataroot_GT: E:\4k6k\datasets\adrianna\val\hhq
+    dataroot_LQ: E:\4k6k\datasets\adrianna\val\hr
 
 #### network structures
 network_G:
   which_model_G: RRDBNet
   in_nc: 3
   out_nc: 3
-  nf: 64
+  nf: 48
   nb: 23
 network_D:
-  which_model_D: discriminator_vgg_128
+  which_model_D: discriminator_resnet
   in_nc: 3
-  nf: 64
+  nf: 48
 
 #### path
 path:
-  pretrain_model_G: ../experiments/div2k_gen_pretrain.pth
-  pretrain_model_D: ../experiments/div2k_disc_pretrain.pth
+  pretrain_model_G: ~
   strict_load: true
   resume_state: ~
 
 #### training settings: learning rate scheme, loss
 train:
-  lr_G: !!float 1e-5
+  lr_G: !!float 1e-4
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
-  lr_D: !!float 1e-5
+  lr_D: !!float 2e-4
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
@@ -60,14 +58,17 @@ train:
 
   niter: 400000
   warmup_iter: -1  # no warm up
-  lr_steps: [50000, 100000, 200000, 300000]
+  lr_steps: [20000, 40000, 60000, 80000]
   lr_gamma: 0.5
 
   pixel_criterion: l1
   pixel_weight: !!float 1e-2
   feature_criterion: l1
   feature_weight: 1
-  gan_type: ragan  # gan | ragan
+  feature_weight_decay: .98
+  feature_weight_decay_steps: 500
+  feature_weight_minimum: .1
+  gan_type: gan  # gan | ragan
   gan_weight: !!float 5e-3
 
   D_update_ratio: 1

@@ -5,18 +5,19 @@ model: srgan
 distortion: sr
 scale: 4
 gpu_ids: [0]
+amp_opt_level: O1
 
 #### datasets
 datasets:
   train:
     name: DIV2K
     mode: LQGT
-    dataroot_GT: ../datasets/div2k/DIV2K800_sub
-    dataroot_LQ: ../datasets/div2k/DIV2K800_sub_bicLRx4
+    dataroot_GT: E:/4k6k/datasets/div2k/DIV2K800_sub
+    dataroot_LQ: E:/4k6k/datasets/div2k/DIV2K800_sub_bicLRx4
 
     use_shuffle: true
     n_workers: 16  # per GPU
-    batch_size: 16
+    batch_size: 32
     target_size: 128
     use_flip: true
     use_rot: true
@@ -24,8 +25,8 @@ datasets:
   val:
     name: div2kval
     mode: LQGT
-    dataroot_GT: ../datasets/div2k/div2k_valid_hr
-    dataroot_LQ: ../datasets/div2k/div2k_valid_lr_bicubic
+    dataroot_GT: E:/4k6k/datasets/div2k/div2k_valid_hr
+    dataroot_LQ: E:/4k6k/datasets/div2k/div2k_valid_lr_bicubic
 
 #### network structures
 network_G:
@@ -35,13 +36,13 @@ network_G:
   nf: 64
   nb: 23
 network_D:
-  which_model_D: discriminator_vgg_128
+  which_model_D: discriminator_resnet
   in_nc: 3
   nf: 64
 
 #### path
 path:
-  pretrain_model_G: ../experiments/RRDB_PSNR_x4.pth
+  pretrain_model_G: ~
   strict_load: true
   resume_state: ~
 
@@ -66,10 +67,13 @@ train:
   pixel_weight: !!float 1e-2
   feature_criterion: l1
   feature_weight: 1
-  gan_type: ragan  # gan | ragan
+  feature_weight_decay: .98
+  feature_weight_decay_steps: 500
+  feature_weight_minimum: .1
+  gan_type: gan  # gan | ragan
   gan_weight: !!float 5e-3
 
-  D_update_ratio: 1
+  D_update_ratio: 2
   D_init_iters: 0
 
   manual_seed: 10
