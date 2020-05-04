@@ -5,7 +5,7 @@ model: srgan
 distortion: sr
 scale: 4
 gpu_ids: [0]
-amp_opt_level: O0
+amp_opt_level: O1
 
 #### datasets
 datasets:
@@ -17,7 +17,7 @@ datasets:
     doCrop: false
     use_shuffle: true
     n_workers: 12  # per GPU
-    batch_size: 64
+    batch_size: 40
     target_size: 256
     color: RGB
   val:
@@ -40,18 +40,18 @@ network_D:
 
 #### path
 path:
-  pretrain_model_G: ../experiments/blacked_fix_and_upconv_gan_only/models/7000_G.pth
-  pretrain_model_D: ../experiments/blacked_fix_and_upconv_gan_only/models/7000_D.pth
+  pretrain_model_G: ../experiments/rrdb_blacked_gan_g.pth
+  pretrain_model_D: ~
   strict_load: true
-  resume_state: ~
+  resume_state: ../experiments/blacked_fix_and_upconv/training_state/9500.state
 
 #### training settings: learning rate scheme, loss
 train:
-  lr_G: !!float 5e-5
+  lr_G: !!float 1e-5
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
-  lr_D: !!float 8e-5
+  lr_D: !!float 4e-5
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
@@ -61,20 +61,20 @@ train:
   warmup_iter: -1  # no warm up
   lr_steps: [5000, 20000, 40000, 60000]
   lr_gamma: 0.5
-  mega_batch_factor: 8
+  mega_batch_factor: 4
 
   pixel_criterion: l1
   pixel_weight: !!float 1e-2
   feature_criterion: l1
   feature_weight: 0
   feature_weight_decay: .9
-  feature_weight_decay_steps: 500
-  feature_weight_minimum: .1
+  feature_weight_decay_steps: 501
+  feature_weight_minimum: 0
   gan_type: gan  # gan | ragan
   gan_weight: 1
 
   D_update_ratio: 1
-  D_init_iters: -1
+  D_init_iters: 997
 
   manual_seed: 10
   val_freq: !!float 5e2

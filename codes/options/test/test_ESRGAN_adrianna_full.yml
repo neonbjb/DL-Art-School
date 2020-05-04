@@ -4,23 +4,23 @@ model: sr
 distortion: sr
 scale: 4
 crop_border: ~  # crop border when evaluation. If None(~), crop the scale pixels
-gpu_ids: [0]
+#gpu_ids: [0]
 
 datasets:
   test_1:  # the 1st test dataset
     name: set5
     mode: LQ
-    dataroot_LQ: ../datasets/upsample_tests
+    batch_size: 1
+    dataroot_LQ: E:\4k6k\datasets\adrianna\full_extract
 
 #### network structures
 network_G:
   which_model_G: RRDBNet
   in_nc: 3
   out_nc: 3
-  nf: 64
+  nf: 48
   nb: 23
-  upscale: 4
 
 #### path
 path:
-  pretrain_model_G: ../experiments/ESRGANx4_blacked_for_adrianna/models/19500_G.pth
+  pretrain_model_G: ../experiments/rrdb_blacked_gan_g.pth

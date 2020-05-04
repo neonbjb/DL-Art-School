@@ -158,10 +158,7 @@ class SRGANModel(BaseModel):
 
         self.fake_H = []
         for var_L, var_H, var_ref, pix in zip(self.var_L, self.var_H, self.var_ref, self.pix):
-            if step > self.D_init_iters:
-                fake_H = self.netG(var_L)
-            else:
-                fake_H = pix
+            fake_H = self.netG(var_L)
             self.fake_H.append(fake_H.detach())
 
             l_g_total = 0
