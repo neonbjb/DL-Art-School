@@ -2,9 +2,10 @@ import torch
 import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
-import models.archs.DiscriminatorResnetBN_arch as DiscriminatorResnetBN_arch
+import models.archs.DiscriminatorResnet_arch_passthrough as DiscriminatorResnet_arch_passthrough
 import models.archs.FlatProcessorNetNew_arch as FlatProcessorNetNew_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
+import models.archs.RRDBNetXL_arch as RRDBNetXL_arch
 #import models.archs.EDVR_arch as EDVR_arch
 import models.archs.HighToLowResNet as HighToLowResNet
 import models.archs.FlatProcessorNet_arch as FlatProcessorNet_arch
@@ -26,6 +27,11 @@ def define_G(opt):
         scale_per_step = math.sqrt(scale)
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], interpolation_scale_factor=scale_per_step)
+    elif which_model == 'RRDBNetXL':
+        scale_per_step = math.sqrt(scale)
+        netG = RRDBNetXL_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                                    nf=opt_net['nf'], nb_lo=opt_net['nblo'], nb_med=opt_net['nbmed'], nb_hi=opt_net['nbhi'],
+                                    interpolation_scale_factor=scale_per_step)
     # image corruption
     elif which_model == 'HighToLowResNet':
         netG = HighToLowResNet.HighToLowResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
@@ -59,6 +65,8 @@ def define_D(opt):
         netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
     elif which_model == 'discriminator_resnet':
         netD = DiscriminatorResnet_arch.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
+    elif which_model == 'discriminator_resnet_passthrough':
+        netD = DiscriminatorResnet_arch_passthrough.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD

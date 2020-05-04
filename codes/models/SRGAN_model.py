@@ -8,6 +8,7 @@ import models.lr_scheduler as lr_scheduler
 from models.base_model import BaseModel
 from models.loss import GANLoss
 from apex import amp
+import torch.nn.functional as F
 
 import torchvision.utils as utils
 import os
@@ -156,10 +157,21 @@ class SRGANModel(BaseModel):
         if step > self.D_init_iters:
             self.optimizer_G.zero_grad()
 
-        self.fake_H = []
+        self.fake_GenOut = []
         for var_L, var_H, var_ref, pix in zip(self.var_L, self.var_H, self.var_ref, self.pix):
-            fake_H = self.netG(var_L)
-            self.fake_H.append(fake_H.detach())
+            fake_GenOut = self.netG(var_L)
+
+            # Extract the image output. For generators that output skip-through connections, the master output is always
+            # the first element of the tuple.
+            if isinstance(fake_GenOut, tuple):
+                fake_H = fake_GenOut[0]
+                # TODO: Fix this.
+                self.fake_GenOut.append((fake_GenOut[0].detach(),
+                                         fake_GenOut[1].detach(),
+                                         fake_GenOut[2].detach()))
+            else:
+                fake_H = fake_GenOut
+                self.fake_GenOut.append(fake_GenOut.detach())
 
             l_g_total = 0
             if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -178,11 +190,11 @@ class SRGANModel(BaseModel):
                         self.l_fea_w = max(self.l_fea_w_minimum, self.l_fea_w * self.l_fea_w_decay)
 
                 if self.opt['train']['gan_type'] == 'gan':
-                    pred_g_fake = self.netD(fake_H)
+                    pred_g_fake = self.netD(fake_GenOut)
                     l_g_gan = self.l_gan_w * self.cri_gan(pred_g_fake, True)
                 elif self.opt['train']['gan_type'] == 'ragan':
                     pred_d_real = self.netD(var_ref).detach()
-                    pred_g_fake = self.netD(fake_H)
+                    pred_g_fake = self.netD(fake_GenOut)
                     l_g_gan = self.l_gan_w * (
                         self.cri_gan(pred_d_real - torch.mean(pred_g_fake), False) +
                         self.cri_gan(pred_g_fake - torch.mean(pred_d_real), True)) / 2
@@ -196,8 +208,17 @@ class SRGANModel(BaseModel):
         for p in self.netD.parameters():
             p.requires_grad = True
 
+        # Convert var_ref to have the same output format as the generator. This generally means interpolating the
+        # HR images to have the same output dimensions as each generator skip connection.
+        if isinstance(self.fake_GenOut[0], tuple):
+            var_ref_skips = []
+            for ref, hi_res in zip(self.var_ref, self.var_H):
+                var_ref_skips.append((ref,) + self.create_artificial_skips(hi_res))
+        else:
+            var_ref_skips = self.var_ref
+
         self.optimizer_D.zero_grad()
-        for var_L, var_H, var_ref, pix, fake_H in zip(self.var_L, self.var_H, self.var_ref, self.pix, self.fake_H):
+        for var_L, var_H, var_ref, pix, fake_H in zip(self.var_L, self.var_H, var_ref_skips, self.pix, self.fake_GenOut):
             if self.opt['train']['gan_type'] == 'gan':
                 # need to forward and backward separately, since batch norm statistics differ
                 # real
@@ -206,7 +227,7 @@ class SRGANModel(BaseModel):
                 with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
                     l_d_real_scaled.backward()
                 # fake
-                pred_d_fake = self.netD(fake_H.detach())  # detach to avoid BP to G
+                pred_d_fake = self.netD(fake_H)  # detach to avoid BP to G
                 l_d_fake = self.cri_gan(pred_d_fake, False)
                 with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                     l_d_fake_scaled.backward()
@@ -217,12 +238,12 @@ class SRGANModel(BaseModel):
                 # l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real), False)
                 # l_d_total = (l_d_real + l_d_fake) / 2
                 # l_d_total.backward()
-                pred_d_fake = self.netD(fake_H.detach()).detach()
+                pred_d_fake = self.netD(fake_H).detach()
                 pred_d_real = self.netD(var_ref)
                 l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake), True) * 0.5
                 with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
                     l_d_real_scaled.backward()
-                pred_d_fake = self.netD(fake_H.detach())
+                pred_d_fake = self.netD(fake_H)
                 l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real.detach()), False) * 0.5
                 with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                     l_d_fake_scaled.backward()
@@ -234,11 +255,14 @@ class SRGANModel(BaseModel):
             os.makedirs("temp/lr", exist_ok=True)
             os.makedirs("temp/gen", exist_ok=True)
             os.makedirs("temp/pix", exist_ok=True)
+            gen_batch = self.fake_GenOut[0]
+            if isinstance(gen_batch, tuple):
+                gen_batch = gen_batch[0]
             for i in range(self.var_L[0].shape[0]):
                 utils.save_image(self.var_H[0][i].cpu().detach(), os.path.join("temp/hr", "%05i_%02i.png" % (step, i)))
                 utils.save_image(self.var_L[0][i].cpu().detach(), os.path.join("temp/lr", "%05i_%02i.png" % (step, i)))
                 utils.save_image(self.pix[0][i].cpu().detach(), os.path.join("temp/pix", "%05i_%02i.png" % (step, i)))
-                utils.save_image(self.fake_H[0][i].cpu().detach(), os.path.join("temp/gen", "%05i_%02i.png" % (step, i)))
+                utils.save_image(gen_batch[i].cpu().detach(), os.path.join("temp/gen", "%05i_%02i.png" % (step, i)))
 
         # set log TODO(handle mega-batches?)
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -253,10 +277,15 @@ class SRGANModel(BaseModel):
         self.log_dict['l_d_fake'] = l_d_fake.item()
         self.log_dict['D_fake'] = torch.mean(pred_d_fake.detach())
 
+    def create_artificial_skips(self, truth_img):
+        med_skip = F.interpolate(truth_img, scale_factor=.5)
+        lo_skip = F.interpolate(truth_img, scale_factor=.25)
+        return med_skip, lo_skip
+
     def test(self):
         self.netG.eval()
         with torch.no_grad():
-            self.fake_H = [self.netG(self.var_L[0])]
+            self.fake_GenOut = [self.netG(self.var_L[0])]
         self.netG.train()
 
     def get_current_log(self):
@@ -265,7 +294,10 @@ class SRGANModel(BaseModel):
     def get_current_visuals(self, need_GT=True):
         out_dict = OrderedDict()
         out_dict['LQ'] = self.var_L[0].detach()[0].float().cpu()
-        out_dict['rlt'] = self.fake_H[0].detach()[0].float().cpu()
+        gen_batch = self.fake_GenOut[0]
+        if isinstance(gen_batch, tuple):
+            gen_batch = gen_batch[0]
+        out_dict['rlt'] = gen_batch.detach()[0].float().cpu()
         if need_GT:
             out_dict['GT'] = self.var_H[0].detach()[0].float().cpu()
         return out_dict
