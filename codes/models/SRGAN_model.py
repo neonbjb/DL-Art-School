@@ -200,6 +200,9 @@ class SRGANModel(BaseModel):
                         self.cri_gan(pred_g_fake - torch.mean(pred_d_real), True)) / 2
                 l_g_total += l_g_gan
 
+                # Scale the loss down by the batch factor.
+                l_g_total = l_g_total / self.mega_batch_factor
+
                 with amp.scale_loss(l_g_total, self.optimizer_G, loss_id=0) as l_g_total_scaled:
                     l_g_total_scaled.backward()
         self.optimizer_G.step()
@@ -223,12 +226,12 @@ class SRGANModel(BaseModel):
                 # need to forward and backward separately, since batch norm statistics differ
                 # real
                 pred_d_real = self.netD(var_ref)
-                l_d_real = self.cri_gan(pred_d_real, True)
+                l_d_real = self.cri_gan(pred_d_real, True) / self.mega_batch_factor
                 with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
                     l_d_real_scaled.backward()
                 # fake
-                pred_d_fake = self.netD(fake_H)  # detach to avoid BP to G
-                l_d_fake = self.cri_gan(pred_d_fake, False)
+                pred_d_fake = self.netD(fake_H)
+                l_d_fake = self.cri_gan(pred_d_fake, False) / self.mega_batch_factor
                 with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                     l_d_fake_scaled.backward()
             elif self.opt['train']['gan_type'] == 'ragan':
@@ -240,11 +243,11 @@ class SRGANModel(BaseModel):
                 # l_d_total.backward()
                 pred_d_fake = self.netD(fake_H).detach()
                 pred_d_real = self.netD(var_ref)
-                l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake), True) * 0.5
+                l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake), True) * 0.5 / self.mega_batch_factor
                 with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
                     l_d_real_scaled.backward()
                 pred_d_fake = self.netD(fake_H)
-                l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real.detach()), False) * 0.5
+                l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real.detach()), False) * 0.5 / self.mega_batch_factor
                 with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                     l_d_fake_scaled.backward()
         self.optimizer_D.step()
@@ -255,14 +258,24 @@ class SRGANModel(BaseModel):
             os.makedirs("temp/lr", exist_ok=True)
             os.makedirs("temp/gen", exist_ok=True)
             os.makedirs("temp/pix", exist_ok=True)
-            gen_batch = self.fake_GenOut[0]
-            if isinstance(gen_batch, tuple):
-                gen_batch = gen_batch[0]
-            for i in range(self.var_L[0].shape[0]):
-                utils.save_image(self.var_H[0][i].cpu().detach(), os.path.join("temp/hr", "%05i_%02i.png" % (step, i)))
-                utils.save_image(self.var_L[0][i].cpu().detach(), os.path.join("temp/lr", "%05i_%02i.png" % (step, i)))
-                utils.save_image(self.pix[0][i].cpu().detach(), os.path.join("temp/pix", "%05i_%02i.png" % (step, i)))
-                utils.save_image(gen_batch[i].cpu().detach(), os.path.join("temp/gen", "%05i_%02i.png" % (step, i)))
+            multi_gen = False
+            if isinstance(self.fake_GenOut[0], tuple):
+                os.makedirs("temp/genlr", exist_ok=True)
+                os.makedirs("temp/genmr", exist_ok=True)
+                os.makedirs("temp/ref", exist_ok=True)
+                multi_gen = True
+            for i in range(self.mega_batch_factor):
+                utils.save_image(self.var_H[i].cpu().detach(), os.path.join("temp/hr", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.var_L[i].cpu().detach(), os.path.join("temp/lr", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.pix[i].cpu().detach(), os.path.join("temp/pix", "%05i_%02i.png" % (step, i)))
+                if multi_gen:
+                    utils.save_image(self.fake_GenOut[i][0].cpu().detach(), os.path.join("temp/gen", "%05i_%02i.png" % (step, i)))
+                    utils.save_image(self.fake_GenOut[i][1].cpu().detach(), os.path.join("temp/genmr", "%05i_%02i.png" % (step, i)))
+                    utils.save_image(self.fake_GenOut[i][2].cpu().detach(), os.path.join("temp/genlr", "%05i_%02i.png" % (step, i)))
+                    utils.save_image(var_ref_skips[i][1].cpu().detach(), os.path.join("temp/ref", "med_%05i_%02i.png" % (step, i)))
+                    utils.save_image(var_ref_skips[i][2].cpu().detach(), os.path.join("temp/ref", "low_%05i_%02i.png" % (step, i)))
+                else:
+                    utils.save_image(self.fake_GenOut[i].cpu().detach(), os.path.join("temp/gen", "%05i_%02i.png" % (step, i)))
 
         # set log TODO(handle mega-batches?)
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -272,9 +285,9 @@ class SRGANModel(BaseModel):
                 self.log_dict['feature_weight'] = self.l_fea_w
                 self.log_dict['l_g_fea'] = l_g_fea.item()
             self.log_dict['l_g_gan'] = l_g_gan.item()
-            self.log_dict['l_g_total'] = l_g_total.item()
-        self.log_dict['l_d_real'] = l_d_real.item()
-        self.log_dict['l_d_fake'] = l_d_fake.item()
+            self.log_dict['l_g_total'] = l_g_total.item() * self.mega_batch_factor
+        self.log_dict['l_d_real'] = l_d_real.item() * self.mega_batch_factor
+        self.log_dict['l_d_fake'] = l_d_fake.item() * self.mega_batch_factor
         self.log_dict['D_fake'] = torch.mean(pred_d_fake.detach())
 
     def create_artificial_skips(self, truth_img):
