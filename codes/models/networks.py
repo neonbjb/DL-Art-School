@@ -10,6 +10,7 @@ import models.archs.RRDBNetXL_arch as RRDBNetXL_arch
 import models.archs.HighToLowResNet as HighToLowResNet
 import models.archs.FlatProcessorNet_arch as FlatProcessorNet_arch
 import models.archs.arch_util as arch_utils
+import models.archs.ResGen_arch as ResGen_arch
 import math
 
 # Generator
@@ -32,6 +33,9 @@ def define_G(opt):
         netG = RRDBNetXL_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb_lo=opt_net['nblo'], nb_med=opt_net['nbmed'], nb_hi=opt_net['nbhi'],
                                     interpolation_scale_factor=scale_per_step)
+    elif which_model == 'ResGen':
+        netG = ResGen_arch.fixup_resnet34(num_filters=opt_net['nf'])
+
     # image corruption
     elif which_model == 'HighToLowResNet':
         netG = HighToLowResNet.HighToLowResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],

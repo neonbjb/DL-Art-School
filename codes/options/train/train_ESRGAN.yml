@@ -17,7 +17,7 @@ datasets:
 
     use_shuffle: true
     n_workers: 16  # per GPU
-    batch_size: 32
+    batch_size: 16
     target_size: 128
     use_flip: true
     use_rot: true
@@ -30,15 +30,11 @@ datasets:
 
 #### network structures
 network_G:
-  which_model_G: RRDBNet
-  in_nc: 3
-  out_nc: 3
-  nf: 64
-  nb: 23
+  which_model_G: ResGen
+  nf: 256
 network_D:
-  which_model_D: discriminator_resnet
-  in_nc: 3
-  nf: 64
+  which_model_D: discriminator_resnet_passthrough
+  nf: 42
 
 #### path
 path:
@@ -62,6 +58,7 @@ train:
   warmup_iter: -1  # no warm up
   lr_steps: [50000, 100000, 200000, 300000]
   lr_gamma: 0.5
+  mega_batch_factor: 1
 
   pixel_criterion: l1
   pixel_weight: !!float 1e-2

@@ -1,5 +1,5 @@
 #### general settings
-name: blacked_fix_and_upconv_xl
+name: esrgan_res
 use_tb_logger: true
 model: srgan
 distortion: sr
@@ -10,21 +10,23 @@ amp_opt_level: O1
 #### datasets
 datasets:
   train:
-    name: vixcloseup
+    name: DIV2K
     mode: LQGT
-    dataroot_GT: K:\4k6k\4k_closeup\hr
-    dataroot_LQ: K:\4k6k\4k_closeup\lr_corrupted
-    doCrop: false
+    dataroot_GT: E:/4k6k/datasets/div2k/DIV2K800_sub
+    dataroot_LQ: E:/4k6k/datasets/div2k/DIV2K800_sub_bicLRx4
+
     use_shuffle: true
     n_workers: 10  # per GPU
-    batch_size: 16
-    target_size: 256
+    batch_size: 24
+    target_size: 128
+    use_flip: true
+    use_rot: true
     color: RGB
   val:
-    name: adrianna_val
+    name: div2kval
     mode: LQGT
-    dataroot_GT: E:\4k6k\datasets\adrianna\val\hhq
-    dataroot_LQ: E:\4k6k\datasets\adrianna\val\hr
+    dataroot_GT: E:/4k6k/datasets/div2k/div2k_valid_hr
+    dataroot_LQ: E:/4k6k/datasets/div2k/div2k_valid_lr_bicubic
 
 #### network structures
 network_G:
@@ -47,7 +49,7 @@ train:
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
-  lr_D: !!float 2e-4
+  lr_D: !!float 1e-4
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
