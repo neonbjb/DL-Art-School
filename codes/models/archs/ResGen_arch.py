@@ -131,10 +131,10 @@ class FixupResNet(nn.Module):
         x = self.final_defilter(x) + self.bias2
         return x, skip_med, skip_lo
 
-def fixup_resnet34(**kwargs):
+def fixup_resnet34(nb_denoiser=20, nb_upsampler=10, **kwargs):
     """Constructs a Fixup-ResNet-34 model.
     """
-    model = FixupResNet(FixupBasicBlock, [2, 28], **kwargs)
+    model = FixupResNet(FixupBasicBlock, [nb_denoiser, nb_upsampler], **kwargs)
     return model
 
 
