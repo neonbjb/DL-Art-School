@@ -16,7 +16,7 @@ datasets:
     dataroot_LQ: E:/4k6k/datasets/div2k/DIV2K800_sub_bicLRx4
 
     use_shuffle: true
-    n_workers: 10  # per GPU
+    n_workers: 0  # per GPU
     batch_size: 24
     target_size: 128
     use_flip: true
@@ -32,6 +32,8 @@ datasets:
 network_G:
   which_model_G: ResGen
   nf: 256
+  nb_denoiser: 2
+  nb_upsampler: 28
 network_D:
   which_model_D: discriminator_resnet_passthrough
   nf: 42
@@ -41,7 +43,7 @@ path:
   #pretrain_model_G: ../experiments/blacked_fix_and_upconv_xl_part1/models/3000_G.pth
   #pretrain_model_D: ~
   strict_load: true
-  resume_state: ~
+  resume_state: ../experiments/esrgan_res/training_state/15500.state
 
 #### training settings: learning rate scheme, loss
 train:
@@ -71,7 +73,7 @@ train:
   gan_type: gan  # gan | ragan
   gan_weight: !!float 1e-2
 
-  D_update_ratio: 1
+  D_update_ratio: 2
   D_init_iters: -1
 
   manual_seed: 10

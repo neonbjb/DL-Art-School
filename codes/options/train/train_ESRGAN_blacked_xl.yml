@@ -12,12 +12,12 @@ datasets:
   train:
     name: vixcloseup
     mode: LQGT
-    dataroot_GT: K:\4k6k\4k_closeup\hr
-    dataroot_LQ: K:\4k6k\4k_closeup\lr_corrupted
+    dataroot_GT: E:\4k6k\datasets\4k_closeup\hr
+    dataroot_LQ: [E:\4k6k\datasets\4k_closeup\lr_corrupted, E:\4k6k\datasets\4k_closeup\lr_c_blurred]
     doCrop: false
     use_shuffle: true
-    n_workers: 10  # per GPU
-    batch_size: 16
+    n_workers: 12  # per GPU
+    batch_size: 15
     target_size: 256
     color: RGB
   val:
@@ -30,16 +30,18 @@ datasets:
 network_G:
   which_model_G: ResGen
   nf: 256
+  nb_denoiser: 20
+  nb_upsampler: 10
 network_D:
   which_model_D: discriminator_resnet_passthrough
-  nf: 42
+  nf: 64
 
 #### path
 path:
-  #pretrain_model_G: ../experiments/blacked_fix_and_upconv_xl_part1/models/3000_G.pth
+  #pretrain_model_G: ../experiments/pretrained_resnet_G.pth
   #pretrain_model_D: ~
   strict_load: true
-  resume_state: ~
+  resume_state: ../experiments/blacked_fix_and_upconv_xl/training_state/2500.state
 
 #### training settings: learning rate scheme, loss
 train:
@@ -57,7 +59,7 @@ train:
   warmup_iter: -1  # no warm up
   lr_steps: [20000, 40000, 50000, 60000]
   lr_gamma: 0.5
-  mega_batch_factor: 2
+  mega_batch_factor: 3
 
   pixel_criterion: l1
   pixel_weight: !!float 1e-2
@@ -69,8 +71,8 @@ train:
   gan_type: gan  # gan | ragan
   gan_weight: !!float 1e-2
 
-  D_update_ratio: 1
-  D_init_iters: -1
+  D_update_ratio: 2
+  D_init_iters: 0
 
   manual_seed: 10
   val_freq: !!float 5e2

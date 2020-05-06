@@ -10,7 +10,7 @@ datasets:
   test_1:  # the 1st test dataset
     name: set5
     mode: LQ
-    batch_size: 16
+    batch_size: 3
     dataroot_LQ: ..\..\datasets\adrianna\full_extract
 
 #### network structures
