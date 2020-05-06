@@ -34,7 +34,8 @@ def define_G(opt):
                                     nf=opt_net['nf'], nb_lo=opt_net['nblo'], nb_med=opt_net['nbmed'], nb_hi=opt_net['nbhi'],
                                     interpolation_scale_factor=scale_per_step)
     elif which_model == 'ResGen':
-        netG = ResGen_arch.fixup_resnet34(num_filters=opt_net['nf'])
+        netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
+                                          num_filters=opt_net['nf'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
@@ -70,7 +71,7 @@ def define_D(opt):
     elif which_model == 'discriminator_resnet':
         netD = DiscriminatorResnet_arch.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
     elif which_model == 'discriminator_resnet_passthrough':
-        netD = DiscriminatorResnet_arch_passthrough.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
+        netD = DiscriminatorResnet_arch_passthrough.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz, use_bn=True)
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD
