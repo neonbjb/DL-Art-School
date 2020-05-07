@@ -14,7 +14,7 @@ class LQGTDataset(data.Dataset):
     """
 
     def get_lq_path(self, i):
-        which_lq = random.randint(0, len(self.paths_LQ))
+        which_lq = random.randint(0, len(self.paths_LQ)-1)
         return self.paths_LQ[which_lq][i]
 
     def __init__(self, opt):
