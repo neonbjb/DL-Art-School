@@ -35,7 +35,7 @@ def define_G(opt):
                                     interpolation_scale_factor=scale_per_step)
     elif which_model == 'ResGen':
         netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
-                                          num_filters=opt_net['nf'])
+                                          upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
