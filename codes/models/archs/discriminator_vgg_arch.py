@@ -12,12 +12,12 @@ class Discriminator_VGG_128(nn.Module):
         self.conv0_1 = nn.Conv2d(nf, nf, 4, 2, 1, bias=False)
         self.bn0_1 = nn.BatchNorm2d(nf, affine=True)
         # [64, 64, 64]
-        self.conv1_0 = nn.Conv2d(nf + 3, nf * 2, 3, 1, 1, bias=False)
+        self.conv1_0 = nn.Conv2d(nf, nf * 2, 3, 1, 1, bias=False)
         self.bn1_0 = nn.BatchNorm2d(nf * 2, affine=True)
         self.conv1_1 = nn.Conv2d(nf * 2, nf * 2, 4, 2, 1, bias=False)
         self.bn1_1 = nn.BatchNorm2d(nf * 2, affine=True)
         # [128, 32, 32]
-        self.conv2_0 = nn.Conv2d(nf * 2 + 3, nf * 4, 3, 1, 1, bias=False)
+        self.conv2_0 = nn.Conv2d(nf * 2, nf * 4, 3, 1, 1, bias=False)
         self.bn2_0 = nn.BatchNorm2d(nf * 4, affine=True)
         self.conv2_1 = nn.Conv2d(nf * 4, nf * 4, 4, 2, 1, bias=False)
         self.bn2_1 = nn.BatchNorm2d(nf * 4, affine=True)
@@ -43,11 +43,11 @@ class Discriminator_VGG_128(nn.Module):
         fea = self.lrelu(self.conv0_0(x))
         fea = self.lrelu(self.bn0_1(self.conv0_1(fea)))
 
-        fea = torch.cat([fea, skip_med], dim=1)
+        #fea = torch.cat([fea, skip_med], dim=1)
         fea = self.lrelu(self.bn1_0(self.conv1_0(fea)))
         fea = self.lrelu(self.bn1_1(self.conv1_1(fea)))
 
-        fea = torch.cat([fea, skip_lo], dim=1)
+        #fea = torch.cat([fea, skip_lo], dim=1)
         fea = self.lrelu(self.bn2_0(self.conv2_0(fea)))
         fea = self.lrelu(self.bn2_1(self.conv2_1(fea)))
 
