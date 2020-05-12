@@ -36,6 +36,9 @@ def define_G(opt):
     elif which_model == 'ResGen':
         netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'])
+    elif which_model == 'ResGenV2':
+        netG = ResGen_arch.fixup_resnet34_v2(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
+                                          upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
