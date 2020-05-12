@@ -1,5 +1,5 @@
 #### general settings
-name: blacked_fix_and_upconv_xl
+name: resgen_movies
 use_tb_logger: true
 model: srgan
 distortion: sr
@@ -10,38 +10,38 @@ amp_opt_level: O1
 #### datasets
 datasets:
   train:
-    name: vixcloseup
+    name: movies
     mode: LQGT
-    dataroot_GT: E:\4k6k\datasets\vixen\4k_closeup\hr
-    dataroot_LQ: [E:\4k6k\datasets\vixen\4k_closeup\lr_corrupted, E:\4k6k\datasets\vixen\4k_closeup\lr_c_blurred]
+    dataroot_GT: F:\\upsample_reg\\for_training\\hr
+    dataroot_LQ: F:\\upsample_reg\\for_training\\lr_corrupted
     doCrop: false
     use_shuffle: true
-    n_workers: 20  # per GPU
-    batch_size: 32
-    target_size: 192
+    n_workers: 8  # per GPU
+    batch_size: 8
+    target_size: 256
     color: RGB
   val:
-    name: adrianna_val
+    name: movies_val
     mode: LQGT
-    dataroot_GT: E:\4k6k\datasets\adrianna\val\hhq
-    dataroot_LQ: E:\4k6k\datasets\adrianna\val\hr
+    dataroot_GT: F:\\upsample_reg\\for_training\\val\\hr
+    dataroot_LQ: F:\\upsample_reg\\for_training\\val\\lr
 
 #### network structures
 network_G:
-  which_model_G: ResGen
-  nf: 164
-  nb_denoiser: 12
-  nb_upsampler: 8
+  which_model_G: ResGenV2
+  nf: 256
+  nb_denoiser: 20
+  nb_upsampler: 10
 network_D:
   which_model_D: discriminator_resnet_passthrough
-  nf: 52
+  nf: 64
 
 #### path
 path:
-  #pretrain_model_G: ../experiments/pretrained_resnet_G.pth
+  #pretrain_model_G: ~
   #pretrain_model_D: ~
   strict_load: true
-  resume_state: ../experiments/blacked_fix_and_upconv_xl/training_state/68000.state
+  resume_state: ~
 
 #### training settings: learning rate scheme, loss
 train:
@@ -59,14 +59,14 @@ train:
   warmup_iter: -1  # no warm up
   lr_steps: [20000, 60000, 80000, 100000]
   lr_gamma: 0.5
-  mega_batch_factor: 2
+  mega_batch_factor: 1
 
   pixel_criterion: l1
   pixel_weight: !!float 1e-2
   feature_criterion: l1
   feature_weight: 1
   feature_weight_decay: 1
-  feature_weight_decay_steps: 500
+  feature_weight_decay_steps: 1
   feature_weight_minimum: 1
   gan_type: gan  # gan | ragan
   gan_weight: !!float 1e-2
