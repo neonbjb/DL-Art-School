@@ -166,8 +166,8 @@ class FixupResNetV2(FixupResNet):
 
     def forward(self, x):
         if self.inject_noise:
-            rand_feature = torch.randn((x.shape[0], 1) + x.shape[2:], device=x.device, dtype=x.dtype)
-            x = torch.cat([x, rand_feature], dim=1)
+            rand_feature = torch.randn_like(x)
+            x = x + rand_feature * .1
         x = self.conv1(x)
         x = self.lrelu(x + self.bias1)
         x = self.layer1(x)

@@ -14,8 +14,8 @@ import models.archs.ResGen_arch as ResGen_arch
 import math
 
 # Generator
-def define_G(opt):
-    opt_net = opt['network_G']
+def define_G(opt, net_key='network_G'):
+    opt_net = opt[net_key]
     which_model = opt_net['which_model_G']
     scale = opt['scale']
 

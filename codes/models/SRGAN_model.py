@@ -30,6 +30,12 @@ class SRGANModel(BaseModel):
         if self.is_train:
             self.netD = networks.define_D(opt).to(self.device)
 
+        if 'network_C' in opt.keys():
+            self.netC = networks.define_G(opt, net_key='network_C').to(self.device)
+            self.netC.eval()
+        else:
+            self.netC = None
+
         # define losses, optimizer and scheduler
         if self.is_train:
             self.mega_batch_factor = train_opt['mega_batch_factor']
@@ -145,7 +151,15 @@ class SRGANModel(BaseModel):
         self.load()  # load G and D if needed
 
     def feed_data(self, data, need_GT=True):
-        self.var_L = torch.chunk(data['LQ'], chunks=self.mega_batch_factor, dim=0)  # LQ
+        # Corrupt the data with the given corruptor, if specified.
+        self.fed_LQ = data['LQ'].to(self.device)
+        if self.netC:
+            with torch.no_grad():
+                corrupted_L = self.netC(self.fed_LQ)[0].detach()
+        else:
+            corrupted_L = self.fed_LQ
+
+        self.var_L = torch.chunk(corrupted_L, chunks=self.mega_batch_factor, dim=0)
         if need_GT:
             self.var_H = [t.to(self.device) for t in torch.chunk(data['GT'], chunks=self.mega_batch_factor, dim=0)]
             input_ref = data['ref'] if 'ref' in data else data['GT']
@@ -272,6 +286,7 @@ class SRGANModel(BaseModel):
         if step % 50 == 0:
             os.makedirs("temp/hr", exist_ok=True)
             os.makedirs("temp/lr", exist_ok=True)
+            os.makedirs("temp/lr_precorrupt", exist_ok=True)
             os.makedirs("temp/gen", exist_ok=True)
             os.makedirs("temp/pix", exist_ok=True)
             multi_gen = False
@@ -280,6 +295,9 @@ class SRGANModel(BaseModel):
                 os.makedirs("temp/genmr", exist_ok=True)
                 os.makedirs("temp/ref", exist_ok=True)
                 multi_gen = True
+
+            # fed_LQ is not chunked.
+            utils.save_image(self.fed_LQ.cpu().detach(), os.path.join("temp/lr_precorrupt", "%05i.png" % (step,)))
             for i in range(self.mega_batch_factor):
                 utils.save_image(self.var_H[i].cpu().detach(), os.path.join("temp/hr", "%05i_%02i.png" % (step, i)))
                 utils.save_image(self.var_L[i].cpu().detach(), os.path.join("temp/lr", "%05i_%02i.png" % (step, i)))
