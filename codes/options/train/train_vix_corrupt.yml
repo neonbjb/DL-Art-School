@@ -5,19 +5,19 @@ model: corruptgan
 distortion: downsample
 scale: 1
 gpu_ids: [0]
-amp_opt_level: O1
+amp_opt_level: O0
 
 #### datasets
 datasets:
   train:
     name: blacked
     mode: downsample
-    dataroot_GT: K:\\4k6k\\4k_closeup\\lr_corrupted
+    dataroot_GT: E:\\4k6k\\datasets\\vixen\\4k_closeup\\lr_corrupted
     dataroot_LQ: G:\\data\\pr_upsample\\ultra_lowq\\for_training\\lr
     mismatched_Data_OK: true
     use_shuffle: true
     n_workers: 0 # per GPU
-    batch_size: 1
+    batch_size: 24
     target_size: 64
     use_flip: false
     use_rot: false
@@ -33,26 +33,27 @@ datasets:
 #### network structures
 network_G:
   which_model_G: ResGenV2
-  nf: 16
-  nb_denoiser: 5
+  nf: 192
+  nb_denoiser: 20
   nb_upsampler: 0
   upscale_applications: 0
+  inject_noise: False
 
 network_D:
   which_model_D: discriminator_vgg_128
   in_nc: 3
-  nf: 16
+  nf: 64
 
 #### path
 path:
   pretrain_model_G: ~
   pretrain_model_D: ~
-  resume_state: ~
+  resume_state: ../experiments/train_vix_corrupt/training_state/19000.state
   strict_load: true
 
 #### training settings: learning rate scheme, loss
 train:
-  lr_G: !!float 5e-5
+  lr_G: !!float 1e-4
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
@@ -60,19 +61,25 @@ train:
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
+  D_noise_theta_init: .01
+  D_noise_final_it: 20000
+  D_noise_theta_floor: .005
   lr_scheme: MultiStepLR
 
   niter: 400000
   warmup_iter: -1  # no warm up
-  lr_steps: [30000, 60000, 100000, 200000]
+  lr_steps: [15000, 50000, 100000, 200000]
   lr_gamma: 0.5
 
   pixel_criterion: l2
   pixel_weight: !!float 1e-2
   feature_criterion: l1
-  feature_weight: 0
-  gan_type: gan  # gan | ragan
-  gan_weight: !!float 1e-1
+  feature_weight: 1.0
+  feature_weight_decay: .98
+  feature_weight_decay_steps: 1000
+  feature_weight_minimum: .5
+  gan_type: ragan  # gan | ragan
+  gan_weight: .1
   mega_batch_factor: 1
 
   D_update_ratio: 1
