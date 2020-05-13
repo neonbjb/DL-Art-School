@@ -14,7 +14,7 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
             batch_size = dataset_opt['batch_size'] // world_size
             shuffle = False
         else:
-            num_workers = dataset_opt['n_workers'] * len(opt['gpu_ids'])
+            num_workers = max(dataset_opt['n_workers'] * len(opt['gpu_ids']), 10)
             batch_size = dataset_opt['batch_size']
             shuffle = True
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
