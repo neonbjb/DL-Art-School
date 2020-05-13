@@ -61,16 +61,13 @@ class FixupResNet(nn.Module):
 
     def __init__(self, block, layers, upscale_applications=2, num_filters=64, inject_noise=False):
         super(FixupResNet, self).__init__()
+        self.inject_noise = inject_noise
         self.num_layers = sum(layers) + layers[-1]  # The last layer is applied twice to achieve 4x upsampling.
         self.inplanes = num_filters
         self.upscale_applications = upscale_applications
-        self.inject_noise = inject_noise
         # Part 1 - Process raw input image. Most denoising should appear here and this should be the most complicated
         # part of the block.
-        input_planes = 3
-        if inject_noise:
-            input_planes = 4
-        self.conv1 = nn.Conv2d(input_planes, num_filters, kernel_size=5, stride=1, padding=2,
+        self.conv1 = nn.Conv2d(3, num_filters, kernel_size=5, stride=1, padding=2,
                                bias=False)
         self.bias1 = nn.Parameter(torch.zeros(1))
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
@@ -124,8 +121,8 @@ class FixupResNet(nn.Module):
 
     def forward(self, x):
         if self.inject_noise:
-            rand_feature = torch.randn((x.shape[0], 1) + x.shape[2:], device=x.device, dtype=x.dtype)
-            x = torch.cat([x, rand_feature], dim=1)
+            rand_feature = torch.randn_like(x)
+            x = x + rand_feature * .1
         x = self.conv1(x)
         x = self.lrelu(x + self.bias1)
         x = self.layer1(x)
