@@ -26,6 +26,7 @@ def parse(opt_path, is_train=True):
         if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
             dataset['scale'] = scale
         is_lmdb = False
+        ''' LMDB is not supported at this point with the mods I've been making.
         if dataset.get('dataroot_GT', None) is not None:
             dataset['dataroot_GT'] = osp.expanduser(dataset['dataroot_GT'])
             if dataset['dataroot_GT'].endswith('lmdb'):
@@ -34,6 +35,7 @@ def parse(opt_path, is_train=True):
             dataset['dataroot_LQ'] = osp.expanduser(dataset['dataroot_LQ'])
             if dataset['dataroot_LQ'].endswith('lmdb'):
                 is_lmdb = True
+        '''
         dataset['data_type'] = 'lmdb' if is_lmdb else 'img'
         if dataset['mode'].endswith('mc'):  # for memcached
             dataset['data_type'] = 'mc'
