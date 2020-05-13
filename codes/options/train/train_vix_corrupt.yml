@@ -16,7 +16,7 @@ datasets:
     dataroot_LQ: G:\\data\\pr_upsample\\ultra_lowq\\for_training\\lr
     mismatched_Data_OK: true
     use_shuffle: true
-    n_workers: 0 # per GPU
+    n_workers: 12 # per GPU
     batch_size: 24
     target_size: 64
     use_flip: false
@@ -37,7 +37,7 @@ network_G:
   nb_denoiser: 20
   nb_upsampler: 0
   upscale_applications: 0
-  inject_noise: False
+  inject_noise: True
 
 network_D:
   which_model_D: discriminator_vgg_128
@@ -48,7 +48,7 @@ network_D:
 path:
   pretrain_model_G: ~
   pretrain_model_D: ~
-  resume_state: ../experiments/train_vix_corrupt/training_state/19000.state
+  resume_state: ../experiments/train_vix_corrupt/training_state/31000.state
   strict_load: true
 
 #### training settings: learning rate scheme, loss

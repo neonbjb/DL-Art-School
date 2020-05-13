@@ -1,5 +1,5 @@
 #### general settings
-name: blacked_fix_and_upconv_xl
+name: train_vix_resgenv2
 use_tb_logger: true
 model: srgan
 distortion: sr
@@ -13,11 +13,11 @@ datasets:
     name: vixcloseup
     mode: LQGT
     dataroot_GT: E:\4k6k\datasets\vixen\4k_closeup\hr
-    dataroot_LQ: [E:\4k6k\datasets\vixen\4k_closeup\lr_corrupted, E:\4k6k\datasets\vixen\4k_closeup\lr_c_blurred]
+    dataroot_LQ: E:\4k6k\datasets\vixen\4k_closeup\lr_corrupted
     doCrop: false
     use_shuffle: true
-    n_workers: 20  # per GPU
-    batch_size: 32
+    n_workers: 0  # per GPU
+    batch_size: 8
     target_size: 192
     color: RGB
   val:
@@ -28,28 +28,38 @@ datasets:
 
 #### network structures
 network_G:
-  which_model_G: ResGen
-  nf: 164
-  nb_denoiser: 12
-  nb_upsampler: 8
+  which_model_G: ResGenV2
+  nf: 256
+  nb_denoiser: 20
+  nb_upsampler: 10
+  upscale_applications: 0
 network_D:
   which_model_D: discriminator_resnet_passthrough
-  nf: 52
+  nf: 64
+# LR corruption network.
+network_C:
+  which_model_G: ResGenV2
+  nf: 192
+  nb_denoiser: 20
+  nb_upsampler: 0
+  upscale_applications: 0
+  inject_noise: False
 
 #### path
 path:
   #pretrain_model_G: ../experiments/pretrained_resnet_G.pth
   #pretrain_model_D: ~
+  pretrain_model_C: ../experiments/pretrained_corruptors/resgen_xl_noise_19000.pth
   strict_load: true
-  resume_state: ../experiments/blacked_fix_and_upconv_xl/training_state/68000.state
+  resume_state: ~
 
 #### training settings: learning rate scheme, loss
 train:
-  lr_G: !!float 6e-5
+  lr_G: !!float 1e-4
   weight_decay_G: 0
   beta1_G: 0.9
   beta2_G: 0.99
-  lr_D: !!float 6e-5
+  lr_D: !!float 1e-4
   weight_decay_D: 0
   beta1_D: 0.9
   beta2_D: 0.99
@@ -62,14 +72,14 @@ train:
   mega_batch_factor: 2
 
   pixel_criterion: l1
-  pixel_weight: !!float 1e-2
+  pixel_weight: .01
   feature_criterion: l1
   feature_weight: 1
   feature_weight_decay: 1
   feature_weight_decay_steps: 500
   feature_weight_minimum: 1
   gan_type: gan  # gan | ragan
-  gan_weight: !!float 1e-2
+  gan_weight: .01
 
   D_update_ratio: 1
   D_init_iters: 0
