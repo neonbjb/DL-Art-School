@@ -81,6 +81,7 @@ class BaseModel():
         for key, param in state_dict.items():
             state_dict[key] = param.cpu()
         torch.save(state_dict, save_path)
+        return save_path
 
     def load_network(self, load_path, network, strict=True):
         if isinstance(network, nn.DataParallel) or isinstance(network, DistributedDataParallel):

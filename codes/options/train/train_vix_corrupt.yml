@@ -37,7 +37,7 @@ network_G:
   nb_denoiser: 20
   nb_upsampler: 0
   upscale_applications: 0
-  inject_noise: True
+  inject_noise: False
 
 network_D:
   which_model_D: discriminator_vgg_128
@@ -48,7 +48,7 @@ network_D:
 path:
   pretrain_model_G: ~
   pretrain_model_D: ~
-  resume_state: ../experiments/train_vix_corrupt/training_state/31000.state
+  resume_state: ~
   strict_load: true
 
 #### training settings: learning rate scheme, loss
@@ -81,6 +81,9 @@ train:
   gan_type: ragan  # gan | ragan
   gan_weight: .1
   mega_batch_factor: 1
+  swapout_G_freq: 113
+  swapout_D_freq: 223
+  swapout_duration: 40
 
   D_update_ratio: 1
   D_init_iters: -1
@@ -91,4 +94,4 @@ train:
 #### logger
 logger:
   print_freq: 50
-  save_checkpoint_freq: !!float 5e2
+  save_checkpoint_freq: 500

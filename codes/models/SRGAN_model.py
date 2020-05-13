@@ -9,6 +9,8 @@ from models.base_model import BaseModel
 from models.loss import GANLoss
 from apex import amp
 import torch.nn.functional as F
+import glob
+import random
 
 import torchvision.utils as utils
 import os
@@ -32,7 +34,10 @@ class SRGANModel(BaseModel):
 
         if 'network_C' in opt.keys():
             self.netC = networks.define_G(opt, net_key='network_C').to(self.device)
+            # The corruptor net is fixed. Lock 'her down.
             self.netC.eval()
+            for p in self.netC.parameters():
+                p.requires_grad = True
         else:
             self.netC = None
 
@@ -147,6 +152,13 @@ class SRGANModel(BaseModel):
 
             self.log_dict = OrderedDict()
 
+            # Swapout params
+            self.swapout_G_freq = train_opt['swapout_G_freq'] if train_opt['swapout_G_freq'] else 0
+            self.swapout_G_duration = 0
+            self.swapout_D_freq = train_opt['swapout_D_freq'] if train_opt['swapout_D_freq'] else 0
+            self.swapout_D_duration = 0
+            self.swapout_duration = train_opt['swapout_duration'] if train_opt['swapout_duration'] else 0
+
         self.print_network()  # print network
         self.load()  # load G and D if needed
 
@@ -173,6 +185,9 @@ class SRGANModel(BaseModel):
 
         if step > self.D_init_iters:
             self.optimizer_G.zero_grad()
+
+        self.swapout_D(step)
+        self.swapout_G(step)
 
         # Turning off G-grad is required to enable mega-batching and D_update_ratio to work together for some reason.
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -248,7 +263,12 @@ class SRGANModel(BaseModel):
         noise = torch.randn_like(var_ref[0]) * noise_theta
         noise.to(self.device)
         self.optimizer_D.zero_grad()
-        for var_L, var_H, var_ref, pix, fake_H in zip(self.var_L, self.var_H, var_ref_skips, self.pix, self.fake_GenOut):
+        for var_L, var_H, var_ref, pix in zip(self.var_L, self.var_H, var_ref_skips, self.pix):
+            # Re-compute generator outputs (post-update).
+            with torch.no_grad():
+                fake_H = self.netG(var_L)
+                fake_H = (fake_H[0].detach(), fake_H[1].detach(), fake_H[2].detach())
+
             # Apply noise to the inputs to slow discriminator convergence.
             var_ref = (var_ref[0] + noise,) + var_ref[1:]
             fake_H = (fake_H[0] + noise,) + fake_H[1:]
@@ -344,6 +364,45 @@ class SRGANModel(BaseModel):
         med_skip = F.interpolate(truth_img, scale_factor=.5)
         lo_skip = F.interpolate(truth_img, scale_factor=.25)
         return med_skip, lo_skip
+
+    def pick_rand_prev_model(self, model_suffix):
+        previous_models = glob.glob(os.path.join(self.opt['path']['models'], "*_%s.pth" % (model_suffix,)))
+        if len(previous_models) <= 1:
+            return None
+        # Just a note: this intentionally includes the swap model in the list of possibilities.
+        return previous_models[random.randint(0, len(previous_models)-1)]
+
+    def swapout_D(self, step):
+        if self.swapout_D_duration > 0:
+            self.swapout_D_duration -= 1
+            if self.swapout_D_duration == 0:
+                # Swap back.
+                print("Swapping back to current D model: %s" % (self.stashed_D,))
+                self.load_network(self.stashed_D, self.netD, self.opt['path']['strict_load'])
+                self.stashed_D = None
+        elif self.swapout_D_freq != 0 and step % self.swapout_D_freq == 0:
+            swapped_model = self.pick_rand_prev_model('D')
+            if swapped_model is not None:
+                print("Swapping to previous D model: %s" % (swapped_model,))
+                self.stashed_D = self.save_network(self.netD, 'D', 'swap_model')
+                self.load_network(swapped_model, self.netD, self.opt['path']['strict_load'])
+                self.swapout_D_duration = self.swapout_duration
+
+    def swapout_G(self, step):
+        if self.swapout_G_duration > 0:
+            self.swapout_G_duration -= 1
+            if self.swapout_G_duration == 0:
+                # Swap back.
+                print("Swapping back to current G model: %s" % (self.stashed_G,))
+                self.load_network(self.stashed_G, self.netG, self.opt['path']['strict_load'])
+                self.stashed_G = None
+        elif self.swapout_G_freq != 0 and step % self.swapout_G_freq == 0:
+            swapped_model = self.pick_rand_prev_model('G')
+            if swapped_model is not None:
+                print("Swapping to previous G model: %s" % (swapped_model,))
+                self.stashed_G = self.save_network(self.netG, 'G', 'swap_model')
+                self.load_network(swapped_model, self.netG, self.opt['path']['strict_load'])
+                self.swapout_G_duration = self.swapout_duration
 
     def test(self):
         self.netG.eval()
