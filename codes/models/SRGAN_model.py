@@ -198,10 +198,10 @@ class SRGANModel(BaseModel):
                 p.requires_grad = False
 
         # Calculate a standard deviation for the gaussian noise to be applied to the discriminator, termed noise-theta.
-        if step >= self.D_noise_final:
+        if self.D_noise_final == 0:
             noise_theta = 0
         else:
-            noise_theta = (self.D_noise_theta - self.D_noise_theta_floor) * (self.D_noise_final - step) / self.D_noise_final + self.D_noise_theta_floor
+            noise_theta = (self.D_noise_theta - self.D_noise_theta_floor) * (self.D_noise_final - min(step, self.D_noise_final)) / self.D_noise_final + self.D_noise_theta_floor
 
         self.fake_GenOut = []
         var_ref_skips = []
