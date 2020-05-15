@@ -177,13 +177,23 @@ class FixupResNetV2(FixupResNet):
         if self.upscale_applications > 0:
             x = F.interpolate(x, scale_factor=2.0, mode='nearest')
             x = self.layer2(x)
-        skip_med = self.filter_to_image(x)
 
+        skip_med = self.filter_to_image(x)
         if self.upscale_applications > 1:
             x = F.interpolate(x, scale_factor=2.0, mode='nearest')
             x = self.layer2(x)
 
-        x = self.filter_to_image(x)
+        if self.upscale_applications == 2:
+            x = self.filter_to_image(x)
+        elif self.upscale_applications == 1:
+            x = skip_med
+            skip_med = skip_lo
+            skip_lo = None
+        elif self.upscale_applications == 0:
+            x = skip_lo
+            skip_lo = None
+            skip_med = None
+
         return x, skip_med, skip_lo
 
 def fixup_resnet34(nb_denoiser=20, nb_upsampler=10, **kwargs):

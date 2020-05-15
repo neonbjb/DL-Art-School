@@ -107,15 +107,18 @@ class FixupBottleneck(nn.Module):
 
 class FixupResNet(nn.Module):
 
-    def __init__(self, block, layers, num_filters=64, num_classes=1000, input_img_size=64, use_bn=False):
+    def __init__(self, block, layers, num_filters=64, num_classes=1000, input_img_size=64, number_skips=2, use_bn=False):
         super(FixupResNet, self).__init__()
         self.num_layers = sum(layers)
         self.inplanes = 3
+        self.number_skips = number_skips
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         self.layer0 = self._make_layer(block, num_filters*2, layers[0], stride=2, use_bn=use_bn, conv_type=conv5x5)
-        self.inplanes = self.inplanes + 3  # Accomodate a skip connection from the generator.
+        if number_skips > 0:
+            self.inplanes = self.inplanes + 3  # Accomodate a skip connection from the generator.
         self.layer1 = self._make_layer(block, num_filters*4, layers[1], stride=2, use_bn=use_bn, conv_type=conv5x5)
-        self.inplanes = self.inplanes + 3  # Accomodate a skip connection from the generator.
+        if number_skips > 1:
+            self.inplanes = self.inplanes + 3  # Accomodate a second skip connection from the generator.
         self.layer2 = self._make_layer(block, num_filters*8, layers[2], stride=2, use_bn=use_bn)
         # SRGAN already has a feature loss tied to a separate VGG discriminator. We really don't care about features.
         # Therefore, level off the filter count from this block forwards.
@@ -157,9 +160,11 @@ class FixupResNet(nn.Module):
         x, med_skip, lo_skip = x
 
         x = self.layer0(x)
-        x = torch.cat([x, med_skip], dim=1)
+        if self.number_skips > 0:
+            x = torch.cat([x, med_skip], dim=1)
         x = self.layer1(x)
-        x = torch.cat([x, lo_skip], dim=1)
+        if self.number_skips > 1:
+            x = torch.cat([x, lo_skip], dim=1)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
