@@ -12,13 +12,15 @@ datasets:
   train:
     name: vixcloseup
     mode: LQGT
-    dataroot_GT: E:\4k6k\datasets\vixen\4k_closeup\hr
-    dataroot_LQ: E:\4k6k\datasets\vixen\4k_closeup\lr_corrupted
+    dataroot_GT: E:\4k6k\datasets\vixen\vix_tiled\hr
+    dataroot_LQ: E:\4k6k\datasets\vixen\vix_tiled\lr
+    use_flip: true
+    use_rot: true
     doCrop: false
     use_shuffle: true
-    n_workers: 0  # per GPU
+    n_workers: 4  # per GPU
     batch_size: 8
-    target_size: 192
+    target_size: 256
     color: RGB
   val:
     name: adrianna_val
@@ -32,7 +34,7 @@ network_G:
   nf: 256
   nb_denoiser: 20
   nb_upsampler: 10
-  upscale_applications: 0
+  upscale_applications: 2
 network_D:
   which_model_D: discriminator_resnet_passthrough
   nf: 64
@@ -47,9 +49,9 @@ network_C:
 
 #### path
 path:
+  pretrained_corruptors_dir: ../experiments/pretrained_corruptors
   #pretrain_model_G: ../experiments/pretrained_resnet_G.pth
   #pretrain_model_D: ~
-  pretrain_model_C: ../experiments/pretrained_corruptors/resgen_xl_noise_19000.pth
   strict_load: true
   resume_state: ~
 
@@ -71,18 +73,29 @@ train:
   lr_gamma: 0.5
   mega_batch_factor: 2
 
+  swapout_G_freq: 113
+  swapout_D_freq: 223
+  swapout_duration: 40
+
+  corruptor_swapout_steps: 1000
+
   pixel_criterion: l1
   pixel_weight: .01
+
   feature_criterion: l1
   feature_weight: 1
   feature_weight_decay: 1
   feature_weight_decay_steps: 500
   feature_weight_minimum: 1
-  gan_type: gan  # gan | ragan
+
+  gan_type: ragan  # gan | ragan
   gan_weight: .01
 
   D_update_ratio: 1
   D_init_iters: 0
+  D_noise_theta_init: .005  # Just fixed noise.
+  D_noise_final_it: 1
+  D_noise_theta_floor: .005
 
   manual_seed: 10
   val_freq: !!float 5e2

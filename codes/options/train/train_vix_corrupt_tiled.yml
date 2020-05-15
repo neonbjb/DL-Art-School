@@ -48,7 +48,7 @@ network_D:
 path:
   pretrain_model_G: ~
   pretrain_model_D: ~
-  resume_state: ../experiments/train_vix_corrupt_tiled/training_state/5000.state
+  resume_state: ../experiments/train_vix_corrupt_tiled/training_state/16000.state
   strict_load: true
 
 #### training settings: learning rate scheme, loss
@@ -74,7 +74,7 @@ train:
   pixel_criterion: l2
   pixel_weight: !!float 1e-2
   feature_criterion: l1
-  feature_weight: .9
+  feature_weight: .6
   feature_weight_decay: .98
   feature_weight_decay_steps: 1000
   feature_weight_minimum: .5
