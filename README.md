@@ -2,14 +2,30 @@
 
 MMSR is an open source image and video super-resolution toolbox based on PyTorch. It is a part of the [open-mmlab](https://github.com/open-mmlab) project developed by [Multimedia Laboratory, CUHK](http://mmlab.ie.cuhk.edu.hk). MMSR is based on our previous projects: [BasicSR](https://github.com/xinntao/BasicSR), [ESRGAN](https://github.com/xinntao/ESRGAN), and [EDVR](https://github.com/xinntao/EDVR).
 
-### Highlights
-- **A unified framework** suitable for image and video super-resolution tasks. It is also easy to adapt to other restoration tasks, e.g., deblurring, denoising, etc.
-- **State of the art**: It includes several winning methods in competitions: such as ESRGAN (PIRM18), EDVR (NTIRE19).
-- **Easy to extend**: It is easy to try new research ideas based on the code base.
+## My (@neonbjb) Modifications
+After tinkering with MMSR, I really began to like a lot about how the codebase was laid out and the general practices being used. I have since worked to extend it to more
+general use cases, as well as implement several GAN training features. The additions are too many to list, but I'll give it a shot:
 
+- FP16 support.
+- Alternative dataset support (notably a disjoint dataset for training a generator to style-transfer between imagesets).
+- Addition of several new architectures, including a ResNet-based discrimator, a downsampling generator (for training image corruptors), and a fix-and-upsample generator.
+- Fixup resblock support which resists the exploding gradients which necessitate batch norms. Most of the fixup architectures can be trained with BN turned off, though they
+  take longer to train and are occasionally divergent in FP16 mode.
+- Batch testing for performing generator augmentation on large sets of images.
+- Model swapout during training - randomly select a past D or G and substitute it in for a short time to increase variance on the respective model.
+- Adding random noise on both the inputs of the discriminator and generator. The discriminator variety has a decay.
+- Decaying the influence of the feature loss.
+- "Corruption" generators which can alter an input before it is fed through the SRGAN pipeline.
+- Outputting "state" images which are very useful in debugging what is actually going on in the pipeline.
+- Skip layers between the generator and discriminator.
+- Support for any number of image resolutions into the discriminators. The original MMSR only accepted 128x128 images.
+- "Megabatches" - gradient accumulation across multiple batches before performing an optimizer step.
+- Image cropping can be disabled. I prefer to do this in preprocessing.
+- Tensorboard logs for an experiment are cleared out when the experiment is restarted anew.
+- A LOT more data is logged to tensorboard.
 
-### Updates
-[2019-07-25] MMSR v0.1 is released.
+Note that this codebase is far from clean. I've notably broken LMDB support in a couple of places. Likely everything other than SRGAN doesn't work too well anymore either.
+I will get around to documenting all this in the near future once the repo stabilizes a bit. For now, you're on your own!
 
 ## Dependencies and Installation
 
