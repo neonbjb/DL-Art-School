@@ -1,5 +1,5 @@
 #### general settings
-name: train_vix_corrupt
+name: train_vix_corrupt_tiled
 use_tb_logger: true
 model: corruptgan
 distortion: downsample
@@ -10,21 +10,21 @@ amp_opt_level: O0
 #### datasets
 datasets:
   train:
-    name: blacked
+    name: vix_corrupt
     mode: downsample
-    dataroot_GT: E:\\4k6k\\datasets\\vixen\\4k_closeup\\lr_corrupted
-    dataroot_LQ: G:\\data\\pr_upsample\\ultra_lowq\\for_training\\lr
+    dataroot_GT: H:\\vix\\lr
+    dataroot_LQ: H:\\ultra_lq\\tiled\\lr
     mismatched_Data_OK: true
     use_shuffle: true
-    n_workers: 12 # per GPU
-    batch_size: 24
+    n_workers: 14 # per GPU
+    batch_size: 48
     target_size: 64
-    use_flip: false
-    use_rot: false
+    use_flip: true
+    use_rot: true
     doCrop: false
     color: RGB
   val:
-    name: blacked_val
+    name: vix_val
     mode: downsample
     target_size: 64
     dataroot_GT: E:\\4k6k\\datasets\\vixen\\val
@@ -48,7 +48,7 @@ network_D:
 path:
   pretrain_model_G: ~
   pretrain_model_D: ~
-  resume_state: ../experiments/train_vix_corrupt/training_state/47000.state
+  resume_state: ../experiments/train_vix_corrupt_tiled/training_state/5000.state
   strict_load: true
 
 #### training settings: learning rate scheme, loss
@@ -74,13 +74,13 @@ train:
   pixel_criterion: l2
   pixel_weight: !!float 1e-2
   feature_criterion: l1
-  feature_weight: .5
+  feature_weight: .9
   feature_weight_decay: .98
   feature_weight_decay_steps: 1000
   feature_weight_minimum: .5
   gan_type: ragan  # gan | ragan
   gan_weight: .1
-  mega_batch_factor: 1
+  mega_batch_factor: 2
   swapout_G_freq: 113
   swapout_D_freq: 223
   swapout_duration: 40

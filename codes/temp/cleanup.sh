@@ -5,3 +5,5 @@ rm pix/*
 rm ref/*
 rm genlr/*
 rm genmr/*
+rm lr_precorrupt/*
+rm ref/*
