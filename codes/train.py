@@ -185,6 +185,7 @@ def main():
             #### validation
             if opt['datasets'].get('val', None) and current_step % opt['train']['val_freq'] == 0:
                 if opt['model'] in ['sr', 'srgan', 'corruptgan'] and rank <= 0:  # image restoration validation
+                    model.force_restore_swapout()
                     # does not support multi-GPU validation
                     pbar = util.ProgressBar(len(val_loader))
                     avg_psnr = 0.
