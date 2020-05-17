@@ -25,9 +25,8 @@ def define_G(opt, net_key='network_G'):
                                        nf=opt_net['nf'], nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == 'RRDBNet':
         # RRDB does scaling in two steps, so take the sqrt of the scale we actually want to achieve and feed it to RRDB.
-        scale_per_step = math.sqrt(scale)
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'], interpolation_scale_factor=scale_per_step)
+                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=scale)
     elif which_model == 'RRDBNetXL':
         scale_per_step = math.sqrt(scale)
         netG = RRDBNetXL_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],

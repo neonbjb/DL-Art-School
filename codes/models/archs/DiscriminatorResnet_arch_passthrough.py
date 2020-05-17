@@ -156,8 +156,12 @@ class FixupResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        # This class expects a medium skip (half-res) and low skip (quarter-res) provided as a tuple in the input.
-        x, med_skip, lo_skip = x
+        if len(x) == 3:
+            # This class can take a medium skip (half-res) and low skip (quarter-res) provided as a tuple in the input.
+            x, med_skip, lo_skip = x
+        else:
+            # Or just a tuple with only the high res input (this assumes number_skips was set right).
+            x = x[0]
 
         x = self.layer0(x)
         if self.number_skips > 0:
