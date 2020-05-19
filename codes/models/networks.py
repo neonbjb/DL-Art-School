@@ -75,7 +75,8 @@ def define_D(opt):
         netD = DiscriminatorResnet_arch.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
     elif which_model == 'discriminator_resnet_passthrough':
         netD = DiscriminatorResnet_arch_passthrough.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz,
-                                                                   number_skips=opt_net['number_skips'], use_bn=True)
+                                                                   number_skips=opt_net['number_skips'], use_bn=True,
+                                                                   disable_passthrough=opt_net['disable_passthrough'])
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD
