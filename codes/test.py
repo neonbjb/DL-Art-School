@@ -10,12 +10,14 @@ from data.util import bgr2ycbcr
 from data import create_dataset, create_dataloader
 from models import create_model
 from tqdm import tqdm
+import torch
 
 if __name__ == "__main__":
     #### options
+    torch.backends.cudnn.benchmark = True
     want_just_images = True
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YMAL file.', default='options/test/test_vix_corrupt.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YMAL file.', default='../options/use_vrp_upsample.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
 
@@ -75,31 +77,6 @@ if __name__ == "__main__":
 
                 if want_just_images:
                     continue
-
-                # calculate PSNR and SSIM
-                if need_GT:
-                    gt_img = util.tensor2img(visuals['GT'])
-                    sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
-                    psnr = util.calculate_psnr(sr_img, gt_img)
-                    ssim = util.calculate_ssim(sr_img, gt_img)
-                    test_results['psnr'].append(psnr)
-                    test_results['ssim'].append(ssim)
-
-                    if gt_img.shape[2] == 3:  # RGB image
-                        sr_img_y = bgr2ycbcr(sr_img / 255., only_y=True)
-                        gt_img_y = bgr2ycbcr(gt_img / 255., only_y=True)
-
-                        psnr_y = util.calculate_psnr(sr_img_y * 255, gt_img_y * 255)
-                        ssim_y = util.calculate_ssim(sr_img_y * 255, gt_img_y * 255)
-                        test_results['psnr_y'].append(psnr_y)
-                        test_results['ssim_y'].append(ssim_y)
-                        logger.info(
-                            '{:20s} - PSNR: {:.6f} dB; SSIM: {:.6f}; PSNR_Y: {:.6f} dB; SSIM_Y: {:.6f}.'.
-                            format(img_name, psnr, ssim, psnr_y, ssim_y))
-                    else:
-                        logger.info('{:20s} - PSNR: {:.6f} dB; SSIM: {:.6f}.'.format(img_name, psnr, ssim))
-                else:
-                    logger.info(img_name)
 
         if not want_just_images and need_GT:  # metrics
             # Average PSNR/SSIM results

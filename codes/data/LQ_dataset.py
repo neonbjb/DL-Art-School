@@ -3,6 +3,9 @@ import lmdb
 import torch
 import torch.utils.data as data
 import data.util as util
+import torchvision.transforms.functional as F
+from PIL import Image
+import os.path as osp
 
 
 class LQDataset(data.Dataset):
@@ -30,24 +33,20 @@ class LQDataset(data.Dataset):
     def __getitem__(self, index):
         if self.data_type == 'lmdb' and self.LQ_env is None:
             self._init_lmdb()
-        LQ_path = None
+        actual_index = int(index / 2)
+        is_left = (index % 2) == 0
 
         # get LQ image
-        LQ_path = self.paths_LQ[index]
-        resolution = [int(s) for s in self.sizes_LQ[index].split('_')
-                      ] if self.data_type == 'lmdb' else None
-        img_LQ = util.read_img(self.LQ_env, LQ_path, resolution)
-        H, W, C = img_LQ.shape
+        LQ_path = self.paths_LQ[actual_index]
+        img_LQ = Image.open(LQ_path)
+        left = 0 if is_left else 2000
+        img_LQ = F.crop(img_LQ, 74, left + 74, 1900, 1900)
+        img_LQ = F.to_tensor(img_LQ)
 
-        if self.opt['color']:  # change color space if necessary
-            img_LQ = util.channel_convert(C, self.opt['color'], [img_LQ])[0]
-
-        # BGR to RGB, HWC to CHW, numpy to tensor
-        if img_LQ.shape[2] == 3:
-            img_LQ = img_LQ[:, :, [2, 1, 0]]
-        img_LQ = torch.from_numpy(np.ascontiguousarray(np.transpose(img_LQ, (2, 0, 1)))).float()
+        img_name = osp.splitext(osp.basename(LQ_path))[0]
+        LQ_path = LQ_path.replace(img_name, img_name + "_%i" % (index % 2))
 
         return {'LQ': img_LQ, 'LQ_path': LQ_path}
 
     def __len__(self):
-        return len(self.paths_LQ)
+        return len(self.paths_LQ) * 2
