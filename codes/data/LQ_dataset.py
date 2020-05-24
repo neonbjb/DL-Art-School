@@ -33,14 +33,15 @@ class LQDataset(data.Dataset):
     def __getitem__(self, index):
         if self.data_type == 'lmdb' and self.LQ_env is None:
             self._init_lmdb()
-        actual_index = int(index / 2)
+        actual_index = index # int(index / 2)
         is_left = (index % 2) == 0
 
         # get LQ image
         LQ_path = self.paths_LQ[actual_index]
         img_LQ = Image.open(LQ_path)
-        left = 0 if is_left else 2000
-        img_LQ = F.crop(img_LQ, 74, left + 74, 1900, 1900)
+        left = 0 if is_left else 1920
+        # crop input if needed.
+        #img_LQ = F.crop(img_LQ, 5, left + 5, 1900, 1900)
         img_LQ = F.to_tensor(img_LQ)
 
         img_name = osp.splitext(osp.basename(LQ_path))[0]
@@ -49,4 +50,4 @@ class LQDataset(data.Dataset):
         return {'LQ': img_LQ, 'LQ_path': LQ_path}
 
     def __len__(self):
-        return len(self.paths_LQ) * 2
+        return len(self.paths_LQ) # * 2
