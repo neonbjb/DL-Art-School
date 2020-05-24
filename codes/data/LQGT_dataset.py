@@ -90,6 +90,7 @@ class LQGTDataset(data.Dataset):
             img_PIX = img_GT
 
         # get LQ image
+        already_blurred = False
         if self.paths_LQ:
             LQ_path = self.get_lq_path(index)
             resolution = [int(s) for s in self.sizes_LQ[index].split('_')
@@ -113,8 +114,16 @@ class LQGTDataset(data.Dataset):
                     img_GT = cv2.cvtColor(img_GT, cv2.COLOR_GRAY2BGR)
 
             H, W, _ = img_GT.shape
+
+            if self.opt['use_blurring']:
+                blur_sig = int(random.randrange(0, 4))
+                hqxform = cv2.GaussianBlur(img_GT, (3, 3), blur_sig)
+                already_blurred = True
+            else:
+                hqxform = img_GT
+
             # using matlab imresize
-            img_LQ = util.imresize_np(img_GT, 1 / scale, True)
+            img_LQ = util.imresize_np(hqxform, 1 / scale, True)
             if img_LQ.ndim == 2:
                 img_LQ = np.expand_dims(img_LQ, axis=2)
 
@@ -142,8 +151,8 @@ class LQGTDataset(data.Dataset):
             img_LQ, img_GT, img_PIX = util.augment([img_LQ, img_GT, img_PIX], self.opt['use_flip'],
                                           self.opt['use_rot'])
 
-            if self.opt['use_blurring']:
-                blur_sig = int(random.randrange(0, 10))
+            if self.opt['use_blurring'] and not already_blurred:
+                blur_sig = int(random.randrange(0, 4))
                 img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), blur_sig)
 
         if self.opt['color']:  # change color space if necessary
