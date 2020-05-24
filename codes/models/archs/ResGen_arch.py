@@ -13,9 +13,14 @@ def conv3x3(in_planes, out_planes, stride=1):
                      padding=1, bias=False)
 
 def conv5x5(in_planes, out_planes, stride=1):
-    """3x3 convolution with padding"""
+    """5x5 convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=5, stride=stride,
                      padding=2, bias=False)
+
+def conv7x7(in_planes, out_planes, stride=1):
+    """7x7 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=7, stride=stride,
+                     padding=3, bias=False)
 
 def conv1x1(in_planes, out_planes, stride=1):
     """1x1 convolution"""
@@ -62,7 +67,7 @@ class FixupResNet(nn.Module):
     def __init__(self, block, layers, upscale_applications=2, num_filters=64, inject_noise=False):
         super(FixupResNet, self).__init__()
         self.inject_noise = inject_noise
-        self.num_layers = sum(layers) + layers[-1]  # The last layer is applied twice to achieve 4x upsampling.
+        self.num_layers = sum(layers) + layers[-1] * (upscale_applications - 1)  # The last layer is applied repeatedly to achieve high level SR.
         self.inplanes = num_filters
         self.upscale_applications = upscale_applications
         # Part 1 - Process raw input image. Most denoising should appear here and this should be the most complicated

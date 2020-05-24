@@ -35,7 +35,7 @@ def define_G(opt, net_key='network_G'):
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'],
                                           inject_noise=opt_net['inject_noise'])
     elif which_model == "BigGan":
-        netG = biggan_arch.biggan_medium(filters=opt_net['nf'])
+        netG = biggan_arch.biggan_medium(num_filters=opt_net['nf'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':

@@ -1,15 +1,10 @@
 ''' Layers
     This file contains various layers for the BigGAN models.
 '''
-import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import init
-import torch.optim as optim
 import torch.nn.functional as F
 from torch.nn import Parameter as P
-
-from sync_batchnorm import SynchronizedBatchNorm2d as SyncBN2d
 
 
 # Projection of x onto y
@@ -336,7 +331,7 @@ class ccbn(nn.Module):
 # Normal, non-class-conditional BN
 class bn(nn.Module):
     def __init__(self, output_size, eps=1e-5, momentum=0.1,
-                 cross_replica=False, mybn=False):
+                 cross_replica=False, mybn=False, norm_style=None):
         super(bn, self).__init__()
         self.output_size = output_size
         # Prepare gain and bias layers

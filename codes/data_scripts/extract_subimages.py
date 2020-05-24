@@ -13,18 +13,18 @@ import data.util as data_util  # noqa: E402
 
 def main():
     mode = 'single'  # single (one input folder) | pair (extract corresponding GT and LR pairs)
-    split_img = False
+    split_img = True
     opt = {}
     opt['n_thread'] = 20
     opt['compression_level'] = 3  # 3 is the default value in cv2
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = 'Z:\\4k6k\\datasets\\adrianna\\adrianna_vids\\images'
-        opt['save_folder'] = 'Z:\\4k6k\\datasets\\adrianna\\adrianna_vids\\tiled'
-        opt['crop_sz'] = 64  # the size of each sub-image
-        opt['step'] = 48  # step of the sliding crop window
-        opt['thres_sz'] = 20  # size threshold
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\vrp\\images_sized'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\vrp\\images_tiled'
+        opt['crop_sz'] = 320  # the size of each sub-image
+        opt['step'] = 280  # step of the sliding crop window
+        opt['thres_sz'] = 200  # size threshold
         extract_single(opt, split_img)
     elif mode == 'pair':
         GT_folder = '../../datasets/div2k/DIV2K_train_HR'
@@ -120,8 +120,8 @@ def worker(path, opt, split_mode=False, left_img=True):
         raise ValueError('Wrong image shape - {}'.format(n_channels))
        
     # Uncomment to filter any image that doesnt meet a threshold size.
-    #if w < 3000:
-    #    return
+    if w < 3000:
+        return
 
     left = 0
     right = w
@@ -152,10 +152,10 @@ def worker(path, opt, split_mode=False, left_img=True):
                 crop_img = img[x:x + crop_sz, y:y + crop_sz, :]
             crop_img = np.ascontiguousarray(crop_img)
             # If this fails, change it and the imwrite below to the write extension.
-            assert img_name.contains(".png")
+            assert ".jpg" in img_name
             cv2.imwrite(
                 osp.join(opt['save_folder'],
-                         img_name.replace('.png', '_l{:05d}_s{:03d}.png'.format(left, index))), crop_img,
+                         img_name.replace('.jpg', '_l{:05d}_s{:03d}.png'.format(left, index))), crop_img,
                 [cv2.IMWRITE_PNG_COMPRESSION, opt['compression_level']])
     return 'Processing {:s} ...'.format(img_name)
 
