@@ -5,12 +5,9 @@ import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.DiscriminatorResnet_arch_passthrough as DiscriminatorResnet_arch_passthrough
 import models.archs.FlatProcessorNetNew_arch as FlatProcessorNetNew_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
-import models.archs.RRDBNetXL_arch as RRDBNetXL_arch
-#import models.archs.EDVR_arch as EDVR_arch
 import models.archs.HighToLowResNet as HighToLowResNet
-import models.archs.FlatProcessorNet_arch as FlatProcessorNet_arch
-import models.archs.arch_util as arch_utils
 import models.archs.ResGen_arch as ResGen_arch
+import models.archs.biggan_gen_arch as biggan_arch
 import math
 
 # Generator
@@ -27,11 +24,9 @@ def define_G(opt, net_key='network_G'):
         # RRDB does scaling in two steps, so take the sqrt of the scale we actually want to achieve and feed it to RRDB.
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], scale=scale)
-    elif which_model == 'RRDBNetXL':
-        scale_per_step = math.sqrt(scale)
-        netG = RRDBNetXL_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb_lo=opt_net['nblo'], nb_med=opt_net['nbmed'], nb_hi=opt_net['nbhi'],
-                                    interpolation_scale_factor=scale_per_step)
+    elif which_model == 'AssistedRRDBNet':
+        netG = RRDBNet_arch.AssistedRRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=scale)
     elif which_model == 'ResGen':
         netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'])
@@ -39,6 +34,8 @@ def define_G(opt, net_key='network_G'):
         netG = ResGen_arch.fixup_resnet34_v2(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'],
                                           inject_noise=opt_net['inject_noise'])
+    elif which_model == "BigGan":
+        netG = biggan_arch.biggan_medium(filters=opt_net['nf'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
