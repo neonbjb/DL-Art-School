@@ -2,8 +2,12 @@ import argparse
 import options.options as option
 from models.networks import define_G
 import torch
+import torchvision
+import torch.nn.functional as F
+
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/use_vrp_upsample.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
