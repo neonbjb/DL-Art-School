@@ -143,7 +143,8 @@ class LQGTDataset(data.Dataset):
                                           self.opt['use_rot'])
 
             if self.opt['use_blurring']:
-                img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), 10)
+                blur_sig = int(random.randrange(0, 10))
+                img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), blur_sig)
 
         if self.opt['color']:  # change color space if necessary
             img_LQ = util.channel_convert(C, self.opt['color'],
