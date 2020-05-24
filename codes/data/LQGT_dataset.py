@@ -142,6 +142,9 @@ class LQGTDataset(data.Dataset):
             img_LQ, img_GT, img_PIX = util.augment([img_LQ, img_GT, img_PIX], self.opt['use_flip'],
                                           self.opt['use_rot'])
 
+            if self.opt['use_blurring']:
+                img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), 10)
+
         if self.opt['color']:  # change color space if necessary
             img_LQ = util.channel_convert(C, self.opt['color'],
                                           [img_LQ])[0]  # TODO during val no definition
