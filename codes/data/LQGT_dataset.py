@@ -5,6 +5,9 @@ import lmdb
 import torch
 import torch.utils.data as data
 import data.util as util
+from PIL import Image
+from io import BytesIO
+import torchvision.transforms.functional as F
 
 
 class LQGTDataset(data.Dataset):
@@ -27,16 +30,17 @@ class LQGTDataset(data.Dataset):
         self.LQ_env, self.GT_env, self.PIX_env = None, None, None  # environments for lmdbs
 
         self.paths_GT, self.sizes_GT = util.get_image_paths(self.data_type, opt['dataroot_GT'])
-        self.paths_LQ = []
-        if isinstance(opt['dataroot_LQ'], list):
-            # Multiple LQ data sources can be given, in case there are multiple ways of corrupting a source image and
-            # we want the model to learn them all.
-            for dr_lq in opt['dataroot_LQ']:
-                lq_path, self.sizes_LQ = util.get_image_paths(self.data_type, dr_lq)
+        if 'dataroot_LQ' in opt.keys():
+            self.paths_LQ = []
+            if isinstance(opt['dataroot_LQ'], list):
+                # Multiple LQ data sources can be given, in case there are multiple ways of corrupting a source image and
+                # we want the model to learn them all.
+                for dr_lq in opt['dataroot_LQ']:
+                    lq_path, self.sizes_LQ = util.get_image_paths(self.data_type, dr_lq)
+                    self.paths_LQ.append(lq_path)
+            else:
+                lq_path, self.sizes_LQ = util.get_image_paths(self.data_type, opt['dataroot_LQ'])
                 self.paths_LQ.append(lq_path)
-        else:
-            lq_path, self.sizes_LQ = util.get_image_paths(self.data_type, opt['dataroot_LQ'])
-            self.paths_LQ.append(lq_path)
         self.doCrop = opt['doCrop']
         if 'dataroot_PIX' in opt.keys():
             self.paths_PIX, self.sizes_PIX = util.get_image_paths(self.data_type, opt['dataroot_PIX'])
@@ -144,12 +148,23 @@ class LQGTDataset(data.Dataset):
 
         # BGR to RGB, HWC to CHW, numpy to tensor
         if img_GT.shape[2] == 3:
-            img_GT = img_GT[:, :, [2, 1, 0]]
-            img_LQ = img_LQ[:, :, [2, 1, 0]]
-            img_PIX = img_PIX[:, :, [2, 1, 0]]
+            img_GT = cv2.cvtColor(img_GT, cv2.COLOR_BGR2RGB)
+            img_LQ = cv2.cvtColor(img_LQ, cv2.COLOR_BGR2RGB)
+            img_PIX = cv2.cvtColor(img_PIX, cv2.COLOR_BGR2RGB)
+
+        # LQ needs to go to a PIL image to perform the compression-artifact transformation.
+        img_LQ = (img_LQ * 255).astype(np.uint8)
+        img_LQ = Image.fromarray(img_LQ)
+        if self.opt['use_compression_artifacts']:
+            qf = random.randrange(15, 100)
+            corruption_buffer = BytesIO()
+            img_LQ.save(corruption_buffer, "JPEG", quality=qf, optimice=True)
+            corruption_buffer.seek(0)
+            img_LQ = Image.open(corruption_buffer)
+
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_PIX = torch.from_numpy(np.ascontiguousarray(np.transpose(img_PIX, (2, 0, 1)))).float()
-        img_LQ = torch.from_numpy(np.ascontiguousarray(np.transpose(img_LQ, (2, 0, 1)))).float()
+        img_LQ = F.to_tensor(img_LQ)
 
         if LQ_path is None:
             LQ_path = GT_path
