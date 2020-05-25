@@ -117,7 +117,7 @@ class LQGTDataset(data.Dataset):
 
             if self.opt['use_blurring']:
                 blur_sig = int(random.randrange(0, 8))
-                hqxform = cv2.GaussianBlur(img_GT, (3, 3), blur_sig)
+                hqxform = cv2.GaussianBlur(img_GT, (5, 5), blur_sig)
                 already_blurred = True
             else:
                 hqxform = img_GT
