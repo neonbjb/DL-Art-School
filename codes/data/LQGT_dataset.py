@@ -144,7 +144,7 @@ class LQGTDataset(data.Dataset):
                                           self.opt['use_rot'])
 
             if self.opt['use_blurring']:
-                blur_sig = int(random.randrange(0, 4))
+                blur_sig = int(random.randrange(0, 3))
                 img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), blur_sig)
 
         if self.opt['color']:  # change color space if necessary
@@ -161,7 +161,7 @@ class LQGTDataset(data.Dataset):
         img_LQ = (img_LQ * 255).astype(np.uint8)
         img_LQ = Image.fromarray(img_LQ)
         if self.opt['use_compression_artifacts']:
-            qf = random.randrange(15, 100)
+            qf = random.randrange(10, 70)
             corruption_buffer = BytesIO()
             img_LQ.save(corruption_buffer, "JPEG", quality=qf, optimice=True)
             corruption_buffer.seek(0)
