@@ -39,7 +39,7 @@ class Discriminator_VGG_128(nn.Module):
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
     def forward(self, x):
-        x, skip_med, skip_lo = x
+        x = x[0]
         fea = self.lrelu(self.conv0_0(x))
         fea = self.lrelu(self.bn0_1(self.conv0_1(fea)))
 
