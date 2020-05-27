@@ -63,6 +63,13 @@ class LQGTDataset(data.Dataset):
             self.PIX_env = lmdb.open(self.opt['dataroot_PIX'], readonly=True, lock=False, readahead=False,
                                     meminit=False)
 
+    def motion_blur(self, image, size, angle):
+        k = np.zeros((size, size), dtype=np.float32)
+        k[(size - 1) // 2, :] = np.ones(size, dtype=np.float32)
+        k = cv2.warpAffine(k, cv2.getRotationMatrix2D((size / 2 - 0.5, size / 2 - 0.5), angle, 1.0), (size, size))
+        k = k * (1.0 / np.sum(k))
+        return cv2.filter2D(image, -1, k)
+
     def __getitem__(self, index):
         if self.data_type == 'lmdb' and (self.GT_env is None or self.LQ_env is None):
             self._init_lmdb()
@@ -144,8 +151,14 @@ class LQGTDataset(data.Dataset):
                                           self.opt['use_rot'])
 
             if self.opt['use_blurring']:
-                blur_sig = int(random.randrange(0, 3))
-                img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), blur_sig)
+                # Pick randomly between gaussian, motion, or no blur.
+                blur_det = random.randint(0, 100)
+                if blur_det < 40:
+                    blur_sig = int(random.randrange(0, 3))
+                    img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), blur_sig)
+                elif blur_det < 70:
+                    img_LQ = self.motion_blur(img_LQ, random.randrange(0,8), random.randint(0, 360))
+
 
         if self.opt['color']:  # change color space if necessary
             img_LQ = util.channel_convert(C, self.opt['color'],
@@ -170,6 +183,9 @@ class LQGTDataset(data.Dataset):
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_PIX = torch.from_numpy(np.ascontiguousarray(np.transpose(img_PIX, (2, 0, 1)))).float()
         img_LQ = F.to_tensor(img_LQ)
+
+        lq_noise = torch.randn_like(img_LQ) * 5 / 255
+        img_LQ += lq_noise
 
         if LQ_path is None:
             LQ_path = GT_path
