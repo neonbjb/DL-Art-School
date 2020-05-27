@@ -157,7 +157,7 @@ class LQGTDataset(data.Dataset):
                     blur_sig = int(random.randrange(0, 3))
                     img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), blur_sig)
                 elif blur_det < 70:
-                    img_LQ = self.motion_blur(img_LQ, random.randrange(0,8), random.randint(0, 360))
+                    img_LQ = self.motion_blur(img_LQ, random.randrange(1, 8), random.randint(0, 360))
 
 
         if self.opt['color']:  # change color space if necessary
