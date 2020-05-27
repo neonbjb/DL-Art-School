@@ -20,26 +20,27 @@ def parse(opt_path, is_train=True):
         scale = opt['scale']
 
     # datasets
-    for phase, dataset in opt['datasets'].items():
-        phase = phase.split('_')[0]
-        dataset['phase'] = phase
-        if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
-            dataset['scale'] = scale
-        is_lmdb = False
-        ''' LMDB is not supported at this point with the mods I've been making.
-        if dataset.get('dataroot_GT', None) is not None:
-            dataset['dataroot_GT'] = osp.expanduser(dataset['dataroot_GT'])
-            if dataset['dataroot_GT'].endswith('lmdb'):
-                is_lmdb = True
-        if dataset.get('dataroot_LQ', None) is not None:
-            dataset['dataroot_LQ'] = osp.expanduser(dataset['dataroot_LQ'])
-            if dataset['dataroot_LQ'].endswith('lmdb'):
-                is_lmdb = True
-        '''
-        dataset['data_type'] = 'lmdb' if is_lmdb else 'img'
-        if dataset['mode'].endswith('mc'):  # for memcached
-            dataset['data_type'] = 'mc'
-            dataset['mode'] = dataset['mode'].replace('_mc', '')
+    if 'datasets' in opt.keys():
+        for phase, dataset in opt['datasets'].items():
+            phase = phase.split('_')[0]
+            dataset['phase'] = phase
+            if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
+                dataset['scale'] = scale
+            is_lmdb = False
+            ''' LMDB is not supported at this point with the mods I've been making.
+            if dataset.get('dataroot_GT', None) is not None:
+                dataset['dataroot_GT'] = osp.expanduser(dataset['dataroot_GT'])
+                if dataset['dataroot_GT'].endswith('lmdb'):
+                    is_lmdb = True
+            if dataset.get('dataroot_LQ', None) is not None:
+                dataset['dataroot_LQ'] = osp.expanduser(dataset['dataroot_LQ'])
+                if dataset['dataroot_LQ'].endswith('lmdb'):
+                    is_lmdb = True
+            '''
+            dataset['data_type'] = 'lmdb' if is_lmdb else 'img'
+            if dataset['mode'].endswith('mc'):  # for memcached
+                dataset['data_type'] = 'mc'
+                dataset['mode'] = dataset['mode'].replace('_mc', '')
 
     # path
     for key, path in opt['path'].items():
