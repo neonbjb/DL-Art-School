@@ -140,7 +140,7 @@ if __name__ == "__main__":
                     os.makedirs(src_imgs_path, exist_ok=True)
                     for i in range(int(frames_per_vid / num_splits)):
                         to_join = [imgs[j] for j in range(i * num_splits, i * num_splits + num_splits)]
-                        cmd = ['magick', 'convert'] + to_join + ['+append', osp.join(src_imgs_path, "%08d.png" % (i,))]
+                        cmd = ['convert'] + to_join + ['+append', osp.join(src_imgs_path, "%08d.png" % (i,))]
                         procs.append(subprocess.Popen(cmd))
                     for p in procs:
                         p.wait()
