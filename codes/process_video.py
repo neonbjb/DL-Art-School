@@ -1,8 +1,7 @@
 import argparse
-import argparse
 import logging
-import os.path as osp
 import os
+import os.path as osp
 import subprocess
 import time
 
@@ -16,7 +15,6 @@ import options.options as option
 import utils.util as util
 from data import create_dataloader
 from models import create_model
-import glob
 
 
 class FfmpegBackedVideoDataset(data.Dataset):
@@ -72,6 +70,19 @@ class FfmpegBackedVideoDataset(data.Dataset):
     def __len__(self):
         return self.frame_count * self.vertical_splits
 
+def merge_images(files, output_path):
+    """Merges several image files together across the vertical axis
+    """
+    images = [Image.open(f) for f in files]
+    w, h = images[0].size
+
+    result_width = w * len(images)
+    result_height = h
+
+    result = Image.new('RGB', (result_width, result_height))
+    for i in range(len(images)):
+        result.paste(im=images[i], box=(i * w, 0))
+    result.save(output_path)
 
 if __name__ == "__main__":
     #### options
@@ -110,6 +121,7 @@ if __name__ == "__main__":
     minivid_crf = opt['minivid_crf']
     vid_output = opt['mini_vid_output_folder'] if 'mini_vid_output_folder' in opt.keys() else dataset_dir
     vid_counter = 0
+    ffmpeg_proc = None
 
     tq = tqdm(test_loader)
     for data in tq:
@@ -131,20 +143,19 @@ if __name__ == "__main__":
 
 
             if frame_counter % frames_per_vid == 0:
+                if ffmpeg_proc is not None:
+                    print("Waiting for last encode..")
+                    ffmpeg_proc.wait()
                 print("Encoding minivid %d.." % (vid_counter,))
                 # Perform stitching.
                 num_splits = opt['dataset']['vertical_splits'] if 'vertical_splits' in opt['dataset'].keys() else 1
                 if num_splits > 1:
-                    imgs = glob.glob(osp.join(dataset_dir, "*.png"))
                     procs = []
                     src_imgs_path = osp.join(dataset_dir, "joined")
                     os.makedirs(src_imgs_path, exist_ok=True)
                     for i in range(int(frames_per_vid / num_splits)):
-                        to_join = [imgs[j] for j in range(i * num_splits, i * num_splits + num_splits)]
-                        cmd = ['convert'] + to_join + ['+append', osp.join(src_imgs_path, "%08d.png" % (i,))]
-                        procs.append(subprocess.Popen(cmd))
-                    for p in procs:
-                        p.wait()
+                        to_join = [osp.join(dataset_dir, "%08d.png" % (j,)) for j in range(i * num_splits, i * num_splits + num_splits)]
+                        merge_images(to_join, osp.join(src_imgs_path, "%08d.png" % (i,)))
                 else:
                     src_imgs_path = dataset_dir
 
@@ -152,8 +163,7 @@ if __name__ == "__main__":
                 # ffmpeg -framerate 30 -i %08d.png -c:v libx265 -crf 12 -preset slow -pix_fmt yuv444p test.mkv
                 cmd = ['ffmpeg', '-y', '-framerate', str(opt['dataset']['frame_rate']), '-f', 'image2', '-i', osp.join(src_imgs_path, "%08d.png"),
                        '-c:v', 'libx265', '-crf', str(minivid_crf), '-preset', 'slow', '-pix_fmt', 'yuv444p', osp.join(vid_output, "mini_%06d.mkv" % (vid_counter,))]
-                process = subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-                process.wait()
+                ffmpeg_proc = subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                 vid_counter += 1
                 frame_counter = 0
                 print("Done.")
