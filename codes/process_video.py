@@ -107,7 +107,8 @@ if __name__ == "__main__":
 
     frame_counter = 0
     frames_per_vid = opt['frames_per_mini_vid']
-    minivid_bitrate = opt['mini_vid_bitrate']
+    minivid_crf = opt['minivid_crf']
+    vid_output = opt['mini_vid_output_folder'] if 'mini_vid_output_folder' in opt.keys() else dataset_dir
     vid_counter = 0
 
     tq = tqdm(test_loader)
@@ -148,9 +149,9 @@ if __name__ == "__main__":
                     src_imgs_path = dataset_dir
 
                 # Encoding command line:
-                # ffmpeg -r 29.97 -f image2 -start_number 0 -i %08d.png -i ../wha_audio.mp3 -vcodec mpeg4 -vb 80M -r 29.97 -q:v 0 test.avi
-                cmd = ['ffmpeg', '-y', '-r', str(opt['dataset']['frame_rate']), '-f', 'image2', '-start_number', '0', '-i', osp.join(src_imgs_path, "%08d.png"),
-                       '-vcodec', 'mpeg4', '-vb', minivid_bitrate, '-r', str(opt['dataset']['frame_rate']), '-q:v', '0', osp.join(dataset_dir, "mini_%06d.mp4" % (vid_counter,))]
+                # ffmpeg -framerate 30 -i %08d.png -c:v libx265 -crf 12 -preset slow -pix_fmt yuv444p test.mkv
+                cmd = ['ffmpeg', '-y', '-framerate', str(opt['dataset']['frame_rate']), '-f', 'image2', '-i', osp.join(src_imgs_path, "%08d.png"),
+                       '-c:v', 'libx265', '-crf', str(minivid_crf), '-preset', 'slow', '-pix_fmt', 'yuv444p', osp.join(vid_output, "mini_%06d.mkv" % (vid_counter,))]
                 process = subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                 process.wait()
                 vid_counter += 1
