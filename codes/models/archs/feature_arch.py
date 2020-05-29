@@ -62,7 +62,3 @@ class WideResnetFeatureExtractor(nn.Module):
         x = self.model.layer2(x)
         x = self.model.layer3(x)
         return x
-
-
-w = WideResnetFeatureExtractor()
-w.forward(torch.randn(3,64,64))

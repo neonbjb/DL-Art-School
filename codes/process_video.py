@@ -38,8 +38,10 @@ class FfmpegBackedVideoDataset(data.Dataset):
     def get_time_for_it(self, it):
         secs = it / self.frame_rate + self.start_at
         mins = int(secs / 60)
+        hours = int(mins / 60)
         secs = secs - (mins * 60)
-        return '%02d:%06.3f' % (mins, secs)
+        mins = mins % 60
+        return '%02d:%02d:%06.3f' % (hours, mins, secs)
 
     def __getitem__(self, index):
         if self.vertical_splits > 0:
