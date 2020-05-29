@@ -8,7 +8,7 @@ import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.HighToLowResNet as HighToLowResNet
 import models.archs.ResGen_arch as ResGen_arch
 import models.archs.biggan_gen_arch as biggan_arch
-import math
+import models.archs.feature_arch as feature_arch
 
 # Generator
 def define_G(opt, net_key='network_G'):
@@ -83,12 +83,16 @@ def define_D(opt):
 def define_F(opt, use_bn=False):
     gpu_ids = opt['gpu_ids']
     device = torch.device('cuda' if gpu_ids else 'cpu')
-    # PyTorch pretrained VGG19-54, before ReLU.
-    if use_bn:
-        feature_layer = 49
-    else:
-        feature_layer = 34
-    netF = SRGAN_arch.VGGFeatureExtractor(feature_layer=feature_layer, use_bn=use_bn,
-                                          use_input_norm=True, device=device)
+    if 'which_model_F' not in opt['train'].keys() or opt['train']['which_model_F'] == 'vgg':
+        # PyTorch pretrained VGG19-54, before ReLU.
+        if use_bn:
+            feature_layer = 49
+        else:
+            feature_layer = 34
+        netF = feature_arch.VGGFeatureExtractor(feature_layer=feature_layer, use_bn=use_bn,
+                                              use_input_norm=True, device=device)
+    elif opt['train']['which_model_F'] == 'wide_resnet':
+        netF = feature_arch.WideResnetFeatureExtractor(use_input_norm=True, device=device)
+
     netF.eval()  # No need to train
     return netF
