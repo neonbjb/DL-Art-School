@@ -120,7 +120,7 @@ if __name__ == "__main__":
     frames_per_vid = opt['frames_per_mini_vid']
     minivid_crf = opt['minivid_crf']
     vid_output = opt['mini_vid_output_folder'] if 'mini_vid_output_folder' in opt.keys() else dataset_dir
-    vid_counter = 0
+    vid_counter = opt['minivid_start_no'] if 'minivid_start_no' in opt.keys() else 0
     ffmpeg_proc = None
 
     tq = tqdm(test_loader)
