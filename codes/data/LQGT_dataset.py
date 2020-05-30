@@ -181,7 +181,7 @@ class LQGTDataset(data.Dataset):
             img_LQ = Image.open(corruption_buffer)
 
         if self.opt['grayscale']:
-            img_LQ = ImageOps.grayscale(img_LQ)
+            img_LQ = ImageOps.grayscale(img_LQ).convert('RGB')
 
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_PIX = torch.from_numpy(np.ascontiguousarray(np.transpose(img_PIX, (2, 0, 1)))).float()
