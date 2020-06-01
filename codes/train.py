@@ -30,12 +30,30 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/finetune_hoh_resgen_xl_blurring.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imset_pre_rrdb.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
+
+    colab_mode = False if 'colab_mode' not in opt.keys() else opt['colab_mode']
+    if colab_mode:
+        # Check the configuration of the remote server. Expect models, resume_state, and val_images directories to be there.
+        # Each one should have a TEST file in it.
+        util.get_files_from_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'],
+                                   os.path.join(opt['remote_path'], 'training_state', "TEST"))
+        util.get_files_from_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'],
+                                   os.path.join(opt['remote_path'], 'models', "TEST"))
+        util.get_files_from_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'],
+                                   os.path.join(opt['remote_path'], 'val_images', "TEST"))
+        # Load the state and models needed from the remote server.
+        if opt['path']['resume_state']:
+            util.get_files_from_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'], os.path.join(opt['remote_path'], 'training_state', opt['path']['resume_state']))
+        if opt['path']['pretrain_model_G']:
+            util.get_files_from_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'], os.path.join(opt['remote_path'], 'models', opt['path']['pretrain_model_G']))
+        if opt['path']['pretrain_model_D']:
+            util.get_files_from_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'], os.path.join(opt['remote_path'], 'models', opt['path']['pretrain_model_D']))
 
     #### distributed training settings
     if args.launcher == 'none':  # disabled distributed training
@@ -190,6 +208,7 @@ def main():
                     pbar = util.ProgressBar(len(val_loader))
                     avg_psnr = 0.
                     idx = 0
+                    colab_imgs_to_copy = []
                     for val_data in val_loader:
                         idx += 1
                         if idx >= 20:
@@ -207,14 +226,21 @@ def main():
                         gt_img = util.tensor2img(visuals['GT'])  # uint8
 
                         # Save SR images for reference
-                        save_img_path = os.path.join(img_dir,
-                                                     '{:s}_{:d}.png'.format(img_name, current_step))
+                        img_base_name = '{:s}_{:d}.png'.format(img_name, current_step)
+                        save_img_path = os.path.join(img_dir, img_base_name)
                         util.save_img(sr_img, save_img_path)
+                        if colab_mode:
+                            colab_imgs_to_copy.append(save_img_path)
 
                         # calculate PSNR
                         sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
                         avg_psnr += util.calculate_psnr(sr_img, gt_img)
                         pbar.update('Test {}'.format(img_name))
+
+                    if colab_mode:
+                        util.copy_files_to_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'],
+                                                  colab_imgs_to_copy,
+                                                  os.path.join(opt['remote_path'], 'val_images', img_base_name))
 
                     avg_psnr = avg_psnr / idx
 

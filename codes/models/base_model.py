@@ -3,6 +3,7 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel
+import utils.util
 
 
 class BaseModel():
@@ -84,6 +85,9 @@ class BaseModel():
         # Also save to the 'alt_path' which is useful for caching to Google Drive in colab, for example.
         if 'alt_path' in self.opt['path'].keys():
             torch.save(state_dict, os.path.join(self.opt['path']['alt_path'], save_filename))
+        if self.opt['colab_mode']:
+            utils.util.copy_files_to_server(self.opt['ssh_server'], self.opt['ssh_username'], self.opt['ssh_password'],
+                                            save_path, os.path.join(self.opt['remote_path'], 'models', save_filename))
         return save_path
 
     def load_network(self, load_path, network, strict=True):
@@ -111,6 +115,9 @@ class BaseModel():
         # Also save to the 'alt_path' which is useful for caching to Google Drive in colab, for example.
         if 'alt_path' in self.opt['path'].keys():
             torch.save(state, os.path.join(self.opt['path']['alt_path'], 'latest.state'))
+        if self.opt['colab_mode']:
+            utils.util.copy_files_to_server(self.opt['ssh_server'], self.opt['ssh_username'], self.opt['ssh_password'],
+                                            save_path, os.path.join(self.opt['remote_path'], 'training_state', save_filename))
 
     def resume_training(self, resume_state):
         """Resume the optimizers and schedulers for training"""

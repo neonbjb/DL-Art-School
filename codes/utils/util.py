@@ -12,6 +12,8 @@ import cv2
 import torch
 from torchvision.utils import make_grid
 from shutil import get_terminal_size
+import scp
+import paramiko
 
 import yaml
 try:
@@ -90,6 +92,21 @@ def setup_logger(logger_name, root, phase, level=logging.INFO, screen=False, tof
         sh.setFormatter(formatter)
         lg.addHandler(sh)
 
+def copy_files_to_server(host, user, password, files, remote_path):
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username=user, password=password)
+    scpclient = scp.SCPClient(client.get_transport())
+    scpclient.put(files, remote_path)
+
+def get_files_from_server(host, user, password, remote_path, local_path):
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username=user, password=password)
+    scpclient = scp.SCPClient(client.get_transport())
+    scpclient.get(remote_path, local_path)
 
 ####################
 # image convert

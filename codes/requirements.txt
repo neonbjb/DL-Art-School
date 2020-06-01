@@ -4,3 +4,5 @@ lmdb
 pyyaml
 tb-nightly
 future
+scp
+tqdm
