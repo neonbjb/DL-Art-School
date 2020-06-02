@@ -448,13 +448,13 @@ class SRGANModel(BaseModel):
 
     def get_current_visuals(self, need_GT=True):
         out_dict = OrderedDict()
-        out_dict['LQ'] = self.var_L[0].detach()[0].float().cpu()
+        out_dict['LQ'] = self.var_L[0].detach().float().cpu()
         gen_batch = self.fake_GenOut[0]
         if isinstance(gen_batch, tuple):
             gen_batch = gen_batch[0]
-        out_dict['rlt'] = gen_batch.detach()[0].float().cpu()
+        out_dict['rlt'] = gen_batch.detach().float().cpu()
         if need_GT:
-            out_dict['GT'] = self.var_H[0].detach()[0].float().cpu()
+            out_dict['GT'] = self.var_H[0].detach().float().cpu()
         return out_dict
 
     def print_network(self):
