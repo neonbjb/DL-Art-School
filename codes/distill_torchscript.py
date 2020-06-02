@@ -9,7 +9,7 @@ import torch.nn.functional as F
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/use_vrp_upsample.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/use_video_upsample.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     netG = define_G(opt)

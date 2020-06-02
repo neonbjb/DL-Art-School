@@ -20,10 +20,10 @@ def main():
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\sft_ns_images\\images'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\sft_ns_images\\images_tiled'
-        opt['crop_sz'] = 300  # the size of each sub-image
-        opt['step'] = 280  # step of the sliding crop window
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\imagesets\\new'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\imagesets\\unfiltered_tiled_2x'
+        opt['crop_sz'] = 512  # the size of each sub-image
+        opt['step'] = 440  # step of the sliding crop window
         opt['thres_sz'] = 120  # size threshold
         extract_single(opt, split_img)
     elif mode == 'pair':
