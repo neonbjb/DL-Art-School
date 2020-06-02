@@ -27,7 +27,7 @@ def define_G(opt, net_key='network_G'):
         # Need to adjust the scale the generator sees by the stride since the stride causes a down-sample.
         gen_scale = scale * initial_stride
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=scale, initial_stride=initial_stride)
+                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=gen_scale, initial_stride=initial_stride)
     elif which_model == 'AssistedRRDBNet':
         netG = RRDBNet_arch.AssistedRRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], scale=scale)
