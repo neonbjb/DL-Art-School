@@ -153,11 +153,12 @@ class LQGTDataset(data.Dataset):
             if self.opt['use_blurring']:
                 # Pick randomly between gaussian, motion, or no blur.
                 blur_det = random.randint(0, 100)
+                blur_magnitude = 3 if 'blur_magnitude' not in self.opt.keys() else self.opt['blur_magnitude']
                 if blur_det < 40:
-                    blur_sig = int(random.randrange(0, 3))
-                    img_LQ = cv2.GaussianBlur(img_LQ, (3, 3), blur_sig)
+                    blur_sig = int(random.randrange(0, blur_magnitude))
+                    img_LQ = cv2.GaussianBlur(img_LQ, (blur_magnitude, blur_magnitude), blur_sig)
                 elif blur_det < 70:
-                    img_LQ = self.motion_blur(img_LQ, random.randrange(1, 8), random.randint(0, 360))
+                    img_LQ = self.motion_blur(img_LQ, random.randrange(1, blur_magnitude * 3), random.randint(0, 360))
 
 
         if self.opt['color']:  # change color space if necessary
