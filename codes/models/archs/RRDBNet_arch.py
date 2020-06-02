@@ -47,12 +47,12 @@ class RRDB(nn.Module):
 
 
 class RRDBNet(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=2):
+    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=2, initial_stride=1):
         super(RRDBNet, self).__init__()
         RRDB_block_f = functools.partial(RRDB, nf=nf, gc=gc)
 
         self.scale = scale
-        self.conv_first = nn.Conv2d(in_nc, nf, 7, 1, padding=3, bias=True)
+        self.conv_first = nn.Conv2d(in_nc, nf, 7, initial_stride, padding=3, bias=True)
         self.RRDB_trunk = arch_util.make_layer(RRDB_block_f, nb)
         self.trunk_conv = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         #### upsampling
@@ -87,10 +87,11 @@ class AssistedRRDBNet(nn.Module):
     # nb=number of additional blocks after the assistance layers.
     # gc=growth channel inside of residual blocks
     # scale=the number of times the output is doubled in size.
-    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=2):
+    # initial_stride=the stride on the first conv. can be used to downsample the image for processing.
+    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=2, initial_stride=1):
         super(AssistedRRDBNet, self).__init__()
         self.scale = scale
-        self.conv_first = nn.Conv2d(in_nc, nf, 7, 1, padding=3, bias=True)
+        self.conv_first = nn.Conv2d(in_nc, nf, 7, initial_stride, padding=3, bias=True)
 
         # Set-up the assist-net, which should do feature extraction for us.
         self.assistnet = torchvision.models.wide_resnet50_2(pretrained=True)
