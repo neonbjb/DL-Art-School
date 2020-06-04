@@ -42,7 +42,7 @@ def _get_paths_from_lmdb(dataroot):
     return paths, sizes
 
 
-def get_image_paths(data_type, dataroot):
+def get_image_paths(data_type, dataroot, weights=[]):
     """get image path list
     support lmdb or image files"""
     paths, sizes = None, None
@@ -52,8 +52,15 @@ def get_image_paths(data_type, dataroot):
         elif data_type == 'img':
             if isinstance(dataroot, list):
                 paths = []
-                for r in dataroot:
-                    paths.extend(_get_paths_from_images(r))
+                for i in range(len(dataroot)):
+                    r = dataroot[i]
+                    extends = 1
+
+                    # Weights have the effect of repeatedly adding the paths from the given root to the final product.
+                    if weights:
+                        extends = weights[i]
+                    for j in range(extends):
+                        paths.extend(_get_paths_from_images(r))
                 paths = sorted(paths)
             else:
                 paths = sorted(_get_paths_from_images(dataroot))

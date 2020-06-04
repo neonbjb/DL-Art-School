@@ -29,7 +29,7 @@ class LQGTDataset(data.Dataset):
         self.paths_PIX, self.sizes_PIX = None, None
         self.LQ_env, self.GT_env, self.PIX_env = None, None, None  # environments for lmdbs
 
-        self.paths_GT, self.sizes_GT = util.get_image_paths(self.data_type, opt['dataroot_GT'])
+        self.paths_GT, self.sizes_GT = util.get_image_paths(self.data_type, opt['dataroot_GT'], opt['dataroot_GT_weights'])
         if 'dataroot_LQ' in opt.keys():
             self.paths_LQ = []
             if isinstance(opt['dataroot_LQ'], list):
