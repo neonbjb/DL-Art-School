@@ -29,6 +29,33 @@ class ResidualDenseBlock_5C(nn.Module):
         x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
         return x5 * 0.2 + x
 
+# 5-channel residual block that uses attention in the convolutions.
+class AttentiveResidualDenseBlock_5C(ResidualDenseBlock_5C):
+    def __init__(self, nf=64, gc=32, num_convs=8, init_temperature=1):
+        super(AttentiveResidualDenseBlock_5C, self).__init__()
+        # gc: growth channel, i.e. intermediate channels
+        self.conv1 = arch_util.DynamicConv2d(nf, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+                                             initial_temperature=init_temperature)
+        self.conv2 = arch_util.DynamicConv2d(nf + gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+                                             initial_temperature=init_temperature)
+        self.conv3 = arch_util.DynamicConv2d(nf + 2 * gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+                                             initial_temperature=init_temperature)
+        self.conv4 = arch_util.DynamicConv2d(nf + 3 * gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+                                             initial_temperature=init_temperature)
+        self.conv5 = arch_util.DynamicConv2d(nf + 4 * gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+                                             initial_temperature=init_temperature)
+
+        # initialization
+        arch_util.initialize_weights([self.conv1, self.conv2, self.conv3, self.conv4, self.conv5],
+                                     0.1)
+
+    def set_temperature(self, temp):
+        self.conv1.set_attention_temperature(temp)
+        self.conv2.set_attention_temperature(temp)
+        self.conv3.set_attention_temperature(temp)
+        self.conv4.set_attention_temperature(temp)
+        self.conv5.set_attention_temperature(temp)
+
 
 class RRDB(nn.Module):
     '''Residual in Residual Dense Block'''
@@ -45,16 +72,30 @@ class RRDB(nn.Module):
         out = self.RDB3(out)
         return out * 0.2 + x
 
+class AttentiveRRDB(RRDB):
+    def __init__(self, nf, gc=32, num_convs=8, init_temperature=1):
+        super(RRDB, self).__init__()
+        self.RDB1 = AttentiveResidualDenseBlock_5C(nf, gc, num_convs, init_temperature)
+        self.RDB2 = AttentiveResidualDenseBlock_5C(nf, gc, num_convs, init_temperature)
+        self.RDB3 = AttentiveResidualDenseBlock_5C(nf, gc, num_convs, init_temperature)
+
+    def set_temperature(self, temp):
+        self.RDB1.set_temperature(temp)
+        self.RDB2.set_temperature(temp)
+        self.RDB3.set_temperature(temp)
 
 class RRDBNet(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=2, initial_stride=1):
+    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=2, initial_stride=1,
+                 rrdb_block_f=None):
         super(RRDBNet, self).__init__()
-        RRDB_block_f = functools.partial(RRDB, nf=nf, gc=gc)
+        if rrdb_block_f is None:
+            rrdb_block_f = functools.partial(RRDB, nf=nf, gc=gc)
 
         self.scale = scale
         self.conv_first = nn.Conv2d(in_nc, nf, 7, initial_stride, padding=3, bias=True)
-        self.RRDB_trunk = arch_util.make_layer(RRDB_block_f, nb)
+        self.RRDB_trunk, self.rrdb_layers = arch_util.make_layer(rrdb_block_f, nb, True)
         self.trunk_conv = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
+
         #### upsampling
         self.upconv1 = nn.Conv2d(nf, nf, 5, 1, padding=2, bias=True)
         self.upconv2 = nn.Conv2d(nf, nf, 5, 1, padding=2, bias=True)
@@ -62,6 +103,12 @@ class RRDBNet(nn.Module):
         self.conv_last = nn.Conv2d(nf, out_nc, 3, 1, 1, bias=True)
 
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+    # Sets the softmax temperature of each RRDB layer. Only works if you are using attentive
+    # convolutions.
+    def set_temperature(self, temp):
+        for layer in self.rrdb_layers:
+            layer.set_temperature(temp)
 
     def forward(self, x):
         fea = self.conv_first(x)
