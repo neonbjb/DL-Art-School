@@ -20,8 +20,8 @@ def main():
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\imagesets\\new'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\imagesets\\unfiltered_tiled_2x'
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\hands_on_hc\\images'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\imagesets\\tiled_512px'
         opt['crop_sz'] = 512  # the size of each sub-image
         opt['step'] = 440  # step of the sliding crop window
         opt['thres_sz'] = 120  # size threshold
@@ -82,9 +82,6 @@ def extract_single(opt, split_img=False):
     if not osp.exists(save_folder):
         os.makedirs(save_folder)
         print('mkdir [{:s}] ...'.format(save_folder))
-    else:
-        print('Folder [{:s}] already exists. Exit...'.format(save_folder))
-        sys.exit(1)
     img_list = data_util._get_paths_from_images(input_folder)
 
     def update(arg):
