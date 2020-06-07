@@ -142,7 +142,8 @@ class SRGANModel(BaseModel):
                                                          restarts=train_opt['restarts'],
                                                          weights=train_opt['restart_weights'],
                                                          gamma=train_opt['lr_gamma'],
-                                                         clear_state=train_opt['clear_state']))
+                                                         clear_state=train_opt['clear_state'],
+                                                         force_lr=train_opt['force_lr']))
             elif train_opt['lr_scheme'] == 'CosineAnnealingLR_Restart':
                 for optimizer in self.optimizers:
                     self.schedulers.append(
