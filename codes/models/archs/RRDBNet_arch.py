@@ -34,15 +34,15 @@ class AttentiveResidualDenseBlock_5C(ResidualDenseBlock_5C):
     def __init__(self, nf=64, gc=32, num_convs=8, init_temperature=1):
         super(AttentiveResidualDenseBlock_5C, self).__init__()
         # gc: growth channel, i.e. intermediate channels
-        self.conv1 = arch_util.DynamicConv2d(nf, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+        self.conv1 = arch_util.DynamicConv2d(nf, gc, 3, 1, 1, num_convs=num_convs,
                                              initial_temperature=init_temperature)
-        self.conv2 = arch_util.DynamicConv2d(nf + gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+        self.conv2 = arch_util.DynamicConv2d(nf + gc, gc, 3, 1, 1, num_convs=num_convs,
                                              initial_temperature=init_temperature)
-        self.conv3 = arch_util.DynamicConv2d(nf + 2 * gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+        self.conv3 = arch_util.DynamicConv2d(nf + 2 * gc, gc, 3, 1, 1, num_convs=num_convs,
                                              initial_temperature=init_temperature)
-        self.conv4 = arch_util.DynamicConv2d(nf + 3 * gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+        self.conv4 = arch_util.DynamicConv2d(nf + 3 * gc, gc, 3, 1, 1, num_convs=num_convs,
                                              initial_temperature=init_temperature)
-        self.conv5 = arch_util.DynamicConv2d(nf + 4 * gc, gc, 3, 1, 1, bias=bias, num_convs=num_convs,
+        self.conv5 = arch_util.DynamicConv2d(nf + 4 * gc, nf, 3, 1, 1, num_convs=num_convs,
                                              initial_temperature=init_temperature)
 
         # initialization
