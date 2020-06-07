@@ -9,6 +9,7 @@ import models.archs.HighToLowResNet as HighToLowResNet
 import models.archs.ResGen_arch as ResGen_arch
 import models.archs.biggan_gen_arch as biggan_arch
 import models.archs.feature_arch as feature_arch
+import functools
 
 # Generator
 def define_G(opt, net_key='network_G'):
@@ -31,6 +32,10 @@ def define_G(opt, net_key='network_G'):
     elif which_model == 'AssistedRRDBNet':
         netG = RRDBNet_arch.AssistedRRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], scale=scale)
+    elif which_model == 'AttentiveRRDBNet':
+        netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=scale,
+                                    rrdb_block_f=functools.partial(RRDBNet_arch.AttentiveRRDB, nf=opt_net['nf'], gc=opt_net['gc']))
     elif which_model == 'ResGen':
         netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'])

@@ -44,7 +44,7 @@ class DynamicConv2d(nn.Module):
 
         # Requirements: input filter count is even, and there are more filters than there are sequences to attend to.
         assert nf_in_per_conv % 2 == 0
-        assert nf_in_per_conv / 2 > num_convs
+        assert nf_in_per_conv / 2 >= num_convs
 
         self.nf = nf_out_per_conv
         self.num_convs = num_convs
@@ -75,7 +75,9 @@ class DynamicConv2d(nn.Module):
         # conv_attention shape: (batch, width, height, sequences)
         # We want to format them so that we can matmul them together to produce:
         # desired shape:        (batch, width, height, filters)
-        attention_result = torch.einsum("...ij,...j->...i", [conv_outputs, conv_attention])
+        # Note: conv_attention will generally be cast to float32 regardless of the input type, so cast conv_outputs to
+        #       float32 as well to match it.
+        attention_result = torch.einsum("...ij,...j->...i", [conv_outputs.to(dtype=torch.float32), conv_attention])
 
         # Remember to shift the filters back into the expected slot.
         if output_attention_weights:
@@ -175,7 +177,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 def test_dynamic_conv():
     writer = SummaryWriter()
-    dataset = datasets.ImageFolder("E:\\data\\cifar-100-python\\images\\train", transforms.Compose([
+    dataset = datasets.ImageFolder("C:\\data\\cifar-100-python\\images\\train", transforms.Compose([
         transforms.Resize(32, 32),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
