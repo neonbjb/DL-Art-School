@@ -439,12 +439,17 @@ class SRGANModel(BaseModel):
         self.netG.train()
 
     # Fetches a summary of the log.
-    def get_current_log(self):
+    def get_current_log(self, step):
         return_log = {}
         for k in self.log_dict.keys():
             if not isinstance(self.log_dict[k], list):
                 continue
             return_log[k] = sum(self.log_dict[k]) / len(self.log_dict[k])
+
+        # Some generators can do their own metric logging.
+        if hasattr(self.netG.module, "get_debug_values"):
+            return_log.update(self.netG.module.get_debug_values(step))
+
         return return_log
 
     def get_current_visuals(self, need_GT=True):
