@@ -146,6 +146,12 @@ class LQGTDataset(data.Dataset):
                 img_GT = cv2.resize(img_GT, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
                 img_PIX = cv2.resize(img_PIX, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
 
+                if self.opt['doResizeLoss']:
+                    r = random.randrange(0, 10)
+                    if r > 5:
+                        img_LQ = cv2.resize(img_LQ, (int(LQ_size/2), int(LQ_size/2)), interpolation=cv2.INTER_LINEAR)
+                        img_LQ = cv2.resize(img_LQ, (LQ_size, LQ_size), interpolation=cv2.INTER_LINEAR)
+
             # augmentation - flip, rotate
             img_LQ, img_GT, img_PIX = util.augment([img_LQ, img_GT, img_PIX], self.opt['use_flip'],
                                           self.opt['use_rot'])

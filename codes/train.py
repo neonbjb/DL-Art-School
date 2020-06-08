@@ -30,7 +30,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_rrdb_xl_wideres.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_switched_rrdb_small.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -187,7 +187,7 @@ def main():
 
             #### log
             if current_step % opt['logger']['print_freq'] == 0:
-                logs = model.get_current_log()
+                logs = model.get_current_log(current_step)
                 message = '[epoch:{:3d}, iter:{:8,d}, lr:('.format(epoch, current_step)
                 for v in model.get_current_learning_rate():
                     message += '{:.3e},'.format(v)
