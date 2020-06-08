@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import models.archs.arch_util as arch_util
 import torchvision
+import switched_conv as switched_conv
 
 
 class ResidualDenseBlock_5C(nn.Module):
@@ -29,32 +30,19 @@ class ResidualDenseBlock_5C(nn.Module):
         x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
         return x5 * 0.2 + x
 
-# 5-channel residual block that uses attention in the convolutions.
-class AttentiveResidualDenseBlock_5C(ResidualDenseBlock_5C):
+
+# Multiple 5-channel residual block that uses learned switching to diversify its outputs.
+class SwitchedRDB_5C(switched_conv.SwitchedAbstractBlock):
     def __init__(self, nf=64, gc=32, num_convs=8, init_temperature=1):
-        super(AttentiveResidualDenseBlock_5C, self).__init__()
-        # gc: growth channel, i.e. intermediate channels
-        self.conv1 = arch_util.DynamicConv2d(nf, gc, 3, 1, 1, num_convs=num_convs,
-                                             initial_temperature=init_temperature)
-        self.conv2 = arch_util.DynamicConv2d(nf + gc, gc, 3, 1, 1, num_convs=num_convs,
-                                             initial_temperature=init_temperature)
-        self.conv3 = arch_util.DynamicConv2d(nf + 2 * gc, gc, 3, 1, 1, num_convs=num_convs,
-                                             initial_temperature=init_temperature)
-        self.conv4 = arch_util.DynamicConv2d(nf + 3 * gc, gc, 3, 1, 1, num_convs=num_convs,
-                                             initial_temperature=init_temperature)
-        self.conv5 = arch_util.DynamicConv2d(nf + 4 * gc, nf, 3, 1, 1, num_convs=num_convs,
-                                             initial_temperature=init_temperature)
+        rdb5c = functools.partial(ResidualDenseBlock_5C, nf, gc)
+        super(SwitchedRDB_5C, self).__init__(
+            rdb5c,
+            nf,
+            num_convs,
+            initial_temperature=init_temperature,
+        )
 
-        # initialization
-        arch_util.initialize_weights([self.conv1, self.conv2, self.conv3, self.conv4, self.conv5],
-                                     0.1)
-
-    def set_temperature(self, temp):
-        self.conv1.set_attention_temperature(temp)
-        self.conv2.set_attention_temperature(temp)
-        self.conv3.set_attention_temperature(temp)
-        self.conv4.set_attention_temperature(temp)
-        self.conv5.set_attention_temperature(temp)
+        arch_util.initialize_weights([self.switcher.attention_conv1, self.switcher.attention_conv2], 1)
 
 
 class RRDB(nn.Module):
@@ -75,9 +63,9 @@ class RRDB(nn.Module):
 class AttentiveRRDB(RRDB):
     def __init__(self, nf, gc=32, num_convs=8, init_temperature=1):
         super(RRDB, self).__init__()
-        self.RDB1 = AttentiveResidualDenseBlock_5C(nf, gc, num_convs, init_temperature)
-        self.RDB2 = AttentiveResidualDenseBlock_5C(nf, gc, num_convs, init_temperature)
-        self.RDB3 = AttentiveResidualDenseBlock_5C(nf, gc, num_convs, init_temperature)
+        self.RDB1 = SwitchedRDB_5C(nf, gc, num_convs, init_temperature)
+        self.RDB2 = SwitchedRDB_5C(nf, gc, num_convs, init_temperature)
+        self.RDB3 = SwitchedRDB_5C(nf, gc, num_convs, init_temperature)
 
     def set_temperature(self, temp):
         self.RDB1.set_temperature(temp)

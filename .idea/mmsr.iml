@@ -11,6 +11,7 @@
     </content>
     <orderEntry type="jdk" jdkName="Python 3.7 (python37-torch)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="SwitchedConvolutions" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />

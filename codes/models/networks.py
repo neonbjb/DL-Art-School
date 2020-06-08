@@ -35,7 +35,8 @@ def define_G(opt, net_key='network_G'):
     elif which_model == 'AttentiveRRDBNet':
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], scale=scale,
-                                    rrdb_block_f=functools.partial(RRDBNet_arch.AttentiveRRDB, nf=opt_net['nf'], gc=opt_net['gc']))
+                                    rrdb_block_f=functools.partial(RRDBNet_arch.AttentiveRRDB, nf=opt_net['nf'], gc=opt_net['gc'],
+                                                                   init_temperature=opt_net['temperature']))
     elif which_model == 'ResGen':
         netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'])
