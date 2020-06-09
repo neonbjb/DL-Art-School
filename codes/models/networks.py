@@ -38,6 +38,21 @@ def define_G(opt, net_key='network_G'):
                                     rrdb_block_f=functools.partial(RRDBNet_arch.AttentiveRRDB, nf=opt_net['nf'], gc=opt_net['gc'],
                                                                    init_temperature=opt_net['temperature'],
                                                                    final_temperature_step=opt_net['temperature_final_step']))
+    elif which_model == 'MultiRRDBNet':
+        block_f = None
+        if opt_net['attention']:
+            block_f = functools.partial(RRDBNet_arch.AttentiveRRDB, nf=opt_net['nf'], gc=opt_net['gc'],
+                                             init_temperature=opt_net['temperature'],
+                                             final_temperature_step=opt_net['temperature_final_step'])
+        netG = RRDBNet_arch.MultiRRDBNet(nf_base=opt_net['nf'], gc_base=opt_net['gc'], lo_blocks=opt_net['lo_blocks'],
+                                         hi_blocks=opt_net['hi_blocks'], scale=scale, rrdb_block_f=block_f)
+    elif which_model == 'PixRRDBNet':
+        block_f = None
+        if opt_net['attention']:
+            block_f = functools.partial(RRDBNet_arch.AttentiveRRDB, nf=opt_net['nf'], gc=opt_net['gc'],
+                                             init_temperature=opt_net['temperature'],
+                                             final_temperature_step=opt_net['temperature_final_step'])
+        netG = RRDBNet_arch.PixShuffleRRDB(nf=opt_net['nf'], nb=opt_net['nb'], gc=opt_net['gc'], scale=scale, rrdb_block_f=block_f)
     elif which_model == 'ResGen':
         netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'])
