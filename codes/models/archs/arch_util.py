@@ -128,3 +128,16 @@ def flow_warp(x, flow, interp_mode='bilinear', padding_mode='zeros'):
     vgrid_scaled = torch.stack((vgrid_x, vgrid_y), dim=3)
     output = F.grid_sample(x, vgrid_scaled, mode=interp_mode, padding_mode=padding_mode)
     return output
+
+
+class PixelUnshuffle(nn.Module):
+    def __init__(self, reduction_factor):
+        super(PixelUnshuffle, self).__init__()
+        self.r = reduction_factor
+
+    def forward(self, x):
+        (b, f, w, h) = x.shape
+        x = x.contiguous().view(b, f, w // self.r, self.r, h // self.r, self.r)
+        x = x.permute(0, 1, 3, 5, 2, 4).contiguous().view(b, f * (self.r ** 2), w // self.r, h // self.r)
+        return x
+
