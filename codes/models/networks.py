@@ -57,6 +57,10 @@ def define_G(opt, net_key='network_G'):
             block_f = functools.partial(RRDBNet_arch.SwitchedRRDB, nf=opt_net['nf'], gc=opt_net['gc'],
                                         init_temperature=opt_net['temperature'],
                                         final_temperature_step=opt_net['temperature_final_step'])
+        if opt_net['mhattention']:
+            block_f = functools.partial(RRDBNet_arch.SwitchedMultiHeadRRDB, num_convs=8, num_heads=2, nf=opt_net['nf'], gc=opt_net['gc'],
+                                        init_temperature=opt_net['temperature'],
+                                        final_temperature_step=opt_net['temperature_final_step'])
         netG = RRDBNet_arch.PixShuffleRRDB(nf=opt_net['nf'], nb=opt_net['nb'], gc=opt_net['gc'], scale=scale, rrdb_block_f=block_f)
     elif which_model == 'ResGen':
         netG = ResGen_arch.fixup_resnet34(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
