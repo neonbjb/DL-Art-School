@@ -3,6 +3,7 @@ results/*
 tb_logger/*
 datasets/*
 options/*
+codes/*.txt
 .vscode
 
 *.html

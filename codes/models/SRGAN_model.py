@@ -210,7 +210,13 @@ class SRGANModel(BaseModel):
         self.fake_GenOut = []
         var_ref_skips = []
         for var_L, var_H, var_ref, pix in zip(self.var_L, self.var_H, self.var_ref, self.pix):
+
+            #from utils import gpu_mem_track
+            #import inspect
+            #gpu_tracker = gpu_mem_track.MemTracker(inspect.currentframe())
+            #gpu_tracker.track()
             fake_GenOut = self.netG(var_L)
+            #gpu_tracker.track()
 
             # Extract the image output. For generators that output skip-through connections, the master output is always
             # the first element of the tuple.
