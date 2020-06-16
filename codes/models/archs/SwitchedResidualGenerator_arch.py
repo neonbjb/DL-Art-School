@@ -86,83 +86,12 @@ class SwitchComputer(nn.Module):
         multiplexer = self.proc_switch_conv(multiplexer)
         multiplexer = self.final_switch_conv.forward(multiplexer)
         # Interpolate the multiplexer across the entire shape of the image.
-        multiplexer = F.interpolate(multiplexer, size=x.shape[2:], mode='nearest')
+        multiplexer = F.interpolate(multiplexer, size=x.shape[2:], mode='nearest', recompute_scale_factor=True)
 
         return self.switch(xformed, multiplexer, output_attention_weights)
 
     def set_temperature(self, temp):
         self.switch.set_attention_temperature(temp)
-
-class SwitchedResidualGenerator(nn.Module):
-    def __init__(self, switch_filters, initial_temp=20, final_temperature_step=50000):
-        super(SwitchedResidualGenerator, self).__init__()
-        self.switch1 = SwitchComputer(3, switch_filters, functools.partial(ResidualBranch, 3, 3, kernel_size=7, depth=3),      4, 4, 0, initial_temp)
-        self.switch2 = SwitchComputer(3, switch_filters, functools.partial(ResidualBranch, 3, 3, kernel_size=5, depth=3),      8, 3, 0, initial_temp)
-        self.switch3 = SwitchComputer(3, switch_filters, functools.partial(ResidualBranch, 3, 3, kernel_size=3, depth=3),     16, 2, 1, initial_temp)
-        self.switch4 = SwitchComputer(3, switch_filters * 2, functools.partial(ResidualBranch, 3, 3, kernel_size=3, depth=2), 32, 1, 2, initial_temp)
-        initialize_weights([self.switch1, self.switch2, self.switch3, self.switch4], 1)
-        # Initialize the transforms with a lesser weight, since they are repeatedly added on to the resultant image.
-        initialize_weights([self.switch1.transforms, self.switch2.transforms, self.switch3.transforms, self.switch4.transforms], .05)
-
-        self.init_temperature = initial_temp
-        self.final_temperature_step = final_temperature_step
-        self.running_sum = [0, 0, 0, 0]
-        self.running_hist = [[],[],[],[]]
-        self.running_count = 0
-
-    def forward(self, x):
-        sw1, self.a1 = self.switch1.forward(x, True)
-        x = x + sw1
-        sw2, self.a2 = self.switch2.forward(x, True)
-        x = x + sw2
-        sw3, self.a3 = self.switch3.forward(x, True)
-        x = x + sw3
-        sw4, self.a4 = self.switch4.forward(x, True)
-        x = x + sw4
-
-        a1mean, a1i = compute_attention_specificity(self.a1, 2)
-        a2mean, a2i = compute_attention_specificity(self.a2, 2)
-        a3mean, a3i = compute_attention_specificity(self.a3, 2)
-        a4mean, a4i = compute_attention_specificity(self.a4, 2)
-        running_sum = [
-            self.running_sum[0] + a1mean,
-            self.running_sum[1] + a2mean,
-            self.running_sum[2] + a3mean,
-            self.running_sum[3] + a4mean,
-        ]
-        self.running_hist[0].append(a1i.detach().cpu().flatten())
-        self.running_hist[1].append(a2i.detach().cpu().flatten())
-        self.running_hist[2].append(a3i.detach().cpu().flatten())
-        self.running_hist[3].append(a4i.detach().cpu().flatten())
-        self.running_count += 1
-
-        return (x,)
-
-    def set_temperature(self, temp):
-        self.switch1.set_temperature(temp)
-        self.switch2.set_temperature(temp)
-        self.switch3.set_temperature(temp)
-        self.switch4.set_temperature(temp)
-
-    def get_debug_values(self, step):
-        # Take the chance to update the temperature here.
-        temp = max(1, int(self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
-        self.set_temperature(temp)
-
-        if step % 250 == 0:
-            save_attention_to_image(self.a1, 4, step, "a1")
-            save_attention_to_image(self.a2, 8, step, "a2", 2)
-            save_attention_to_image(self.a3, 16, step, "a3", 4)
-            save_attention_to_image(self.a4, 32, step, "a4", 8)
-
-        val = {"switch_temperature": temp}
-        for i in range(len(self.running_sum)):
-            val["switch_%i_specificity" % (i,)] = self.running_sum[i] / self.running_count
-            val["switch_%i_histogram" % (i,)] = torch.cat(self.running_hist[i])
-            self.running_sum[i] = 0
-            self.running_hist[i] = []
-        self.running_count = 0
-        return val
 
 
 class ConfigurableSwitchedResidualGenerator(nn.Module):
@@ -178,22 +107,13 @@ class ConfigurableSwitchedResidualGenerator(nn.Module):
         self.transformation_counts = trans_counts
         self.init_temperature = initial_temp
         self.final_temperature_step = final_temperature_step
-        self.running_sum = [0 for i in range(len(switches))]
-        self.running_hist = [[] for i in range(len(switches))]
-        self.running_count = 0
 
     def forward(self, x):
         self.attentions = []
         for i, sw in enumerate(self.switches):
             x, att = sw.forward(x, True)
             self.attentions.append(att)
-            spec, hist = compute_attention_specificity(att, 2)
-            self.running_sum[i] += spec
-            self.running_hist[i].append(hist.detach().cpu().flatten())
-
-        self.running_count += 1
-
-        return (x,)
+        return x,
 
     def set_temperature(self, temp):
         [sw.set_temperature(temp) for sw in self.switches]
@@ -206,11 +126,11 @@ class ConfigurableSwitchedResidualGenerator(nn.Module):
         if step % 250 == 0:
             [save_attention_to_image(self.attentions[i], self.transformation_counts[i], step, "a%i" % (i+1,), l_mult=float(self.transformation_counts[i]/4)) for i in range(len(self.switches))]
 
+        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
+        means = [i[0] for i in mean_hists]
+        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
         val = {"switch_temperature": temp}
-        for i in range(len(self.running_sum)):
-            val["switch_%i_specificity" % (i,)] = self.running_sum[i] / self.running_count
-            self.running_sum[i] = 0
-            val["switch_%i_histogram" % (i,)] = torch.cat(self.running_hist[i])
-            self.running_hist[i] = []
-        self.running_count = 0
+        for i in range(len(means)):
+            val["switch_%i_specificity" % (i,)] = means[i]
+            val["switch_%i_histogram" % (i,)] = hists[i]
         return val
