@@ -57,7 +57,7 @@ class Discriminator_VGG_128(nn.Module):
         fea = self.lrelu(self.bn4_0(self.conv4_0(fea)))
         fea = self.lrelu(self.bn4_1(self.conv4_1(fea)))
 
-        fea = fea.view(fea.size(0), -1)
+        fea = fea.contiguous().view(fea.size(0), -1)
         fea = self.lrelu(self.linear1(fea))
         out = self.linear2(fea)
         return out
