@@ -85,6 +85,7 @@ class ResidualDenseBlock_5C_WithMheadConverter(ResidualDenseBlock_5C):
                                                                        late_stage_padding=0)
         self.heads = heads
         self.converter = nn.Conv3d(nf, nf, kernel_size=(heads, 1, 1), stride=(heads, 1, 1))
+        arch_util.initialize_weights(self.converter)
 
     # Accepts input of shape (b, heads, f, w, h)
     def forward(self, x):

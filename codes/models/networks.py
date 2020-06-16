@@ -80,14 +80,7 @@ def define_G(opt, net_key='network_G'):
         '''netG = FlatProcessorNet_arch.FlatProcessorNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                 nf=opt_net['nf'], downscale=opt_net['scale'], reduce_anneal_blocks=opt_net['ra_blocks'],
                                 assembler_blocks=opt_net['assembler_blocks'])'''
-        netG = FlatProcessorNetNew_arch.fixup_resnet34(num_filters=opt_net['nf'])
-    # video restoration
-    elif which_model == 'EDVR':
-        netG = EDVR_arch.EDVR(nf=opt_net['nf'], nframes=opt_net['nframes'],
-                              groups=opt_net['groups'], front_RBs=opt_net['front_RBs'],
-                              back_RBs=opt_net['back_RBs'], center=opt_net['center'],
-                              predeblur=opt_net['predeblur'], HR_in=opt_net['HR_in'],
-                              w_TSA=opt_net['w_TSA'])
+        netG = FlatProcessorNetNew_arch.fixup_resnet34(num_filters=opt_net['nf'])\
 
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
