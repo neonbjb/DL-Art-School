@@ -7,8 +7,8 @@ import models.archs.FlatProcessorNetNew_arch as FlatProcessorNetNew_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.HighToLowResNet as HighToLowResNet
 import models.archs.ResGen_arch as ResGen_arch
-import models.archs.biggan_gen_arch as biggan_arch
 import models.archs.feature_arch as feature_arch
+import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import functools
 
 # Generator
@@ -69,8 +69,9 @@ def define_G(opt, net_key='network_G'):
         netG = ResGen_arch.fixup_resnet34_v2(nb_denoiser=opt_net['nb_denoiser'], nb_upsampler=opt_net['nb_upsampler'],
                                           upscale_applications=opt_net['upscale_applications'], num_filters=opt_net['nf'],
                                           inject_noise=opt_net['inject_noise'])
-    elif which_model == "BigGan":
-        netG = biggan_arch.biggan_medium(num_filters=opt_net['nf'])
+    elif which_model == "SwitchedResidualGenerator":
+        netG = SwitchedGen_arch.SwitchedResidualGenerator(switch_filters=opt_net['nf'], initial_temp=opt_net['temperature'],
+                                                          final_temperature_step=opt_net['temperature_final_step'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
