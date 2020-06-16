@@ -72,6 +72,10 @@ def define_G(opt, net_key='network_G'):
     elif which_model == "SwitchedResidualGenerator":
         netG = SwitchedGen_arch.SwitchedResidualGenerator(switch_filters=opt_net['nf'], initial_temp=opt_net['temperature'],
                                                           final_temperature_step=opt_net['temperature_final_step'])
+    elif which_model == "ConfigurableSwitchedResidualGenerator":
+        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator(switch_filters=opt_net['switch_filters'], switch_depths=opt_net['switch_depths'], trans_counts=opt_net['trans_counts'],
+                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
+                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
