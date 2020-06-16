@@ -30,7 +30,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_lowdim_rrdb_no_sr.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_residualgenerator.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -193,11 +193,14 @@ def main():
                     message += '{:.3e},'.format(v)
                 message += ')] '
                 for k, v in logs.items():
-                    message += '{:s}: {:.4e} '.format(k, v)
-                    # tensorboard logger
-                    if opt['use_tb_logger'] and 'debug' not in opt['name']:
-                        if rank <= 0:
-                            tb_logger.add_scalar(k, v, current_step)
+                    if 'histogram' in k:
+                        tb_logger.add_histogram(k, v, current_step)
+                    else:
+                        message += '{:s}: {:.4e} '.format(k, v)
+                        # tensorboard logger
+                        if opt['use_tb_logger'] and 'debug' not in opt['name']:
+                            if rank <= 0:
+                                tb_logger.add_scalar(k, v, current_step)
                 if rank <= 0:
                     logger.info(message)
             #### validation
