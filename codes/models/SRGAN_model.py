@@ -183,6 +183,10 @@ class SRGANModel(BaseModel):
             self.pix = [t.to(self.device) for t in torch.chunk(data['PIX'], chunks=self.mega_batch_factor, dim=0)]
 
     def optimize_parameters(self, step):
+        # Some generators have variants depending on the current step.
+        if hasattr(self.netG.module, "update_for_step"):
+            self.netG.module.update_for_step(step, os.path.join(self.opt['path']['models'], ".."))
+
         # G
         for p in self.netD.parameters():
             p.requires_grad = False

@@ -66,6 +66,7 @@ def define_G(opt, net_key='network_G'):
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator(switch_filters=opt_net['switch_filters'], switch_reductions=opt_net['switch_reductions'],
                                                                       switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
                                                                       trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
+                                                                      trans_filters_mid=opt_net['trans_filters_mid'],
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'])
 
     # image corruption

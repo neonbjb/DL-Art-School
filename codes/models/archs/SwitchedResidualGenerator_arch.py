@@ -29,11 +29,12 @@ class ConvBnLelu(nn.Module):
 
 
 class ResidualBranch(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size, depth):
+    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth):
+        assert depth >= 2
         super(ResidualBranch, self).__init__()
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_out, kernel_size)] +
-                                     [ConvBnLelu(filters_out, filters_out, kernel_size) for i in range(depth-2)] +
-                                     [ConvBnLelu(filters_out, filters_out, kernel_size, lelu=False)])
+        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size)] +
+                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size) for i in range(depth-2)] +
+                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False)])
         self.scale = nn.Parameter(torch.ones(1))
         self.bias = nn.Parameter(torch.zeros(1))
 
@@ -67,16 +68,15 @@ class SwitchComputer(nn.Module):
         self.proc_switch_conv = ConvBnLelu(final_filters, proc_block_filters)
         self.final_switch_conv = nn.Conv2d(proc_block_filters, transform_count, 1, 1, 0)
 
-        # Always include the identity transform (all zeros), hence transform_count-10
-        self.transforms = nn.ModuleList([transform_block() for i in range(transform_count-1)])
+        self.transforms = nn.ModuleList([transform_block() for i in range(transform_count)])
 
-        # And the switch itself
+        # And the switch itself, including learned scalars
         self.switch = BareConvSwitch(initial_temperature=init_temp)
+        self.scale = nn.Parameter(torch.ones(1))
+        self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, x, output_attention_weights=False):
         xformed = [t.forward(x) for t in self.transforms]
-        # Append the identity transform.
-        xformed.append(torch.zeros_like(xformed[0]))
 
         multiplexer = self.filter_conv(x)
         for block in self.reduction_blocks:
@@ -88,18 +88,23 @@ class SwitchComputer(nn.Module):
         # Interpolate the multiplexer across the entire shape of the image.
         multiplexer = F.interpolate(multiplexer, size=x.shape[2:], mode='nearest')
 
-        return self.switch(xformed, multiplexer, output_attention_weights)
+        outputs, attention = self.switch(xformed, multiplexer, True)
+        outputs = outputs * self.scale + self.bias
+        if output_attention_weights:
+            return outputs, attention
+        else:
+            return outputs
 
     def set_temperature(self, temp):
         self.switch.set_attention_temperature(temp)
 
 
 class ConfigurableSwitchedResidualGenerator(nn.Module):
-    def __init__(self, switch_filters, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers, initial_temp=20, final_temperature_step=50000):
+    def __init__(self, switch_filters, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers, trans_filters_mid, initial_temp=20, final_temperature_step=50000):
         super(ConfigurableSwitchedResidualGenerator, self).__init__()
         switches = []
-        for filters, sw_reduce, sw_proc, trans_count, kernel, layers in zip(switch_filters, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers):
-            switches.append(SwitchComputer(3, filters, functools.partial(ResidualBranch, 3, 3, kernel_size=kernel, depth=layers), trans_count, sw_reduce, sw_proc, initial_temp))
+        for filters, sw_reduce, sw_proc, trans_count, kernel, layers, mid_filters in zip(switch_filters, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers, trans_filters_mid):
+            switches.append(SwitchComputer(3, filters, functools.partial(ResidualBranch, 3, mid_filters, 3, kernel_size=kernel, depth=layers), trans_count, sw_reduce, sw_proc, initial_temp))
         initialize_weights(switches, 1)
         # Initialize the transforms with a lesser weight, since they are repeatedly added on to the resultant image.
         initialize_weights([s.transforms for s in switches], .2 / len(switches))
@@ -107,6 +112,7 @@ class ConfigurableSwitchedResidualGenerator(nn.Module):
         self.transformation_counts = trans_counts
         self.init_temperature = initial_temp
         self.final_temperature_step = final_temperature_step
+        self.attentions = None
 
     def forward(self, x):
         self.attentions = []
@@ -119,14 +125,15 @@ class ConfigurableSwitchedResidualGenerator(nn.Module):
     def set_temperature(self, temp):
         [sw.set_temperature(temp) for sw in self.switches]
 
+    def update_for_step(self, step, experiments_path='.'):
+        if self.attentions:
+            temp = max(1, int(self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
+            self.set_temperature(temp)
+            if step % 2 == 0:
+                [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts[i], step, "a%i" % (i+1,), l_mult=float(self.transformation_counts[i]/4)) for i in range(len(self.switches))]
+
     def get_debug_values(self, step):
-        # Take the chance to update the temperature here.
-        temp = max(1, int(self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
-        self.set_temperature(temp)
-
-        if step % 250 == 0:
-            [save_attention_to_image(self.attentions[i], self.transformation_counts[i], step, "a%i" % (i+1,), l_mult=float(self.transformation_counts[i]/4)) for i in range(len(self.switches))]
-
+        temp = self.switches[0].switch.temperature
         mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
         means = [i[0] for i in mean_hists]
         hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
