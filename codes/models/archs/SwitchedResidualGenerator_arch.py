@@ -129,7 +129,7 @@ class ConfigurableSwitchedResidualGenerator(nn.Module):
         if self.attentions:
             temp = max(1, int(self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
             self.set_temperature(temp)
-            if step % 2 == 0:
+            if step % 250 == 0:
                 [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts[i], step, "a%i" % (i+1,), l_mult=float(self.transformation_counts[i]/4)) for i in range(len(self.switches))]
 
     def get_debug_values(self, step):
