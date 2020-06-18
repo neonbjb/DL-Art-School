@@ -92,13 +92,7 @@ def main():
         logger.info(option.dict2str(opt))
         # tensorboard logger
         if opt['use_tb_logger'] and 'debug' not in opt['name']:
-            tb_logger_path = '../tb_logger/' + opt['name']
-
-            # If not resuming, delete the existing logs. Tensorboard doesn't do too great with these.
-            if opt['path'].get('resume_state', None) is None:
-                if os.path.exists(tb_logger_path) and os.path.isdir(tb_logger_path):
-                    shutil.rmtree(tb_logger_path)
-
+            tb_logger_path = os.path.join(opt['path']['experiments_root'], 'tb_logger')
             version = float(torch.__version__[0:3])
             if version >= 1.1:  # PyTorch 1.1
                 from torch.utils.tensorboard import SummaryWriter
