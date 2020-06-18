@@ -15,6 +15,7 @@ import options.options as option
 from utils import util
 from data import create_dataloader, create_dataset
 from models import create_model
+from time import time
 
 
 def init_dist(backend='nccl', **kwargs):
@@ -30,7 +31,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_residualgenerator.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_residualgenerator_fast_specific.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -174,7 +175,14 @@ def main():
         if opt['dist']:
             train_sampler.set_epoch(epoch)
         tq_ldr = tqdm(train_loader)
+
+        _t = time()
+        _profile = False
         for _, train_data in enumerate(tq_ldr):
+            if _profile:
+                print("Data fetch: %f" % (time() - _t))
+                _t = time()
+
             current_step += 1
             if current_step > total_iters:
                 break
@@ -182,8 +190,14 @@ def main():
             model.update_learning_rate(current_step, warmup_iter=opt['train']['warmup_iter'])
 
             #### training
+            if _profile:
+                print("Update LR: %f" % (time() - _t))
+                _t = time()
             model.feed_data(train_data)
             model.optimize_parameters(current_step)
+            if _profile:
+                print("Model feed + step: %f" % (time() - _t))
+                _t = time()
 
             #### log
             if current_step % opt['logger']['print_freq'] == 0:

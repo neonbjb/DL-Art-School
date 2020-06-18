@@ -9,7 +9,7 @@
       <excludeFolder url="file://$MODULE_DIR$/results" />
       <excludeFolder url="file://$MODULE_DIR$/tb_logger" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.7 (python37-torch)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.7 (torch-1.4-venv)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="SwitchedConvolutions" />
   </component>
