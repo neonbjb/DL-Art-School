@@ -131,4 +131,5 @@ class BaseModel():
             self.optimizers[i].load_state_dict(o)
         for i, s in enumerate(resume_schedulers):
             self.schedulers[i].load_state_dict(s)
-        amp.load_state_dict(resume_state['amp'])
+        if 'amp' in resume_state.keys():
+            amp.load_state_dict(resume_state['amp'])
