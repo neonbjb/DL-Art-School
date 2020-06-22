@@ -63,7 +63,8 @@ def define_G(opt, net_key='network_G'):
                                         final_temperature_step=opt_net['temperature_final_step'])
         netG = RRDBNet_arch.PixShuffleRRDB(nf=opt_net['nf'], nb=opt_net['nb'], gc=opt_net['gc'], scale=scale, rrdb_block_f=block_f)
     elif which_model == "ConfigurableSwitchedResidualGenerator":
-        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator(switch_filters=opt_net['switch_filters'], switch_reductions=opt_net['switch_reductions'],
+        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator(switch_filters=opt_net['switch_filters'], switch_growths=opt_net['switch_growths'],
+                                                                      switch_reductions=opt_net['switch_reductions'],
                                                                       switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
                                                                       trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
                                                                       trans_filters_mid=opt_net['trans_filters_mid'],
