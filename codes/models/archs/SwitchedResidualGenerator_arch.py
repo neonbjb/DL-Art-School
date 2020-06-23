@@ -37,13 +37,17 @@ class ResidualBranch(nn.Module):
     def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth):
         assert depth >= 2
         super(ResidualBranch, self).__init__()
+        self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
         self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=False)] +
                                      [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=False) for i in range(depth-2)] +
                                      [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False)])
         self.scale = nn.Parameter(torch.ones(1))
         self.bias = nn.Parameter(torch.zeros(1))
 
-    def forward(self, x):
+    def forward(self, x, noise=None):
+        if noise is not None:
+            noise = noise * self.noise_scale
+            x = x + noise
         for m in self.bnconvs:
             x = m.forward(x)
         return x * self.scale + self.bias
@@ -75,7 +79,7 @@ def create_sequential_growing_processing_block(filters_init, filter_growth, num_
 
 class SwitchComputer(nn.Module):
     def __init__(self, channels_in, filters, growth, transform_block, transform_count, reduction_blocks, processing_blocks=0,
-                 init_temp=20, enable_negative_transforms=False):
+                 init_temp=20, enable_negative_transforms=False, add_scalable_noise_to_transforms=False):
         super(SwitchComputer, self).__init__()
         self.enable_negative_transforms = enable_negative_transforms
 
@@ -91,6 +95,7 @@ class SwitchComputer(nn.Module):
         self.final_switch_conv = nn.Conv2d(proc_block_filters, tc, 1, 1, 0)
 
         self.transforms = nn.ModuleList([transform_block() for _ in range(transform_count)])
+        self.add_noise = add_scalable_noise_to_transforms
 
         # And the switch itself, including learned scalars
         self.switch = BareConvSwitch(initial_temperature=init_temp)
@@ -98,7 +103,11 @@ class SwitchComputer(nn.Module):
         self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, x, output_attention_weights=False):
-        xformed = [t.forward(x) for t in self.transforms]
+        if self.add_noise:
+            rand_feature = torch.randn_like(x)
+            xformed = [t.forward(x, rand_feature) for t in self.transforms]
+        else:
+            xformed = [t.forward(x) for t in self.transforms]
         if self.enable_negative_transforms:
             xformed.extend([-t for t in xformed])
 
@@ -126,11 +135,12 @@ class SwitchComputer(nn.Module):
 class ConfigurableSwitchedResidualGenerator(nn.Module):
     def __init__(self, switch_filters, switch_growths, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes,
                  trans_layers, trans_filters_mid, initial_temp=20, final_temperature_step=50000, heightened_temp_min=1,
-                 heightened_final_step=50000, upsample_factor=1):
+                 heightened_final_step=50000, upsample_factor=1, enable_negative_transforms=False,
+                 add_scalable_noise_to_transforms=False):
         super(ConfigurableSwitchedResidualGenerator, self).__init__()
         switches = []
         for filters, growth, sw_reduce, sw_proc, trans_count, kernel, layers, mid_filters in zip(switch_filters, switch_growths, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers, trans_filters_mid):
-            switches.append(SwitchComputer(3, filters, growth, functools.partial(ResidualBranch, 3, mid_filters, 3, kernel_size=kernel, depth=layers), trans_count, sw_reduce, sw_proc, initial_temp))
+            switches.append(SwitchComputer(3, filters, growth, functools.partial(ResidualBranch, 3, mid_filters, 3, kernel_size=kernel, depth=layers), trans_count, sw_reduce, sw_proc, initial_temp, enable_negative_transforms=enable_negative_transforms, add_scalable_noise_to_transforms=add_scalable_noise_to_transforms))
         initialize_weights(switches, 1)
         # Initialize the transforms with a lesser weight, since they are repeatedly added on to the resultant image.
         initialize_weights([s.transforms for s in switches], .2 / len(switches))

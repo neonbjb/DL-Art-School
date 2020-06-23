@@ -70,7 +70,7 @@ def define_G(opt, net_key='network_G'):
                                                                       trans_filters_mid=opt_net['trans_filters_mid'],
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale)
+                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
