@@ -20,11 +20,13 @@ def main():
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\hands_on_hc\\images'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\imagesets\\tiled_512px'
-        opt['crop_sz'] = 512  # the size of each sub-image
-        opt['step'] = 440  # step of the sliding crop window
-        opt['thres_sz'] = 120  # size threshold
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\fkaw\\images'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\fkaw\\square_images'
+        opt['crop_sz'] = 1024  # the size of each sub-image
+        opt['step'] = 880  # step of the sliding crop window
+        opt['thres_sz'] = 240  # size threshold
+        opt['resize_final_img'] = .5
+        opt['only_resize'] = .5
         extract_single(opt, split_img)
     elif mode == 'pair':
         GT_folder = '../../datasets/div2k/DIV2K_train_HR'
@@ -105,6 +107,7 @@ def worker(path, opt, split_mode=False, left_img=True):
     crop_sz = opt['crop_sz']
     step = opt['step']
     thres_sz = opt['thres_sz']
+    only_resize = opt['only_resize']
     img_name = osp.basename(path)
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
@@ -117,7 +120,7 @@ def worker(path, opt, split_mode=False, left_img=True):
         raise ValueError('Wrong image shape - {}'.format(n_channels))
        
     # Uncomment to filter any image that doesnt meet a threshold size.
-    if w < 3000:
+    if min(h,w) < 1024:
         return
 
     left = 0
@@ -139,6 +142,18 @@ def worker(path, opt, split_mode=False, left_img=True):
     if w - (w_space[-1] + crop_sz) > thres_sz:
         w_space = np.append(w_space, w - crop_sz)
 
+    dsize = None
+    if only_resize:
+        dsize = (crop_sz, crop_sz)
+        if h < w:
+            h_space = [0]
+            w_space = [(w - h) // 2]
+            crop_sz = h
+        else:
+            h_space = [(h - w) // 2]
+            w_space = [0]
+            crop_sz = w
+
     index = 0
     for x in h_space:
         for y in w_space:
@@ -150,6 +165,12 @@ def worker(path, opt, split_mode=False, left_img=True):
             crop_img = np.ascontiguousarray(crop_img)
             # If this fails, change it and the imwrite below to the write extension.
             assert ".jpg" in img_name
+            if 'resize_final_img' in opt.keys():
+                # Resize too.
+                resize_factor = opt['resize_final_img']
+                if dsize is None:
+                    dsize = (int(crop_img.shape[0] * resize_factor), int(crop_img.shape[1] * resize_factor))
+                crop_img = cv2.resize(crop_img, dsize, interpolation = cv2.INTER_AREA)
             cv2.imwrite(
                 osp.join(opt['save_folder'],
                          img_name.replace('.jpg', '_l{:05d}_s{:03d}.png'.format(left, index))), crop_img,
