@@ -59,7 +59,7 @@ class HalvingProcessingBlock(nn.Module):
     def __init__(self, filters):
         super(HalvingProcessingBlock, self).__init__()
         self.bnconv1 = ConvBnLelu(filters, filters * 2, stride=2, bn=False)
-        self.bnconv2 = ConvBnLelu(filters * 2, filters * 2, bn=False)
+        self.bnconv2 = ConvBnLelu(filters * 2, filters * 2, bn=True)
 
     def forward(self, x):
         x = self.bnconv1(x)
@@ -72,7 +72,7 @@ def create_sequential_growing_processing_block(filters_init, filter_growth, num_
     convs = []
     current_filters = filters_init
     for i in range(num_convs):
-        convs.append(ConvBnLelu(current_filters, current_filters + filter_growth, bn=False))
+        convs.append(ConvBnLelu(current_filters, current_filters + filter_growth, bn=True))
         current_filters += filter_growth
     return nn.Sequential(*convs), current_filters
 
