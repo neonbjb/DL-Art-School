@@ -76,7 +76,7 @@ def define_G(opt, net_key='network_G'):
                                                                       switch_reductions=opt_net['switch_reductions'],
                                                                       switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
                                                                       trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
-                                                                      trans_filters_mid=opt_net['trans_filters_mid'],
+                                                                      transformation_filters=opt_net['transformation_filters'],
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
