@@ -33,15 +33,15 @@ class ConvBnLelu(nn.Module):
             return x
 
 
-class ResidualBranch(nn.Module):
-    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth):
+class MultiConvBlock(nn.Module):
+    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth, scale_init=1):
         assert depth >= 2
-        super(ResidualBranch, self).__init__()
+        super(MultiConvBlock, self).__init__()
         self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
         self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=False)] +
                                      [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=False) for i in range(depth-2)] +
                                      [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False)])
-        self.scale = nn.Parameter(torch.ones(1))
+        self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init))
         self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, x, noise=None):
@@ -198,9 +198,9 @@ class ConvBasisMultiplexer(nn.Module):
         return x
 
 
-class ConvBasisMultiplexerBase(nn.Module):
+class ConvBasisMultiplexerReducer(nn.Module):
     def __init__(self, input_channels, base_filters, growth, reductions, processing_depth):
-        super(ConvBasisMultiplexerBase, self).__init__()
+        super(ConvBasisMultiplexerReducer, self).__init__()
         self.filter_conv = ConvBnLelu(input_channels, base_filters)
         self.reduction_blocks = nn.Sequential(OrderedDict([('block%i:' % (i,), HalvingProcessingBlock(base_filters * 2 ** i)) for i in range(reductions)]))
         reduction_filters = base_filters * 2 ** reductions
@@ -240,7 +240,7 @@ class ConfigurableSwitchedResidualGenerator(nn.Module):
         super(ConfigurableSwitchedResidualGenerator, self).__init__()
         switches = []
         for filters, growth, sw_reduce, sw_proc, trans_count, kernel, layers, mid_filters in zip(switch_filters, switch_growths, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers, trans_filters_mid):
-            switches.append(SwitchComputer(3, filters, growth, functools.partial(ResidualBranch, 3, mid_filters, 3, kernel_size=kernel, depth=layers), trans_count, sw_reduce, sw_proc, initial_temp, enable_negative_transforms=enable_negative_transforms, add_scalable_noise_to_transforms=add_scalable_noise_to_transforms))
+            switches.append(SwitchComputer(3, filters, growth, functools.partial(MultiConvBlock, 3, mid_filters, 3, kernel_size=kernel, depth=layers), trans_count, sw_reduce, sw_proc, initial_temp, enable_negative_transforms=enable_negative_transforms, add_scalable_noise_to_transforms=add_scalable_noise_to_transforms))
         initialize_weights(switches, 1)
         # Initialize the transforms with a lesser weight, since they are repeatedly added on to the resultant image.
         initialize_weights([s.transforms for s in switches], .2 / len(switches))
@@ -310,7 +310,7 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
         self.final_conv = ConvBnLelu(transformation_filters, 3, bn=False)
         for filters, growth, sw_reduce, sw_proc, trans_count, kernel, layers in zip(switch_filters, switch_growths, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers):
             multiplx_fn = functools.partial(ConvBasisMultiplexer, transformation_filters, filters, growth, sw_reduce, sw_proc, trans_count)
-            switches.append(ConfigurableSwitchComputer(multiplx_fn, functools.partial(ResidualBranch, transformation_filters, transformation_filters, transformation_filters, kernel_size=kernel, depth=layers), trans_count, initial_temp, enable_negative_transforms=enable_negative_transforms, add_scalable_noise_to_transforms=add_scalable_noise_to_transforms))
+            switches.append(ConfigurableSwitchComputer(multiplx_fn, functools.partial(MultiConvBlock, transformation_filters, transformation_filters, transformation_filters, kernel_size=kernel, depth=layers), trans_count, initial_temp, enable_negative_transforms=enable_negative_transforms, add_scalable_noise_to_transforms=add_scalable_noise_to_transforms))
             post_switch_proc.append(ConvBnLelu(transformation_filters, transformation_filters, bn=False))
         initialize_weights(switches, 1)
         # Initialize the transforms with a lesser weight, since they are repeatedly added on to the resultant image.

@@ -6,7 +6,7 @@ import models.archs.DiscriminatorResnet_arch_passthrough as DiscriminatorResnet_
 import models.archs.FlatProcessorNetNew_arch as FlatProcessorNetNew_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.HighToLowResNet as HighToLowResNet
-import models.archs.ResGen_arch as ResGen_arch
+import models.archs.NestedSwitchGenerator as ng
 import models.archs.feature_arch as feature_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import functools
@@ -73,6 +73,15 @@ def define_G(opt, net_key='network_G'):
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_filters=opt_net['switch_filters'], switch_growths=opt_net['switch_growths'],
+                                                                      switch_reductions=opt_net['switch_reductions'],
+                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
+                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
+                                                                      transformation_filters=opt_net['transformation_filters'],
+                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
+                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
+                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
+    elif which_model == "NestedSwitchGenerator":
+        netG = ng.NestedSwitchedGenerator(switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
                                                                       switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
                                                                       trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
