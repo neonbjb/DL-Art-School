@@ -44,6 +44,14 @@ class MultiConvBlock(nn.Module):
         self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init))
         self.bias = nn.Parameter(torch.zeros(1))
 
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
     def forward(self, x, noise=None):
         if noise is not None:
             noise = noise * self.noise_scale
