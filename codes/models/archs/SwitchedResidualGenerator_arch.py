@@ -336,10 +336,6 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
         self.upsample_factor = upsample_factor
 
     def forward(self, x):
-        # This network is entirely a "repair" network and operates on full-resolution images. Upsample first if that
-        # is called for, then repair.
-        if self.upsample_factor > 1:
-            x = F.interpolate(x, scale_factor=self.upsample_factor, mode="nearest")
 
         x = self.initial_conv(x)
 
