@@ -106,10 +106,7 @@ class FixupResNet(nn.Module):
                 nn.init.constant_(m.conv2.weight, 0)
                 if m.downsample is not None:
                     nn.init.normal_(m.downsample.weight, mean=0, std=np.sqrt(2 / (m.downsample.weight.shape[0] * np.prod(m.downsample.weight.shape[2:]))))
-            '''
-            elif isinstance(m, nn.Linear):
-                nn.init.constant_(m.weight, 0)
-                nn.init.constant_(m.bias, 0)'''
+
 
     def _make_layer(self, block, planes, blocks, stride=1, conv_type=conv3x3):
         defilter = None

@@ -8,6 +8,7 @@ from models.archs.arch_util import initialize_weights
 from switched_conv_util import save_attention_to_image
 
 
+''' Convenience class with Conv->BN->LeakyRelu. Includes Kaiming weight initialization. '''
 class ConvBnLelu(nn.Module):
     def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True):
         super(ConvBnLelu, self).__init__()
@@ -22,6 +23,14 @@ class ConvBnLelu(nn.Module):
             self.lelu = nn.LeakyReLU(negative_slope=.1)
         else:
             self.lelu = None
+
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out', nonlinearity='leaky_relu' if self.lelu else 'linear')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         x = self.conv(x)
@@ -43,14 +52,6 @@ class MultiConvBlock(nn.Module):
                                      [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False)])
         self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init))
         self.bias = nn.Parameter(torch.zeros(1))
-
-        # Init params.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
 
     def forward(self, x, noise=None):
         if noise is not None:
