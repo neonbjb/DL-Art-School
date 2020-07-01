@@ -212,7 +212,7 @@ class ConfigurableSwitchComputer(nn.Module):
 
         outputs, attention = self.switch(xformed, m, True)
         outputs = identity + outputs
-        outputs = identity + self.post_switch_conv(outputs)
+        #outputs = identity + self.post_switch_conv(outputs)
         outputs = outputs * self.scale + self.bias
         if output_attention_weights:
             return outputs, attention
