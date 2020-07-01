@@ -34,6 +34,7 @@ class TorchCustomTrace:
     # the backwards pass.
     def mem_forward_hook(self, module: torch.nn.Module, inputs, outputs, trace: str, mod_id: str):
         mod = self.modules[mod_id]
+        '''
         for li in inputs:
             if type(li) == torch.Tensor:
                 li = [li]
@@ -48,7 +49,8 @@ class TorchCustomTrace:
                 self.module_map_by_inputs[o.data_ptr()].append(mod)
             else:
                 self.module_map_by_inputs[o.data_ptr()] = [mod]
-       # print(trace, [i.data_ptr() for i in inputs], [o.data_ptr() for o in outputs])
+        '''
+        print(trace)
 
     def mem_backward_hook(self, inputs, outputs, op):
         if len(inputs) == 0:
@@ -90,7 +92,7 @@ class TorchCustomTrace:
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/use_video_upsample.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/debug.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
 

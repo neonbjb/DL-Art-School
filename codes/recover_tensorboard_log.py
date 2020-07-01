@@ -1,8 +1,8 @@
 from torch.utils.tensorboard import SummaryWriter
 
 if __name__ == "__main__":
-    writer = SummaryWriter("../experiments/train_div2k_feat_rg2_more_stuff")
-    f = open("../experiments/train_div2k_feat_rg2_more_stuff/console_output")
+    writer = SummaryWriter("../experiments/train_div2k_feat_nsgen_r3/recovered_tb")
+    f = open("../experiments/train_div2k_feat_nsgen_r3/console.txt", encoding="utf8")
     console = f.readlines()
     search_terms = [
         ("iter", ", iter:  ", ", lr:"),
