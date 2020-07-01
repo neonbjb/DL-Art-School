@@ -7,14 +7,49 @@ from collections import OrderedDict
 from models.archs.arch_util import initialize_weights
 from switched_conv_util import save_attention_to_image
 
+''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. '''
+class ConvBnRelu(nn.Module):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, relu=True, bn=True, bias=True):
+        super(ConvBnRelu, self).__init__()
+        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
+        assert kernel_size in padding_map.keys()
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        if bn:
+            self.bn = nn.BatchNorm2d(filters_out)
+        else:
+            self.bn = None
+        if relu:
+            self.relu = nn.ReLU()
+        else:
+            self.relu = None
 
-''' Convenience class with Conv->BN->LeakyRelu. Includes Kaiming weight initialization. '''
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.relu else 'linear')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn:
+            x = self.bn(x)
+        if self.relu:
+            return self.relu(x)
+        else:
+            return x
+
+
+''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. '''
 class ConvBnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True, bias=True):
         super(ConvBnLelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size])
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
         if bn:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
@@ -47,9 +82,9 @@ class MultiConvBlock(nn.Module):
         assert depth >= 2
         super(MultiConvBlock, self).__init__()
         self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=bn)] +
-                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=bn) for i in range(depth-2)] +
-                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False)])
+        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=bn, bias=False)] +
+                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=bn, bias=False) for i in range(depth-2)] +
+                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False, bias=False)])
         self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init))
         self.bias = nn.Parameter(torch.zeros(1))
 
