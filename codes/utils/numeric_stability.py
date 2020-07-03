@@ -4,7 +4,7 @@ import models.archs.SwitchedResidualGenerator_arch as srg
 import models.archs.NestedSwitchGenerator as nsg
 import functools
 
-blacklisted_modules = [nn.Conv2d, nn.ReLU, nn.LeakyReLU, nn.BatchNorm2d, nn.Softmax]
+blacklisted_modules = [nn.Conv2d, nn.ReLU, nn.LeakyReLU, nn.BatchNorm2d, nn.Softmax, srg.Interpolate]
 def install_forward_trace_hooks(module, id="base"):
     if type(module) in blacklisted_modules:
         return
@@ -96,15 +96,11 @@ if __name__ == "__main__":
                    torch.randn(1, 3, 64, 64),
                    device='cuda')
     '''
-    test_stability(functools.partial(srg.ConfigurableSwitchedResidualGenerator2,
-                                     switch_filters=[16,16,16,16,16],
-                                     switch_growths=[32,32,32,32,32],
-                                     switch_reductions=[1,1,1,1,1],
-                                     switch_processing_layers=[5,5,5,5,5],
-                                     trans_counts=[8,8,8,8,8],
-                                     trans_kernel_sizes=[3,3,3,3,3],
-                                     trans_layers=[3,3,3,3,3],
+    test_stability(functools.partial(srg.ConfigurableSwitchedResidualGenerator3,
+                                     trans_counts=[8],
+                                     trans_kernel_sizes=[3],
+                                     trans_layers=[3],
                                      transformation_filters=64,
                                      initial_temp=10),
-                   torch.randn(1, 3, 64, 64),
+                   torch.randn(1, 3, 128, 128),
                    device='cuda')

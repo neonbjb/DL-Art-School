@@ -4,78 +4,10 @@ from switched_conv import BareConvSwitch, compute_attention_specificity
 import torch.nn.functional as F
 import functools
 from collections import OrderedDict
-from models.archs.arch_util import initialize_weights
+from models.archs.arch_util import initialize_weights, ConvBnRelu, ConvBnLelu
 from models.archs.RRDBNet_arch import ResidualDenseBlock_5C
+from models.archs.spinenet_arch import SpineNet
 from switched_conv_util import save_attention_to_image
-
-''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
-class ConvBnRelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, relu=True, bn=True, bias=True):
-        super(ConvBnRelu, self).__init__()
-        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
-        assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if bn:
-            self.bn = nn.BatchNorm2d(filters_out)
-        else:
-            self.bn = None
-        if relu:
-            self.relu = nn.ReLU()
-        else:
-            self.relu = None
-
-        # Init params.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.relu else 'linear')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.bn:
-            x = self.bn(x)
-        if self.relu:
-            return self.relu(x)
-        else:
-            return x
-
-
-''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
-class ConvBnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True, bias=True):
-        super(ConvBnLelu, self).__init__()
-        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
-        assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if bn:
-            self.bn = nn.BatchNorm2d(filters_out)
-        else:
-            self.bn = None
-        if lelu:
-            self.lelu = nn.LeakyReLU(negative_slope=.1)
-        else:
-            self.lelu = None
-
-        # Init params.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out', nonlinearity='leaky_relu' if self.lelu else 'linear')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.bn:
-            x = self.bn(x)
-        if self.lelu:
-            return self.lelu(x)
-        else:
-            return x
 
 
 class MultiConvBlock(nn.Module):
@@ -214,7 +146,7 @@ class ConfigurableSwitchComputer(nn.Module):
 
         m = self.multiplexer(identity)
         # Interpolate the multiplexer across the entire shape of the image.
-        m = F.interpolate(m, size=x.shape[2:], mode='nearest')
+        m = F.interpolate(m, size=xformed[0].shape[2:], mode='nearest')
 
         outputs, attention = self.switch(xformed, m, True)
         outputs = identity + outputs * self.switch_scale
@@ -250,6 +182,22 @@ class ConvBasisMultiplexer(nn.Module):
         x = self.cbl2(x)
         x = self.cbl3(x)
         return x
+
+
+class SpineNetMultiplexer(nn.Module):
+    def __init__(self, input_channels, transform_count):
+        super(SpineNetMultiplexer, self).__init__()
+        self.backbone = SpineNet('49', in_channels=input_channels)
+        self.rdc1 = ConvBnRelu(256, 128, kernel_size=3, bias=False)
+        self.rdc2 = ConvBnRelu(128, 64, kernel_size=3, bias=False)
+        self.rdc3 = ConvBnRelu(64, transform_count, bias=False, bn=False, relu=False)
+
+    def forward(self, x):
+        spine = self.backbone(x)
+        feat = self.rdc1(spine[0])
+        feat = self.rdc2(feat)
+        feat = self.rdc3(feat)
+        return feat
 
 
 class ConvBasisMultiplexerReducer(nn.Module):
@@ -414,6 +362,97 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
             self.set_temperature(temp)
             if step % 50 == 0:
                 [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts[i], step, "a%i" % (i+1,)) for i in range(len(self.switches))]
+
+    def get_debug_values(self, step):
+        temp = self.switches[0].switch.temperature
+        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
+        means = [i[0] for i in mean_hists]
+        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
+        val = {"switch_temperature": temp}
+        for i in range(len(means)):
+            val["switch_%i_specificity" % (i,)] = means[i]
+            val["switch_%i_histogram" % (i,)] = hists[i]
+        return val
+
+
+class Interpolate(nn.Module):
+    def __init__(self, factor):
+        super(Interpolate, self).__init__()
+        self.factor = factor
+
+    def forward(self, x):
+        return F.interpolate(x, scale_factor=self.factor)
+
+
+class ConfigurableSwitchedResidualGenerator3(nn.Module):
+    def __init__(self, trans_counts,
+                 trans_kernel_sizes,
+                 trans_layers, transformation_filters, initial_temp=20, final_temperature_step=50000,
+                 heightened_temp_min=1,
+                 heightened_final_step=50000, upsample_factor=1, enable_negative_transforms=False,
+                 add_scalable_noise_to_transforms=False):
+        super(ConfigurableSwitchedResidualGenerator3, self).__init__()
+        switches = []
+        for trans_count, kernel, layers in zip(trans_counts, trans_kernel_sizes, trans_layers):
+            multiplx_fn = functools.partial(SpineNetMultiplexer, 3)
+            switches.append(ConfigurableSwitchComputer(base_filters=3, multiplexer_net=multiplx_fn,
+                                                       pre_transform_block=functools.partial(nn.Sequential,
+                                                                                             ConvBnLelu(3, transformation_filters, kernel_size=1, stride=4, bn=False, lelu=False, bias=False),
+                                                                                             ResidualDenseBlock_5C(
+                                                                                                 transformation_filters),
+                                                                                             ResidualDenseBlock_5C(
+                                                                                                 transformation_filters)),
+                                                       transform_block=functools.partial(nn.Sequential,
+                                                                                         ResidualDenseBlock_5C(transformation_filters),
+                                                                                         Interpolate(4),
+                                                                                         ConvBnLelu(transformation_filters, transformation_filters // 2, kernel_size=3, bias=False, bn=False),
+                                                                                         ConvBnLelu(transformation_filters // 2, 3, kernel_size=1, bias=False, bn=False, lelu=False)),
+                                                       transform_count=trans_count, init_temp=initial_temp,
+                                                       enable_negative_transforms=enable_negative_transforms,
+                                                       add_scalable_noise_to_transforms=add_scalable_noise_to_transforms,
+                                                       init_scalar=.01))
+
+        self.switches = nn.ModuleList(switches)
+        self.transformation_counts = trans_counts
+        self.init_temperature = initial_temp
+        self.final_temperature_step = final_temperature_step
+        self.heightened_temp_min = heightened_temp_min
+        self.heightened_final_step = heightened_final_step
+        self.attentions = None
+        self.upsample_factor = upsample_factor
+
+    def forward(self, x):
+        if self.upsample_factor > 1:
+            x = F.interpolate(x, scale_factor=self.upsample_factor, mode="nearest")
+
+        self.attentions = []
+        for i, sw in enumerate(self.switches):
+            x, att = sw.forward(x, True)
+            self.attentions.append(att)
+
+        return x,
+
+    def set_temperature(self, temp):
+        [sw.set_temperature(temp) for sw in self.switches]
+
+    def update_for_step(self, step, experiments_path='.'):
+        if self.attentions:
+            temp = max(1, int(
+                self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
+            if temp == 1 and self.heightened_final_step and self.heightened_final_step != 1:
+                # Once the temperature passes (1) it enters an inverted curve to match the linear curve from above.
+                # without this, the attention specificity "spikes" incredibly fast in the last few iterations.
+                h_steps_total = self.heightened_final_step - self.final_temperature_step
+                h_steps_current = min(step - self.final_temperature_step, h_steps_total)
+                # The "gap" will represent the steps that need to be traveled as a linear function.
+                h_gap = 1 / self.heightened_temp_min
+                temp = h_gap * h_steps_current / h_steps_total
+                # Invert temperature to represent reality on this side of the curve
+                temp = 1 / temp
+            self.set_temperature(temp)
+            if step % 50 == 0:
+                [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts[i], step,
+                                         "a%i" % (i + 1,)) for i in range(len(self.switches))]
 
     def get_debug_values(self, step):
         temp = self.switches[0].switch.temperature
