@@ -449,6 +449,14 @@ class SRGANModel(BaseModel):
         # Just a note: this intentionally includes the swap model in the list of possibilities.
         return previous_models[random.randint(0, len(previous_models)-1)]
 
+    def compute_fea_loss(self, real, fake):
+        with torch.no_grad():
+            real = real.unsqueeze(dim=0)
+            fake = fake.unsqueeze(dim=0)
+            real_fea = self.netF(real).detach()
+            fake_fea = self.netF(fake)
+            return self.cri_fea(fake_fea, real_fea).item()
+
     # Called before verification/checkpoint to ensure we're using the real models and not a swapout variant.
     def force_restore_swapout(self):
         if self.swapout_D_duration > 0:
