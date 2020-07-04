@@ -3,7 +3,6 @@ from torch import nn
 from switched_conv import BareConvSwitch, compute_attention_specificity
 import torch.nn.functional as F
 import functools
-from collections import OrderedDict
 from models.archs.arch_util import initialize_weights
 from switched_conv_util import save_attention_to_image
 
