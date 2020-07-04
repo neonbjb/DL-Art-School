@@ -313,9 +313,8 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
         for filters, growth, sw_reduce, sw_proc, trans_count, kernel, layers in zip(switch_filters, switch_growths, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers):
             multiplx_fn = functools.partial(ConvBasisMultiplexer, transformation_filters, filters, growth, sw_reduce, sw_proc, trans_count)
             switches.append(ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
-                                                       pre_transform_block=functools.partial(nn.Sequential, ResidualDenseBlock_5C(transformation_filters),
-                                                                                                            ResidualDenseBlock_5C(transformation_filters)),
-                                                       transform_block=functools.partial(ResidualDenseBlock_5C, transformation_filters),
+                                                       pre_transform_block=functools.partial(ConvBnLelu, transformation_filters, transformation_filters, bn=False, bias=False),
+                                                       transform_block=functools.partial(MultiConvBlock, transformation_filters, transformation_filters, transformation_filters, kernel_size=kernel, depth=layers),
                                                        transform_count=trans_count, init_temp=initial_temp, enable_negative_transforms=enable_negative_transforms,
                                                        add_scalable_noise_to_transforms=add_scalable_noise_to_transforms, init_scalar=.01))
 
