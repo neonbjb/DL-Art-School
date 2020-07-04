@@ -237,7 +237,7 @@ def main():
                             visuals = model.get_current_visuals()
 
                             sr_img = util.tensor2img(visuals['rlt'][b])  # uint8
-                            gt_img = util.tensor2img(visuals['GT'][b])  # uint8
+                            #gt_img = util.tensor2img(visuals['GT'][b])  # uint8
 
                             # Save SR images for reference
                             img_base_name = '{:s}_{:d}.png'.format(img_name, current_step)
@@ -266,7 +266,7 @@ def main():
                     logger.info('# Validation # PSNR: {:.4e} Fea: {:.4e}'.format(avg_psnr, avg_fea_loss))
                     # tensorboard logger
                     if opt['use_tb_logger'] and 'debug' not in opt['name']:
-                        tb_logger.add_scalar('val_psnr', avg_psnr, current_step)
+                        #tb_logger.add_scalar('val_psnr', avg_psnr, current_step)
                         tb_logger.add_scalar('val_fea', avg_fea_loss, current_step)
 
             #### save models and training states
