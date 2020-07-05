@@ -142,6 +142,45 @@ class PixelUnshuffle(nn.Module):
         return x
 
 
+# simply define a silu function
+def silu(input):
+    '''
+    Applies the Sigmoid Linear Unit (SiLU) function element-wise:
+        SiLU(x) = x * sigmoid(x)
+    '''
+    return input * torch.sigmoid(input) # use torch.sigmoid to make sure that we created the most efficient implemetation based on builtin PyTorch functions
+
+# create a class wrapper from PyTorch nn.Module, so
+# the function now can be easily used in models
+class SiLU(nn.Module):
+    '''
+    Applies the Sigmoid Linear Unit (SiLU) function element-wise:
+        SiLU(x) = x * sigmoid(x)
+    Shape:
+        - Input: (N, *) where * means, any number of additional
+          dimensions
+        - Output: (N, *), same shape as the input
+    References:
+        -  Related paper:
+        https://arxiv.org/pdf/1606.08415.pdf
+    Examples:
+        >>> m = silu()
+        >>> input = torch.randn(2)
+        >>> output = m(input)
+    '''
+    def __init__(self):
+        '''
+        Init method.
+        '''
+        super().__init__() # init the base class
+
+    def forward(self, input):
+        '''
+        Forward pass of the function.
+        '''
+        return silu(input) # simply apply already implemented SiLU
+
+
 ''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvBnRelu(nn.Module):
@@ -175,6 +214,42 @@ class ConvBnRelu(nn.Module):
             return self.relu(x)
         else:
             return x
+
+
+''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. '''
+class ConvBnSilu(nn.Module):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, silu=True, bn=True, bias=True):
+        super(ConvBnSilu, self).__init__()
+        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
+        assert kernel_size in padding_map.keys()
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        if bn:
+            self.bn = nn.BatchNorm2d(filters_out)
+        else:
+            self.bn = None
+        if silu:
+            self.silu = SiLU()
+        else:
+            self.silu = None
+
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.silu else 'linear')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn:
+            x = self.bn(x)
+        if self.silu:
+            return self.silu(x)
+        else:
+            return x
+
 
 ''' Convenience class with Conv->BN->LeakyReLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
