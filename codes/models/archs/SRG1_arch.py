@@ -8,11 +8,11 @@ from switched_conv_util import save_attention_to_image
 
 
 class ConvBnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True, bias=True):
         super(ConvBnLelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size])
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
         if bn:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
@@ -21,15 +21,6 @@ class ConvBnLelu(nn.Module):
             self.lelu = nn.LeakyReLU(negative_slope=.1)
         else:
             self.lelu = None
-
-        # Init params.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out',
-                                        nonlinearity='leaky_relu' if self.lelu else 'linear')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         x = self.conv(x)
@@ -42,13 +33,14 @@ class ConvBnLelu(nn.Module):
 
 
 class ResidualBranch(nn.Module):
-    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth):
+    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth, bn=False):
         assert depth >= 2
         super(ResidualBranch, self).__init__()
         self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=False)] +
-                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=False) for i in range(depth-2)] +
-                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False)])
+        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=bn, bias=False)] +
+                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=bn, bias=False) for i in range(depth-2)] +
+                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False, bias=False)])
+
         self.scale = nn.Parameter(torch.ones(1))
         self.bias = nn.Parameter(torch.zeros(1))
 
@@ -66,9 +58,8 @@ class ResidualBranch(nn.Module):
 class HalvingProcessingBlock(nn.Module):
     def __init__(self, filters):
         super(HalvingProcessingBlock, self).__init__()
-        self.bnconv1 = ConvBnLelu(filters, filters * 2, stride=2, bn=False)
-        self.bnconv2 = ConvBnLelu(filters * 2, filters * 2, bn=True)
-
+        self.bnconv1 = ConvBnLelu(filters, filters * 2, stride=2, bn=False, bias=False)
+        self.bnconv2 = ConvBnLelu(filters * 2, filters * 2, bn=True, bias=False)
     def forward(self, x):
         x = self.bnconv1(x)
         return self.bnconv2(x)
@@ -80,7 +71,7 @@ def create_sequential_growing_processing_block(filters_init, filter_growth, num_
     convs = []
     current_filters = filters_init
     for i in range(num_convs):
-        convs.append(ConvBnLelu(current_filters, current_filters + filter_growth, bn=True))
+        convs.append(ConvBnLelu(current_filters, current_filters + filter_growth, bn=True, bias=False))
         current_filters += filter_growth
     return nn.Sequential(*convs), current_filters
 
