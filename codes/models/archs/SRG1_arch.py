@@ -3,42 +3,8 @@ from torch import nn
 from switched_conv import BareConvSwitch, compute_attention_specificity
 import torch.nn.functional as F
 import functools
-from models.archs.arch_util import initialize_weights
+from models.archs.arch_util import initialize_weights, ConvBnRelu, ConvBnLelu
 from switched_conv_util import save_attention_to_image
-
-
-class ConvBnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True, bias=True):
-        super(ConvBnLelu, self).__init__()
-        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
-        assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if bn:
-            self.bn = nn.BatchNorm2d(filters_out)
-        else:
-            self.bn = None
-        if lelu:
-            self.lelu = nn.LeakyReLU(negative_slope=.1)
-        else:
-            self.lelu = None
-
-        # Init params.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out',
-                                        nonlinearity='leaky_relu' if self.lelu else 'linear')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.bn:
-            x = self.bn(x)
-        if self.lelu:
-            return self.lelu(x)
-        else:
-            return x
 
 
 class MultiConvBlock(nn.Module):
@@ -79,7 +45,7 @@ def create_sequential_growing_processing_block(filters_init, filter_growth, num_
     convs = []
     current_filters = filters_init
     for i in range(num_convs):
-        convs.append(ConvBnLelu(current_filters, current_filters + filter_growth, bn=True, bias=False))
+        convs.append(ConvBnRelu(current_filters, current_filters + filter_growth, bn=True, bias=False))
         current_filters += filter_growth
     return nn.Sequential(*convs), current_filters
 
