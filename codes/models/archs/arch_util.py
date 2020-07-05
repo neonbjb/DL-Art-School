@@ -148,7 +148,7 @@ def silu(input):
     Applies the Sigmoid Linear Unit (SiLU) function element-wise:
         SiLU(x) = x * sigmoid(x)
     '''
-    return input * torch.sigmoid(input) # use torch.sigmoid to make sure that we created the most efficient implemetation based on builtin PyTorch functions
+    return input * torch.sigmoid(input)
 
 # create a class wrapper from PyTorch nn.Module, so
 # the function now can be easily used in models
@@ -178,7 +178,7 @@ class SiLU(nn.Module):
         '''
         Forward pass of the function.
         '''
-        return silu(input) # simply apply already implemented SiLU
+        return silu(input)
 
 
 ''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
