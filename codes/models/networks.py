@@ -114,6 +114,8 @@ def define_D(opt):
         netD = DiscriminatorResnet_arch_passthrough.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz,
                                                                    number_skips=opt_net['number_skips'], use_bn=True,
                                                                    disable_passthrough=opt_net['disable_passthrough'])
+    elif which_model == 'discriminator_pix':
+        netD = SRGAN_arch.Discriminator_VGG_PixLoss(in_nc=opt_net['in_nc'], nf=opt_net['nf'])
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD
