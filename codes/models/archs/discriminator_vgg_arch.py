@@ -107,7 +107,7 @@ class Discriminator_VGG_PixLoss(nn.Module):
         self.bn4_1 = nn.BatchNorm2d(nf * 8, affine=True)
 
         self.reduce_1 = ConvBnLelu(nf * 8, nf * 4, bias=False)
-        self.pix_loss_collapse = ConvBnLelu(nf * 4, 1, bias=False)
+        self.pix_loss_collapse = ConvBnLelu(nf * 4, 1, bias=False, bn=False, lelu=False)
 
         # activation function
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
