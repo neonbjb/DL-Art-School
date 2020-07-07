@@ -285,3 +285,39 @@ class ConvBnLelu(nn.Module):
             return self.lelu(x)
         else:
             return x
+
+
+''' Convenience class with Conv->GroupNorm->LeakyReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. '''
+class ConvGnLelu(nn.Module):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, gn=True, bias=True, num_groups=8):
+        super(ConvGnLelu, self).__init__()
+        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
+        assert kernel_size in padding_map.keys()
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        if gn:
+            self.gn = nn.GroupNorm(num_groups, filters_out)
+        else:
+            self.gn = None
+        if lelu:
+            self.lelu = nn.LeakyReLU(negative_slope=.1)
+        else:
+            self.lelu = None
+
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out',
+                                        nonlinearity='leaky_relu' if self.lelu else 'linear')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.gn:
+            x = self.gn(x)
+        if self.lelu:
+            return self.lelu(x)
+        else:
+            return x
