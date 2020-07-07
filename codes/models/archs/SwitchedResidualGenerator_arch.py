@@ -155,7 +155,7 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
         switches = []
         self.initial_conv = ConvBnLelu(3, transformation_filters, bn=False, lelu=False, bias=True)
         self.sw_conv = ConvBnLelu(transformation_filters, transformation_filters, lelu=False, bias=True)
-        self.upconv1 = ConvBnLelu(transformation_filters, transformation_filters, bn=False, biasd=True)
+        self.upconv1 = ConvBnLelu(transformation_filters, transformation_filters, bn=False, bias=True)
         self.upconv2 = ConvBnLelu(transformation_filters, transformation_filters, bn=False, bias=True)
         self.hr_conv = ConvBnLelu(transformation_filters, transformation_filters, bn=False, bias=True)
         self.final_conv = ConvBnLelu(transformation_filters, 3, bn=False, lelu=False, bias=True)

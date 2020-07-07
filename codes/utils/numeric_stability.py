@@ -97,6 +97,19 @@ if __name__ == "__main__":
                    torch.randn(1, 3, 64, 64),
                    device='cuda')
     '''
+    test_stability(functools.partial(srg.ConfigurableSwitchedResidualGenerator2,
+                                     switch_filters=[32,32,32,32],
+                                     switch_growths=[16,16,16,16],
+                                     switch_reductions=[4,3,2,1],
+                                     switch_processing_layers=[3,3,4,5],
+                                     trans_counts=[16,16,16,16,16],
+                                     trans_kernel_sizes=[3,3,3,3,3],
+                                     trans_layers=[3,3,3,3,3],
+                                     transformation_filters=64,
+                                     initial_temp=10),
+                   torch.randn(1, 3, 64, 64),
+                   device='cuda')
+    '''
     test_stability(functools.partial(srg1.ConfigurableSwitchedResidualGenerator,
                                      switch_filters=[32,32,32,32],
                                      switch_growths=[16,16,16,16],
@@ -109,3 +122,4 @@ if __name__ == "__main__":
                                      initial_temp=10),
                    torch.randn(1, 3, 64, 64),
                    device='cuda')
+                   '''
