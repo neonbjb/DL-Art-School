@@ -78,20 +78,36 @@ class ConvBasisMultiplexer(nn.Module):
         return x
 
 
-class SpineNetMultiplexer(nn.Module):
-    def __init__(self, input_channels, transform_count):
-        super(SpineNetMultiplexer, self).__init__()
-        self.backbone = SpineNet('49', in_channels=input_channels)
-        self.rdc1 = ConvBnSilu(256, 128, kernel_size=3, bias=False)
-        self.rdc2 = ConvBnSilu(128, 64, kernel_size=3, bias=False)
-        self.rdc3 = ConvBnSilu(64, transform_count, bias=False, bn=False, relu=False)
+class CachedBackboneWrapper:
+    def __init__(self, backbone: nn.Module):
+        self.backbone = backbone
+
+    def __call__(self, *args):
+        self.cache = self.backbone(*args)
+        return self.cache
+
+    def get_forward_result(self):
+        return self.cache
+
+
+class BackboneMultiplexer(nn.Module):
+    def __init__(self, backbone: CachedBackboneWrapper, transform_count):
+        super(BackboneMultiplexer, self).__init__()
+        self.backbone = backbone
+        self.proc = nn.Sequential(ConvBnSilu(256, 256, kernel_size=3, bias=True),
+                                  ConvBnSilu(256, 256, kernel_size=3, bias=False))
+        self.up1 = nn.Sequential(ConvBnSilu(256, 128, kernel_size=3, bias=False, bn=False, silu=False),
+                                 ConvBnSilu(128, 128, kernel_size=3, bias=False))
+        self.up2 = nn.Sequential(ConvBnSilu(128, 64, kernel_size=3, bias=False, bn=False, silu=False),
+                                 ConvBnSilu(64, 64, kernel_size=3, bias=False))
+        self.final = ConvBnSilu(64, transform_count, bias=False, bn=False, silu=False)
 
     def forward(self, x):
-        spine = self.backbone(x)
-        feat = self.rdc1(spine[0])
-        feat = self.rdc2(feat)
-        feat = self.rdc3(feat)
-        return feat
+        spine = self.backbone.get_forward_result()
+        feat = self.proc(spine[0])
+        feat = self.up1(F.interpolate(feat, scale_factor=2, mode="nearest"))
+        feat = self.up2(F.interpolate(feat, scale_factor=2, mode="nearest"))
+        return self.final(feat)
 
 
 class ConfigurableSwitchComputer(nn.Module):
@@ -233,55 +249,56 @@ class Interpolate(nn.Module):
 
 
 class ConfigurableSwitchedResidualGenerator3(nn.Module):
-    def __init__(self, trans_counts,
-                 trans_kernel_sizes,
-                 trans_layers, transformation_filters, initial_temp=20, final_temperature_step=50000,
+    def __init__(self, base_filters, trans_count, initial_temp=20, final_temperature_step=50000,
                  heightened_temp_min=1,
-                 heightened_final_step=50000, upsample_factor=1, enable_negative_transforms=False,
-                 add_scalable_noise_to_transforms=False):
+                 heightened_final_step=50000, upsample_factor=4):
         super(ConfigurableSwitchedResidualGenerator3, self).__init__()
-        switches = []
-        for trans_count, kernel, layers in zip(trans_counts, trans_kernel_sizes, trans_layers):
-            multiplx_fn = functools.partial(SpineNetMultiplexer, 3)
-            switches.append(ConfigurableSwitchComputer(base_filters=3, multiplexer_net=multiplx_fn,
-                                                       pre_transform_block=functools.partial(nn.Sequential,
-                                                                                             ConvBnLelu(3, transformation_filters, kernel_size=1, stride=4, bn=False, lelu=False, bias=False),
-                                                                                             ResidualDenseBlock_5C(
-                                                                                                 transformation_filters),
-                                                                                             ResidualDenseBlock_5C(
-                                                                                                 transformation_filters)),
-                                                       transform_block=functools.partial(nn.Sequential,
-                                                                                         ResidualDenseBlock_5C(transformation_filters),
-                                                                                         Interpolate(4),
-                                                                                         ConvBnLelu(transformation_filters, transformation_filters // 2, kernel_size=3, bias=False, bn=False),
-                                                                                         ConvBnLelu(transformation_filters // 2, 3, kernel_size=1, bias=False, bn=False, lelu=False)),
-                                                       transform_count=trans_count, init_temp=initial_temp,
-                                                       enable_negative_transforms=enable_negative_transforms,
-                                                       add_scalable_noise_to_transforms=add_scalable_noise_to_transforms,
-                                                       init_scalar=.01))
+        self.initial_conv = ConvBnLelu(3, base_filters, bn=False, lelu=False, bias=True)
+        self.sw_conv = ConvBnLelu(base_filters, base_filters, lelu=False, bias=True)
+        self.upconv1 = ConvBnLelu(base_filters, base_filters, bn=False, bias=True)
+        self.upconv2 = ConvBnLelu(base_filters, base_filters, bn=False, bias=True)
+        self.hr_conv = ConvBnLelu(base_filters, base_filters, bn=False, bias=True)
+        self.final_conv = ConvBnLelu(base_filters, 3, bn=False, lelu=False, bias=True)
 
-        self.switches = nn.ModuleList(switches)
-        self.transformation_counts = trans_counts
+        self.backbone = SpineNet('49', in_channels=3, use_input_norm=True)
+        for p in self.backbone.parameters(recurse=True):
+            p.requires_grad = False
+        self.backbone_wrapper = CachedBackboneWrapper(self.backbone)
+        multiplx_fn = functools.partial(BackboneMultiplexer, self.backbone_wrapper)
+        pretransform_fn = functools.partial(nn.Sequential, ConvBnLelu(base_filters, base_filters, kernel_size=3, bn=False, lelu=False, bias=False))
+        transform_fn = functools.partial(MultiConvBlock, base_filters, int(base_filters * 1.5), base_filters, kernel_size=3, depth=4)
+        self.switch = ConfigurableSwitchComputer(base_filters, multiplx_fn, pretransform_fn, transform_fn, trans_count, init_temp=initial_temp,
+                                            enable_negative_transforms=False, add_scalable_noise_to_transforms=True, init_scalar=.1)
+
+        self.transformation_counts = trans_count
         self.init_temperature = initial_temp
         self.final_temperature_step = final_temperature_step
         self.heightened_temp_min = heightened_temp_min
         self.heightened_final_step = heightened_final_step
         self.attentions = None
         self.upsample_factor = upsample_factor
+        self.backbone_forward = None
+
+    def get_forward_results(self):
+        return self.backbone_forward
 
     def forward(self, x):
-        if self.upsample_factor > 1:
-            x = F.interpolate(x, scale_factor=self.upsample_factor, mode="nearest")
+        self.backbone_forward = self.backbone_wrapper(F.interpolate(x, scale_factor=2, mode="nearest"))
+
+        x = self.initial_conv(x)
 
         self.attentions = []
-        for i, sw in enumerate(self.switches):
-            x, att = sw.forward(x, True)
-            self.attentions.append(att)
+        x, att = self.switch(x, output_attention_weights=True)
+        self.attentions.append(att)
 
-        return x,
+        x = self.upconv1(F.interpolate(x, scale_factor=2, mode="nearest"))
+        if self.upsample_factor > 2:
+            x = F.interpolate(x, scale_factor=2, mode="nearest")
+        x = self.upconv2(x)
+        return self.final_conv(self.hr_conv(x)),
 
     def set_temperature(self, temp):
-        [sw.set_temperature(temp) for sw in self.switches]
+        self.switch.set_temperature(temp)
 
     def update_for_step(self, step, experiments_path='.'):
         if self.attentions:
@@ -299,11 +316,10 @@ class ConfigurableSwitchedResidualGenerator3(nn.Module):
                 temp = 1 / temp
             self.set_temperature(temp)
             if step % 50 == 0:
-                [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts[i], step,
-                                         "a%i" % (i + 1,)) for i in range(len(self.switches))]
+                save_attention_to_image(experiments_path, self.attentions[0], self.transformation_counts, step, "a%i" % (1,), l_mult=10)
 
     def get_debug_values(self, step):
-        temp = self.switches[0].switch.temperature
+        temp = self.switch.switch.temperature
         mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
         means = [i[0] for i in mean_hists]
         hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]

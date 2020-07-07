@@ -1,12 +1,48 @@
 # Taken and modified from https://github.com/lucifer443/SpineNet-Pytorch/blob/master/mmdet/models/backbones/spinenet.py
 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import kaiming_normal
 
 from torchvision.models.resnet import BasicBlock, Bottleneck
 from torch.nn.modules.batchnorm import _BatchNorm
-from models.archs.arch_util import ConvBnRelu
+
+
+''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. '''
+class ConvBnRelu(nn.Module):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, relu=True, bn=True, bias=True):
+        super(ConvBnRelu, self).__init__()
+        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
+        assert kernel_size in padding_map.keys()
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        if bn:
+            self.bn = nn.BatchNorm2d(filters_out)
+        else:
+            self.bn = None
+        if relu:
+            self.relu = nn.ReLU()
+        else:
+            self.relu = None
+
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.relu else 'linear')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn:
+            x = self.bn(x)
+        if self.relu:
+            return self.relu(x)
+        else:
+            return x
+
 
 def constant_init(module, val, bias=0):
     if hasattr(module, 'weight') and module.weight is not None:
@@ -213,7 +249,11 @@ class SpineNet(nn.Module):
                  arch,
                  in_channels=3,
                  output_level=[3, 4, 5, 6, 7],
-                 zero_init_residual=True):
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN', requires_grad=True),
+                 zero_init_residual=True,
+                 activation='relu',
+                 use_input_norm=False):
         super(SpineNet, self).__init__()
         self._block_specs = build_block_specs()[2:]
         self._endpoints_num_filters = SCALING_MAP[arch]['endpoints_num_filters']
@@ -225,6 +265,7 @@ class SpineNet(nn.Module):
         self.zero_init_residual = zero_init_residual
         assert min(output_level) > 2 and max(output_level) < 8, "Output level out of range"
         self.output_level = output_level
+        self.use_input_norm = use_input_norm
 
         self._make_stem_layer(in_channels)
         self._make_scale_permuted_network()
@@ -237,7 +278,8 @@ class SpineNet(nn.Module):
             in_channels,
             64,
             kernel_size=7,
-            stride=2)  # Original paper had stride=2 and a maxpool after.
+            stride=2)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         # Build the initial level 2 blocks.
         self.init_block1 = make_res_layer(
@@ -286,12 +328,19 @@ class SpineNet(nn.Module):
         if self.zero_init_residual:
             for m in self.modules():
                 if isinstance(m, Bottleneck):
-                    constant_init(m.norm3, 0)
+                    constant_init(m.bn3, 0)
                 elif isinstance(m, BasicBlock):
-                    constant_init(m.norm2, 0)
+                    constant_init(m.bn2, 0)
 
     def forward(self, input):
-        feat = self.conv1(input)
+        # Spinenet is pretrained on the standard pytorch input norm. The image will need to
+        # be normalized before feeding it through.
+        if self.use_input_norm:
+            mean = torch.Tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(input.device)
+            std = torch.Tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(input.device)
+            input = (input - mean) / std
+
+        feat = self.maxpool(self.conv1(input))
         feat1 = self.init_block1(feat)
         feat2 = self.init_block2(feat1)
         block_feats = [feat1, feat2]
