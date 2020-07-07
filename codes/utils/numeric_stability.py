@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import models.archs.SRG1_arch as srg1
 import models.archs.SwitchedResidualGenerator_arch as srg
 import models.archs.NestedSwitchGenerator as nsg
 import functools
@@ -96,15 +97,15 @@ if __name__ == "__main__":
                    torch.randn(1, 3, 64, 64),
                    device='cuda')
     '''
-    test_stability(functools.partial(srg.ConfigurableSwitchedResidualGenerator2,
-                                     switch_filters=[16,16,16,16,16],
-                                     switch_growths=[32,32,32,32,32],
-                                     switch_reductions=[1,1,1,1,1],
-                                     switch_processing_layers=[5,5,5,5,5],
-                                     trans_counts=[8,8,8,8,8],
+    test_stability(functools.partial(srg1.ConfigurableSwitchedResidualGenerator,
+                                     switch_filters=[32,32,32,32],
+                                     switch_growths=[16,16,16,16],
+                                     switch_reductions=[4,3,2,1],
+                                     switch_processing_layers=[3,3,4,5],
+                                     trans_counts=[16,16,16,16,16],
                                      trans_kernel_sizes=[3,3,3,3,3],
                                      trans_layers=[3,3,3,3,3],
-                                     transformation_filters=64,
+                                     trans_filters_mid=[24,24,24,24,24],
                                      initial_temp=10),
                    torch.randn(1, 3, 64, 64),
                    device='cuda')

@@ -1,12 +1,13 @@
 from torch.utils.tensorboard import SummaryWriter
 
 if __name__ == "__main__":
-    writer = SummaryWriter("../experiments/train_div2k_feat_nsgen_r3/recovered_tb")
-    f = open("../experiments/train_div2k_feat_nsgen_r3/console.txt", encoding="utf8")
+    writer = SummaryWriter("../experiments/recovered_tb")
+    f = open("../experiments/recovered_tb.txt", encoding="utf8")
     console = f.readlines()
     search_terms = [
         ("iter", ", iter:  ", ", lr:"),
-        ("l_g_total", " l_g_total: ", " switch_temperature:")
+        ("l_g_total", " l_g_total: ", " switch_temperature:"),
+        ("l_d_fake", "l_d_fake: ", " D_fake:")
     ]
     iter = 0
     for line in console:
