@@ -126,7 +126,7 @@ class Discriminator_VGG_PixLoss(nn.Module):
         # activation function
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
-    def forward(self, x):
+    def forward(self, x, flatten=True):
         x = x[0]
         fea0 = self.lrelu(self.conv0_0(x))
         fea0 = self.lrelu(self.bn0_1(self.conv0_1(fea0)))
@@ -144,9 +144,9 @@ class Discriminator_VGG_PixLoss(nn.Module):
         fea4 = self.lrelu(self.bn4_1(self.conv4_1(fea4)))
 
         loss = self.reduce_1(fea4)
-        # Compress all of the loss values into the batch dimension. The actual loss attached to this output will
-        # then know how to handle them.
-        loss = self.pix_loss_collapse(loss).view(-1, 1)
+        # "Weight" all losses the same by interpolating them to the highest dimension.
+        loss = self.pix_loss_collapse(loss)
+        loss = F.interpolate(loss, scale_factor=4, mode="nearest")
 
         # And the pyramid network!
         dec3 = self.up3_decimate(F.interpolate(fea4, scale_factor=2, mode="nearest"))
@@ -154,17 +154,17 @@ class Discriminator_VGG_PixLoss(nn.Module):
         dec3 = self.up3_converge(dec3)
         dec3 = self.up3_proc(dec3)
         loss3 = self.up3_reduce(dec3)
-        loss3 = self.up3_pix(loss3).view(-1, 1)
+        loss3 = self.up3_pix(loss3)
+        loss3 = F.interpolate(loss3, scale_factor=2, mode="nearest")
 
         dec2 = self.up2_decimate(F.interpolate(dec3, scale_factor=2, mode="nearest"))
         dec2 = torch.cat([dec2, fea2], dim=1)
         dec2 = self.up2_converge(dec2)
         dec2 = self.up2_proc(dec2)
         loss2 = self.up2_reduce(dec2)
-        loss2 = self.up2_pix(loss2).view(-1, 1)
 
-        # "Weight" all losses the same by repeating the LR losses to the HR dim.
-        combined_losses = torch.cat([loss.repeat((16, 1)), loss3.repeat((4, 1)), loss2])
-
+        # Compress all of the loss values into the batch dimension. The actual loss attached to this output will
+        # then know how to handle them.
+        combined_losses = torch.cat([loss, loss3, loss2], dim=1)
         return combined_losses.view(-1, 1)
 

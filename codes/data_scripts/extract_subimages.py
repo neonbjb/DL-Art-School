@@ -20,8 +20,8 @@ def main():
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\div2k\\DIV2K_train_HR'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\div2k\\tiled1024'
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\flickr2k\\Flickr2K_HR'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\flickr2k\\1024px'
         opt['crop_sz'] = 1024  # the size of each sub-image
         opt['step'] = 880  # step of the sliding crop window
         opt['thres_sz'] = 240  # size threshold

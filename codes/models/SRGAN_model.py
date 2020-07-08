@@ -227,14 +227,10 @@ class SRGANModel(BaseModel):
             _t = time()
 
         self.fake_GenOut = []
+        self.fake_H = []
         var_ref_skips = []
         for var_L, var_H, var_ref, pix in zip(self.var_L, self.var_H, self.var_ref, self.pix):
-            #from utils import gpu_mem_track
-            #import inspect
-            #gpu_tracker = gpu_mem_track.MemTracker(inspect.currentframe())
-            #gpu_tracker.track()
             fake_GenOut = self.netG(var_L)
-            #gpu_tracker.track()
 
             if _profile:
                 print("Gen forward %f" % (time() - _t,))
@@ -246,11 +242,11 @@ class SRGANModel(BaseModel):
                 gen_img = fake_GenOut[0]
                 # The following line detaches all generator outputs that are not None.
                 self.fake_GenOut.append(tuple([(x.detach() if x is not None else None) for x in list(fake_GenOut)]))
-                var_ref = (var_ref,) + self.create_artificial_skips(var_H)
+                var_ref = (var_ref,)  # This is a tuple for legacy reasons.
             else:
                 gen_img = fake_GenOut
                 self.fake_GenOut.append(fake_GenOut.detach())
-            var_ref_skips.append(var_ref)
+            var_ref_skips.append(var_ref[0].detach())
 
             l_g_total = 0
             if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -324,8 +320,9 @@ class SRGANModel(BaseModel):
                         _t = time()
 
                 # Apply noise to the inputs to slow discriminator convergence.
-                var_ref = (var_ref[0] + noise,) + var_ref[1:]
+                var_ref = (var_ref[0] + noise,)
                 fake_H = (fake_H[0] + noise,) + fake_H[1:]
+                self.fake_H.append(fake_H[0].detach())
                 if self.opt['train']['gan_type'] == 'gan':
                     # need to forward and backward separately, since batch norm statistics differ
                     # real
@@ -340,13 +337,50 @@ class SRGANModel(BaseModel):
                     l_d_fake_log = l_d_fake * self.mega_batch_factor
                     with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                         l_d_fake_scaled.backward()
+                if self.opt['train']['gan_type'] == 'pixgan':
+                    # We're making some assumptions about the underlying pixel-discriminator here. This is a
+                    # necessary evil for now, but if this turns out well we might want to make this configurable.
+                    PIXDISC_CHANNELS = 3
+                    PIXDISC_OUTPUT_REDUCTION = 8
+                    PIXDISC_MAX_REDUCTION = 32
+                    disc_output_shape = (var_ref[0].shape[0], PIXDISC_CHANNELS, var_ref[0].shape[2] // PIXDISC_OUTPUT_REDUCTION, var_ref[0].shape[3] // PIXDISC_OUTPUT_REDUCTION)
+                    real = torch.ones(disc_output_shape)
+                    fake = torch.zeros(disc_output_shape)
+
+                    # randomly determine portions of the image to swap to keep the discriminator honest.
+                    if random.random() > .25:
+
+                        # Make the swap across fake_H and var_ref
+                        SWAP_MAX_DIM = var_ref[0].shape[2] // (2 * PIXDISC_MAX_REDUCTION) - 1
+                        assert SWAP_MAX_DIM > 0
+                        swap_x, swap_y = random.randint(0, SWAP_MAX_DIM) * PIXDISC_MAX_REDUCTION, random.randint(0, SWAP_MAX_DIM) * PIXDISC_MAX_REDUCTION
+                        swap_w, swap_h = random.randint(1, SWAP_MAX_DIM) * PIXDISC_MAX_REDUCTION, random.randint(1, SWAP_MAX_DIM) * PIXDISC_MAX_REDUCTION
+                        t = fake_H[:, :, swap_x:swap_x+swap_w, swap_y:swap_y+swap_h].clone()
+                        fake_H[:, :, swap_x:swap_x+swap_w, swap_y:swap_y+swap_h] = var_ref[0][:, :, swap_x:swap_x+swap_w, swap_y:swap_y+swap_h]
+                        var_ref[0][:, :, swap_x:swap_x+swap_w, swap_y:swap_y+swap_h] = t
+
+                        # Swap the expectation matrix too.
+                        swap_x, swap_y, swap_w, swap_h = swap_x // PIXDISC_OUTPUT_REDUCTION, swap_y // PIXDISC_OUTPUT_REDUCTION, swap_w // PIXDISC_OUTPUT_REDUCTION, swap_h // PIXDISC_OUTPUT_REDUCTION
+                        real[:, :, swap_x:swap_x+swap_w, swap_y:swap_y+swap_h] = 0.0
+                        fake[:, :, swap_x:swap_x+swap_w, swap_y:swap_y+swap_h] = 1.0
+
+                    # We're also assuming that this is exactly how the flattened discriminator output is generated.
+                    real = real.view(-1, 1)
+                    fake = fake.view(-1, 1)
+
+                    # real
+                    pred_d_real = self.netD(var_ref)
+                    l_d_real = self.cri_gan(pred_d_real, real) / self.mega_batch_factor
+                    l_d_real_log = l_d_real * self.mega_batch_factor
+                    with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
+                        l_d_real_scaled.backward()
+                    # fake
+                    pred_d_fake = self.netD(fake_H)
+                    l_d_fake = self.cri_gan(pred_d_fake, fake) / self.mega_batch_factor
+                    l_d_fake_log = l_d_fake * self.mega_batch_factor
+                    with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
+                        l_d_fake_scaled.backward()
                 elif self.opt['train']['gan_type'] == 'ragan':
-                    # pred_d_real = self.netD(var_ref)
-                    # pred_d_fake = self.netD(fake_H.detach())  # detach to avoid BP to G
-                    # l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake), True)
-                    # l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real), False)
-                    # l_d_total = (l_d_real + l_d_fake) / 2
-                    # l_d_total.backward()
                     pred_d_fake = self.netD(fake_H).detach()
                     pred_d_real = self.netD(var_ref)
 
@@ -383,34 +417,26 @@ class SRGANModel(BaseModel):
             sample_save_path = os.path.join(self.opt['path']['models'], "..", "temp")
             os.makedirs(os.path.join(sample_save_path, "hr"), exist_ok=True)
             os.makedirs(os.path.join(sample_save_path, "lr"), exist_ok=True)
-            os.makedirs(os.path.join(sample_save_path, "lr_precorrupt"), exist_ok=True)
             os.makedirs(os.path.join(sample_save_path, "gen"), exist_ok=True)
+            os.makedirs(os.path.join(sample_save_path, "disc_fake"), exist_ok=True)
             os.makedirs(os.path.join(sample_save_path, "pix"), exist_ok=True)
             multi_gen = False
             if isinstance(self.fake_GenOut[0], tuple):
-                os.makedirs(os.path.join(sample_save_path, "genlr"), exist_ok=True)
-                os.makedirs(os.path.join(sample_save_path, "genmr"), exist_ok=True)
                 os.makedirs(os.path.join(sample_save_path, "ref"), exist_ok=True)
                 multi_gen = True
 
             # fed_LQ is not chunked.
-            utils.save_image(self.fed_LQ.cpu().detach(), os.path.join(sample_save_path, "lr_precorrupt", "%05i.png" % (step,)))
             for i in range(self.mega_batch_factor):
-                utils.save_image(self.var_H[i].cpu().detach(), os.path.join(sample_save_path, "hr", "%05i_%02i.png" % (step, i)))
-                utils.save_image(self.var_L[i].cpu().detach(), os.path.join(sample_save_path, "lr", "%05i_%02i.png" % (step, i)))
-                utils.save_image(self.pix[i].cpu().detach(), os.path.join(sample_save_path, "pix", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.var_H[i].cpu(), os.path.join(sample_save_path, "hr", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.var_L[i].cpu(), os.path.join(sample_save_path, "lr", "%05i_%02i.png" % (step, i)))
+                utils.save_image(self.pix[i].cpu(), os.path.join(sample_save_path, "pix", "%05i_%02i.png" % (step, i)))
                 if multi_gen:
-                    utils.save_image(self.fake_GenOut[i][0].cpu().detach(), os.path.join(sample_save_path, "gen", "%05i_%02i.png" % (step, i)))
-                    if len(self.fake_GenOut[i]) > 1:
-                        if self.fake_GenOut[i][1] is not None:
-                            utils.save_image(self.fake_GenOut[i][1].cpu().detach(), os.path.join(sample_save_path, "genmr", "%05i_%02i.png" % (step, i)))
-                        if self.fake_GenOut[i][2] is not None:
-                            utils.save_image(self.fake_GenOut[i][2].cpu().detach(), os.path.join(sample_save_path, "genlr", "%05i_%02i.png" % (step, i)))
-                    utils.save_image(var_ref_skips[i][0].cpu().detach(), os.path.join(sample_save_path, "ref", "hi_%05i_%02i.png" % (step, i)))
-                    utils.save_image(var_ref_skips[i][1].cpu().detach(), os.path.join(sample_save_path, "ref", "med_%05i_%02i.png" % (step, i)))
-                    utils.save_image(var_ref_skips[i][2].cpu().detach(), os.path.join(sample_save_path, "ref", "low_%05i_%02i.png" % (step, i)))
+                    utils.save_image(self.fake_GenOut[i][0].cpu(), os.path.join(sample_save_path, "gen", "%05i_%02i.png" % (step, i)))
+                    utils.save_image(var_ref_skips[i].cpu(), os.path.join(sample_save_path, "ref", "%05i_%02i.png" % (step, i)))
+                    if step % self.D_update_ratio == 0 and step > self.D_init_iters:
+                        utils.save_image(self.fake_H[i], os.path.join(sample_save_path, "disc_fake", "%05i_%02i.png" % (step, i)))
                 else:
-                    utils.save_image(self.fake_GenOut[i].cpu().detach(), os.path.join(sample_save_path, "gen", "%05i_%02i.png" % (step, i)))
+                    utils.save_image(self.fake_GenOut[i].cpu(), os.path.join(sample_save_path, "gen", "%05i_%02i.png" % (step, i)))
 
         # Log metrics
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -421,10 +447,10 @@ class SRGANModel(BaseModel):
                 self.add_log_entry('l_g_fea', l_g_fea_log.item())
             if self.l_gan_w > 0:
                 self.add_log_entry('l_g_gan', l_g_gan_log.item())
-            self.add_log_entry('l_g_total', l_g_total_log.item() * self.mega_batch_factor)
+            self.add_log_entry('l_g_total', l_g_total_log.item())
         if self.l_gan_w > 0 and step > self.G_warmup:
-            self.add_log_entry('l_d_real', l_d_real_log.item() * self.mega_batch_factor)
-            self.add_log_entry('l_d_fake', l_d_fake_log.item() * self.mega_batch_factor)
+            self.add_log_entry('l_d_real', l_d_real_log.item())
+            self.add_log_entry('l_d_fake', l_d_fake_log.item())
             self.add_log_entry('D_fake', torch.mean(pred_d_fake.detach()))
             self.add_log_entry('D_diff', torch.mean(pred_d_fake) - torch.mean(pred_d_real))
 
@@ -443,12 +469,6 @@ class SRGANModel(BaseModel):
         else:
             self.log_dict[key][self.log_dict[key_it] % log_rotating_buffer_size] = value
         self.log_dict[key_it] += 1
-
-
-    def create_artificial_skips(self, truth_img):
-        med_skip = F.interpolate(truth_img, scale_factor=.5)
-        lo_skip = F.interpolate(truth_img, scale_factor=.25)
-        return med_skip, lo_skip
 
     def pick_rand_prev_model(self, model_suffix):
         previous_models = glob.glob(os.path.join(self.opt['path']['models'], "*_%s.pth" % (model_suffix,)))

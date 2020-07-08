@@ -29,11 +29,10 @@ def init_dist(backend='nccl', **kwargs):
     torch.cuda.set_device(rank % num_gpus)
     dist.init_process_group(backend=backend, **kwargs)
 
-
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_div2k_srg3.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_div2k_rrdb_pixgan_normal_gan.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
