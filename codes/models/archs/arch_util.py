@@ -219,7 +219,7 @@ class ConvBnRelu(nn.Module):
 ''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvBnSilu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, silu=True, bn=True, bias=True):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, silu=True, bn=True, bias=True, weight_init_factor=1):
         super(ConvBnSilu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
@@ -237,6 +237,9 @@ class ConvBnSilu(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.silu else 'linear')
+                m.weight.data *= weight_init_factor
+                if m.bias is not None:
+                    m.bias.data.zero_()
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -254,7 +257,7 @@ class ConvBnSilu(nn.Module):
 ''' Convenience class with Conv->BN->LeakyReLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvBnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True, bias=True):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True, bias=True, weight_init_factor=1):
         super(ConvBnLelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
@@ -273,6 +276,9 @@ class ConvBnLelu(nn.Module):
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out',
                                         nonlinearity='leaky_relu' if self.lelu else 'linear')
+                m.weight.data *= weight_init_factor
+                if m.bias is not None:
+                    m.bias.data.zero_()
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -319,5 +325,42 @@ class ConvGnLelu(nn.Module):
             x = self.gn(x)
         if self.lelu:
             return self.lelu(x)
+        else:
+            return x
+
+''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. '''
+class ConvGnSilu(nn.Module):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, silu=True, gn=True, bias=True, num_groups=8, weight_init_factor=1):
+        super(ConvGnSilu, self).__init__()
+        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
+        assert kernel_size in padding_map.keys()
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        if gn:
+            self.gn = nn.GroupNorm(num_groups, filters_out)
+        else:
+            self.gn = None
+        if silu:
+            self.silu = SiLU()
+        else:
+            self.silu = None
+
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.silu else 'linear')
+                m.weight.data *= weight_init_factor
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.gn:
+            x = self.gn(x)
+        if self.silu:
+            return self.silu(x)
         else:
             return x

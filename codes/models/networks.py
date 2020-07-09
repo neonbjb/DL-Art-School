@@ -59,7 +59,7 @@ def define_G(opt, net_key='network_G'):
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
-        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_filters=opt_net['switch_filters'], switch_growths=opt_net['switch_growths'],
+        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
                                                                       switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
                                                                       trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
