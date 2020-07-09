@@ -161,7 +161,8 @@ class Discriminator_VGG_PixLoss(nn.Module):
         dec2 = torch.cat([dec2, fea2], dim=1)
         dec2 = self.up2_converge(dec2)
         dec2 = self.up2_proc(dec2)
-        loss2 = self.up2_reduce(dec2)
+        dec2 = self.up2_reduce(dec2)
+        loss2 = self.up2_pix(dec2)
 
         # Compress all of the loss values into the batch dimension. The actual loss attached to this output will
         # then know how to handle them.
