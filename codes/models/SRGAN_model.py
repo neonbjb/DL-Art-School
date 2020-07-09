@@ -435,7 +435,7 @@ class SRGANModel(BaseModel):
                 utils.save_image(self.pix[i].cpu(), os.path.join(sample_save_path, "pix", "%05i_%02i.png" % (step, i)))
                 if multi_gen:
                     utils.save_image(self.fake_GenOut[i][0].cpu(), os.path.join(sample_save_path, "gen", "%05i_%02i.png" % (step, i)))
-                    if step % self.D_update_ratio == 0 and step > self.D_init_iters:
+                    if self.l_gan_w > 0 and step > self.G_warmup:
                         utils.save_image(var_ref_skips[i].cpu(), os.path.join(sample_save_path, "ref", "%05i_%02i.png" % (step, i)))
                         utils.save_image(self.fake_H[i], os.path.join(sample_save_path, "disc_fake", "%05i_%02i.png" % (step, i)))
                 else:
