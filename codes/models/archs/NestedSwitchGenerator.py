@@ -83,9 +83,9 @@ class Constrictor(nn.Module):
         assert(filters > output_filters)
         gap = filters - output_filters
         gap_div_4 = int(gap / 4)
-        self.cbl1 = ConvBnRelu(filters, filters - (gap_div_4 * 2), kernel_size=1, bn=True, bias=True)
-        self.cbl2 = ConvBnRelu(filters - (gap_div_4 * 2), filters - (gap_div_4 * 3), kernel_size=1, bn=True, bias=False)
-        self.cbl3 = ConvBnRelu(filters - (gap_div_4 * 3), output_filters, kernel_size=1, relu=False, bn=False, bias=False)
+        self.cbl1 = ConvBnRelu(filters, filters - (gap_div_4 * 2), kernel_size=1, norm=True, bias=True)
+        self.cbl2 = ConvBnRelu(filters - (gap_div_4 * 2), filters - (gap_div_4 * 3), kernel_size=1, norm=True, bias=False)
+        self.cbl3 = ConvBnRelu(filters - (gap_div_4 * 3), output_filters, kernel_size=1, activation=False, norm=False, bias=False)
 
     def forward(self, x):
         x = self.cbl1(x)
@@ -134,10 +134,10 @@ class NestedSwitchComputer(nn.Module):
             filters.append(current_filters)
             reduce = True
 
-        self.multiplexer_init_conv = ConvBnLelu(transform_filters, switch_base_filters, kernel_size=7, lelu=False, bn=False)
+        self.multiplexer_init_conv = ConvBnLelu(transform_filters, switch_base_filters, kernel_size=7, activation=False, norm=False)
         self.processing_trunk = nn.ModuleList(processing_trunk)
         self.switch = RecursiveSwitchedTransform(transform_filters, filters, nesting_depth-1, transforms_at_leaf, trans_kernel_size, trans_num_layers-1, trans_scale_init, initial_temp=initial_temp, add_scalable_noise_to_transforms=add_scalable_noise_to_transforms)
-        self.anneal = ConvBnLelu(transform_filters, transform_filters, kernel_size=1, bn=False)
+        self.anneal = ConvBnLelu(transform_filters, transform_filters, kernel_size=1, norm=False)
 
     def forward(self, x):
         feed_forward = x
@@ -161,9 +161,9 @@ class NestedSwitchedGenerator(nn.Module):
                  trans_layers, transformation_filters, initial_temp=20, final_temperature_step=50000, heightened_temp_min=1,
                  heightened_final_step=50000, upsample_factor=1, add_scalable_noise_to_transforms=False):
         super(NestedSwitchedGenerator, self).__init__()
-        self.initial_conv = ConvBnLelu(3, transformation_filters, kernel_size=7, lelu=False, bn=False)
-        self.proc_conv = ConvBnLelu(transformation_filters, transformation_filters, bn=False)
-        self.final_conv = ConvBnLelu(transformation_filters, 3, kernel_size=1, lelu=False, bn=False)
+        self.initial_conv = ConvBnLelu(3, transformation_filters, kernel_size=7, activation=False, norm=False)
+        self.proc_conv = ConvBnLelu(transformation_filters, transformation_filters, norm=False)
+        self.final_conv = ConvBnLelu(transformation_filters, 3, kernel_size=1, activation=False, norm=False)
 
         switches = []
         for sw_reduce, sw_proc, trans_count, kernel, layers in zip(switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes, trans_layers):

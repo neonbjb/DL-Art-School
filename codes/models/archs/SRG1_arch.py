@@ -12,9 +12,9 @@ class MultiConvBlock(nn.Module):
         assert depth >= 2
         super(MultiConvBlock, self).__init__()
         self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=bn, bias=False)] +
-                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=bn, bias=False) for i in range(depth-2)] +
-                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False, bias=False)])
+        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, norm=bn, bias=False)] +
+                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, norm=bn, bias=False) for i in range(depth - 2)] +
+                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, activation=False, norm=False, bias=False)])
         self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init))
         self.bias = nn.Parameter(torch.zeros(1))
 
@@ -32,8 +32,8 @@ class MultiConvBlock(nn.Module):
 class HalvingProcessingBlock(nn.Module):
     def __init__(self, filters):
         super(HalvingProcessingBlock, self).__init__()
-        self.bnconv1 = ConvBnSilu(filters, filters * 2, stride=2, bn=False, bias=False)
-        self.bnconv2 = ConvBnSilu(filters * 2, filters * 2, bn=True, bias=False)
+        self.bnconv1 = ConvBnSilu(filters, filters * 2, stride=2, norm=False, bias=False)
+        self.bnconv2 = ConvBnSilu(filters * 2, filters * 2, norm=True, bias=False)
     def forward(self, x):
         x = self.bnconv1(x)
         return self.bnconv2(x)
@@ -45,7 +45,7 @@ def create_sequential_growing_processing_block(filters_init, filter_growth, num_
     convs = []
     current_filters = filters_init
     for i in range(num_convs):
-        convs.append(ConvBnSilu(current_filters, current_filters + filter_growth, bn=True, bias=False))
+        convs.append(ConvBnSilu(current_filters, current_filters + filter_growth, norm=True, bias=False))
         current_filters += filter_growth
     return nn.Sequential(*convs), current_filters
 
@@ -60,7 +60,7 @@ class SwitchComputer(nn.Module):
         self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(filters * 2 ** i) for i in range(reduction_blocks)])
         final_filters = filters * 2 ** reduction_blocks
         self.processing_blocks, final_filters = create_sequential_growing_processing_block(final_filters, growth, processing_blocks)
-        self.post_interpolate_decimate = ConvBnSilu(final_filters, filters, kernel_size=1, silu=False, bn=False)
+        self.post_interpolate_decimate = ConvBnSilu(final_filters, filters, kernel_size=1, activation=False, norm=False)
         self.interpolate_process = ConvBnSilu(filters, filters)
         self.interpolate_process2 = ConvBnSilu(filters, filters)
         tc = transform_count

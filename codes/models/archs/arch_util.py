@@ -184,16 +184,16 @@ class SiLU(nn.Module):
 ''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvBnRelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, relu=True, bn=True, bias=True):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True):
         super(ConvBnRelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
         self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if bn:
+        if norm:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
             self.bn = None
-        if relu:
+        if activation:
             self.relu = nn.ReLU()
         else:
             self.relu = None
@@ -219,16 +219,16 @@ class ConvBnRelu(nn.Module):
 ''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvBnSilu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, silu=True, bn=True, bias=True, weight_init_factor=1):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, weight_init_factor=1):
         super(ConvBnSilu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
         self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if bn:
+        if norm:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
             self.bn = None
-        if silu:
+        if activation:
             self.silu = SiLU()
         else:
             self.silu = None
@@ -257,16 +257,16 @@ class ConvBnSilu(nn.Module):
 ''' Convenience class with Conv->BN->LeakyReLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvBnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, bn=True, bias=True, weight_init_factor=1):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, weight_init_factor=1):
         super(ConvBnLelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
         self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if bn:
+        if norm:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
             self.bn = None
-        if lelu:
+        if activation:
             self.lelu = nn.LeakyReLU(negative_slope=.1)
         else:
             self.lelu = None
@@ -296,16 +296,16 @@ class ConvBnLelu(nn.Module):
 ''' Convenience class with Conv->GroupNorm->LeakyReLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvGnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, lelu=True, gn=True, bias=True, num_groups=8):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, num_groups=8):
         super(ConvGnLelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
         self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if gn:
+        if norm:
             self.gn = nn.GroupNorm(num_groups, filters_out)
         else:
             self.gn = None
-        if lelu:
+        if activation:
             self.lelu = nn.LeakyReLU(negative_slope=.1)
         else:
             self.lelu = None
@@ -331,16 +331,16 @@ class ConvGnLelu(nn.Module):
 ''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvGnSilu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, silu=True, gn=True, bias=True, num_groups=8, weight_init_factor=1):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, num_groups=8, weight_init_factor=1):
         super(ConvGnSilu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
         self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if gn:
+        if norm:
             self.gn = nn.GroupNorm(num_groups, filters_out)
         else:
             self.gn = None
-        if silu:
+        if activation:
             self.silu = SiLU()
         else:
             self.silu = None
@@ -364,3 +364,23 @@ class ConvGnSilu(nn.Module):
             return self.silu(x)
         else:
             return x
+
+# Block that upsamples 2x and reduces incoming filters by 2x. It preserves structure by taking a passthrough feed
+# along with the feature representation.
+class ExpansionBlock(nn.Module):
+    def __init__(self, filters, block=ConvGnSilu):
+        super(ExpansionBlock, self).__init__()
+        self.decimate = block(filters, filters // 2, kernel_size=1, bias=False, activation=False, norm=True)
+        self.process_passthrough = block(filters // 2, filters // 2, kernel_size=3, bias=True, activation=False, norm=True)
+        self.conjoin = block(filters, filters // 2, kernel_size=3, bias=False, activation=True, norm=False)
+        self.process = block(filters // 2, filters // 2, kernel_size=3, bias=False, activation=True, norm=True)
+
+    # input is the feature signal with shape  (b, f, w, h)
+    # passthrough is the structure signal with shape (b, f/2, w*2, h*2)
+    # output is conjoined upsample with shape (b, f/2, w*2, h*2)
+    def forward(self, input, passthrough):
+        x = F.interpolate(input, scale_factor=2, mode="nearest")
+        x = self.decimate(x)
+        p = self.process_passthrough(passthrough)
+        x = self.conjoin(torch.cat([x, p], dim=1))
+        return self.process(x)

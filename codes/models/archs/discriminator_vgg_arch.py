@@ -108,20 +108,20 @@ class Discriminator_VGG_PixLoss(nn.Module):
         self.bn4_1 = nn.GroupNorm(8, nf * 8, affine=True)
 
         self.reduce_1 = ConvGnLelu(nf * 8, nf * 4, bias=False)
-        self.pix_loss_collapse = ConvGnLelu(nf * 4, 1, bias=False, gn=False, lelu=False)
+        self.pix_loss_collapse = ConvGnLelu(nf * 4, 1, bias=False, norm=False, activation=False)
 
         # Pyramid network: upsample with residuals and produce losses at multiple resolutions.
-        self.up3_decimate = ConvGnLelu(nf * 8, nf * 8, kernel_size=3, bias=True, lelu=False)
+        self.up3_decimate = ConvGnLelu(nf * 8, nf * 8, kernel_size=3, bias=True, activation=False)
         self.up3_converge = ConvGnLelu(nf * 16, nf * 8, kernel_size=3, bias=False)
         self.up3_proc = ConvGnLelu(nf * 8, nf * 8, bias=False)
         self.up3_reduce = ConvGnLelu(nf * 8, nf * 4, bias=False)
-        self.up3_pix = ConvGnLelu(nf * 4, 1, bias=False, gn=False, lelu=False)
+        self.up3_pix = ConvGnLelu(nf * 4, 1, bias=False, norm=False, activation=False)
 
-        self.up2_decimate = ConvGnLelu(nf * 8, nf * 4, kernel_size=1, bias=True, lelu=False)
+        self.up2_decimate = ConvGnLelu(nf * 8, nf * 4, kernel_size=1, bias=True, activation=False)
         self.up2_converge = ConvGnLelu(nf * 8, nf * 4, kernel_size=3, bias=False)
         self.up2_proc = ConvGnLelu(nf * 4, nf * 4, bias=False)
         self.up2_reduce = ConvGnLelu(nf * 4, nf * 2, bias=False)
-        self.up2_pix = ConvGnLelu(nf * 2, 1, bias=False, gn=False, lelu=False)
+        self.up2_pix = ConvGnLelu(nf * 2, 1, bias=False, norm=False, activation=False)
 
         # activation function
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)

@@ -4,7 +4,7 @@ from switched_conv import BareConvSwitch, compute_attention_specificity
 import torch.nn.functional as F
 import functools
 from collections import OrderedDict
-from models.archs.arch_util import ConvBnLelu, ConvGnSilu
+from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock
 from models.archs.RRDBNet_arch import ResidualDenseBlock_5C
 from models.archs.spinenet_arch import SpineNet
 from switched_conv_util import save_attention_to_image
@@ -15,9 +15,9 @@ class MultiConvBlock(nn.Module):
         assert depth >= 2
         super(MultiConvBlock, self).__init__()
         self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, bn=bn, bias=False, weight_init_factor=weight_init_factor)] +
-                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, bn=bn, bias=False, weight_init_factor=weight_init_factor) for i in range(depth-2)] +
-                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, lelu=False, bn=False, bias=False, weight_init_factor=weight_init_factor)])
+        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, norm=bn, bias=False, weight_init_factor=weight_init_factor)] +
+                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, norm=bn, bias=False, weight_init_factor=weight_init_factor) for i in range(depth - 2)] +
+                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, activation=False, norm=False, bias=False, weight_init_factor=weight_init_factor)])
         self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init))
         self.bias = nn.Parameter(torch.zeros(1))
 
@@ -35,26 +35,12 @@ class MultiConvBlock(nn.Module):
 class HalvingProcessingBlock(nn.Module):
     def __init__(self, filters):
         super(HalvingProcessingBlock, self).__init__()
-        self.bnconv1 = ConvGnSilu(filters, filters * 2, stride=2, gn=False, bias=False)
-        self.bnconv2 = ConvGnSilu(filters * 2, filters * 2, gn=True, bias=False)
+        self.bnconv1 = ConvGnSilu(filters, filters * 2, stride=2, norm=False, bias=False)
+        self.bnconv2 = ConvGnSilu(filters * 2, filters * 2, norm=True, bias=False)
 
     def forward(self, x):
         x = self.bnconv1(x)
         return self.bnconv2(x)
-
-
-class ExpansionBlock(nn.Module):
-    def __init__(self, filters):
-        super(ExpansionBlock, self).__init__()
-        self.decimate = ConvGnSilu(filters, filters // 2, kernel_size=1, bias=False, silu=False, gn=False)
-        self.conjoin = ConvGnSilu(filters, filters // 2, kernel_size=3, bias=True, silu=False, gn=True)
-        self.process = ConvGnSilu(filters // 2, filters // 2, kernel_size=3, bias=False, silu=True, gn=True)
-
-    def forward(self, input, passthrough):
-        x = F.interpolate(input, scale_factor=2, mode="nearest")
-        x = self.decimate(x)
-        x = self.conjoin(torch.cat([x, passthrough], dim=1))
-        return self.process(x)
 
 
 # This is a classic u-net architecture with the goal of assigning each individual pixel an individual transform
@@ -70,10 +56,10 @@ class ConvBasisMultiplexer(nn.Module):
 
         gap = base_filters - multiplexer_channels
         cbl1_out = ((base_filters - (gap // 2)) // 4) * 4   # Must be multiples of 4 to use with group norm.
-        self.cbl1 = ConvGnSilu(base_filters, cbl1_out, gn=use_gn, bias=False, num_groups=4)
+        self.cbl1 = ConvGnSilu(base_filters, cbl1_out, norm=use_gn, bias=False, num_groups=4)
         cbl2_out = ((base_filters - (3 * gap // 4)) // 4) * 4
-        self.cbl2 = ConvGnSilu(cbl1_out, cbl2_out, gn=use_gn, bias=False, num_groups=4)
-        self.cbl3 = ConvGnSilu(cbl2_out, multiplexer_channels, bias=True, gn=False)
+        self.cbl2 = ConvGnSilu(cbl1_out, cbl2_out, norm=use_gn, bias=False, num_groups=4)
+        self.cbl3 = ConvGnSilu(cbl2_out, multiplexer_channels, bias=True, norm=False)
 
     def forward(self, x):
         x = self.filter_conv(x)
@@ -109,11 +95,11 @@ class BackboneMultiplexer(nn.Module):
         self.backbone = backbone
         self.proc = nn.Sequential(ConvGnSilu(256, 256, kernel_size=3, bias=True),
                                   ConvGnSilu(256, 256, kernel_size=3, bias=False))
-        self.up1 = nn.Sequential(ConvGnSilu(256, 128, kernel_size=3, bias=False, gn=False, silu=False),
+        self.up1 = nn.Sequential(ConvGnSilu(256, 128, kernel_size=3, bias=False, norm=False, activation=False),
                                  ConvGnSilu(128, 128, kernel_size=3, bias=False))
-        self.up2 = nn.Sequential(ConvGnSilu(128, 64, kernel_size=3, bias=False, gn=False, silu=False),
+        self.up2 = nn.Sequential(ConvGnSilu(128, 64, kernel_size=3, bias=False, norm=False, activation=False),
                                  ConvGnSilu(64, 64, kernel_size=3, bias=False))
-        self.final = ConvGnSilu(64, transform_count, bias=False, gn=False, silu=False)
+        self.final = ConvGnSilu(64, transform_count, bias=False, norm=False, activation=False)
 
     def forward(self, x):
         spine = self.backbone.get_forward_result()
@@ -139,7 +125,7 @@ class ConfigurableSwitchComputer(nn.Module):
         # And the switch itself, including learned scalars
         self.switch = BareConvSwitch(initial_temperature=init_temp)
         self.switch_scale = nn.Parameter(torch.full((1,), float(1)))
-        self.post_switch_conv = ConvBnLelu(base_filters, base_filters, bn=False, bias=True)
+        self.post_switch_conv = ConvBnLelu(base_filters, base_filters, norm=False, bias=True)
         # The post_switch_conv gets a low scale initially. The network can decide to magnify it (or not)
         # depending on its needs.
         self.psc_scale = nn.Parameter(torch.full((1,), float(.1)))
@@ -174,11 +160,11 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
                  add_scalable_noise_to_transforms=False):
         super(ConfigurableSwitchedResidualGenerator2, self).__init__()
         switches = []
-        self.initial_conv = ConvBnLelu(3, transformation_filters, bn=False, lelu=False, bias=True)
-        self.upconv1 = ConvBnLelu(transformation_filters, transformation_filters, bn=False, bias=True)
-        self.upconv2 = ConvBnLelu(transformation_filters, transformation_filters, bn=False, bias=True)
-        self.hr_conv = ConvBnLelu(transformation_filters, transformation_filters, bn=False, bias=True)
-        self.final_conv = ConvBnLelu(transformation_filters, 3, bn=False, lelu=False, bias=True)
+        self.initial_conv = ConvBnLelu(3, transformation_filters, norm=False, activation=False, bias=True)
+        self.upconv1 = ConvBnLelu(transformation_filters, transformation_filters, norm=False, bias=True)
+        self.upconv2 = ConvBnLelu(transformation_filters, transformation_filters, norm=False, bias=True)
+        self.hr_conv = ConvBnLelu(transformation_filters, transformation_filters, norm=False, bias=True)
+        self.final_conv = ConvBnLelu(transformation_filters, 3, norm=False, activation=False, bias=True)
         for _ in range(switch_depth):
             multiplx_fn = functools.partial(ConvBasisMultiplexer, transformation_filters, switch_filters, switch_reductions, switch_processing_layers, trans_counts)
             pretransform_fn = functools.partial(ConvBnLelu, transformation_filters, transformation_filters, bn=False, bias=False, weight_init_factor=.1)
@@ -258,19 +244,19 @@ class ConfigurableSwitchedResidualGenerator3(nn.Module):
                  heightened_temp_min=1,
                  heightened_final_step=50000, upsample_factor=4):
         super(ConfigurableSwitchedResidualGenerator3, self).__init__()
-        self.initial_conv = ConvBnLelu(3, base_filters, bn=False, lelu=False, bias=True)
-        self.sw_conv = ConvBnLelu(base_filters, base_filters, lelu=False, bias=True)
-        self.upconv1 = ConvBnLelu(base_filters, base_filters, bn=False, bias=True)
-        self.upconv2 = ConvBnLelu(base_filters, base_filters, bn=False, bias=True)
-        self.hr_conv = ConvBnLelu(base_filters, base_filters, bn=False, bias=True)
-        self.final_conv = ConvBnLelu(base_filters, 3, bn=False, lelu=False, bias=True)
+        self.initial_conv = ConvBnLelu(3, base_filters, norm=False, activation=False, bias=True)
+        self.sw_conv = ConvBnLelu(base_filters, base_filters, activation=False, bias=True)
+        self.upconv1 = ConvBnLelu(base_filters, base_filters, norm=False, bias=True)
+        self.upconv2 = ConvBnLelu(base_filters, base_filters, norm=False, bias=True)
+        self.hr_conv = ConvBnLelu(base_filters, base_filters, norm=False, bias=True)
+        self.final_conv = ConvBnLelu(base_filters, 3, norm=False, activation=False, bias=True)
 
         self.backbone = SpineNet('49', in_channels=3, use_input_norm=True)
         for p in self.backbone.parameters(recurse=True):
             p.requires_grad = False
         self.backbone_wrapper = CachedBackboneWrapper(self.backbone)
         multiplx_fn = functools.partial(BackboneMultiplexer, self.backbone_wrapper)
-        pretransform_fn = functools.partial(nn.Sequential, ConvBnLelu(base_filters, base_filters, kernel_size=3, bn=False, lelu=False, bias=False))
+        pretransform_fn = functools.partial(nn.Sequential, ConvBnLelu(base_filters, base_filters, kernel_size=3, norm=False, activation=False, bias=False))
         transform_fn = functools.partial(MultiConvBlock, base_filters, int(base_filters * 1.5), base_filters, kernel_size=3, depth=4)
         self.switch = ConfigurableSwitchComputer(base_filters, multiplx_fn, pretransform_fn, transform_fn, trans_count, init_temp=initial_temp,
                                             add_scalable_noise_to_transforms=True, init_scalar=.1)
