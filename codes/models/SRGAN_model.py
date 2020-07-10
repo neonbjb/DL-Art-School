@@ -339,15 +339,11 @@ class SRGANModel(BaseModel):
                         l_d_fake_scaled.backward()
                 if self.opt['train']['gan_type'] == 'pixgan':
                     # randomly determine portions of the image to swap to keep the discriminator honest.
-
-                    # We're making some assumptions about the underlying pixel-discriminator here. This is a
-                    # necessary evil for now, but if this turns out well we might want to make this configurable.
-                    PIXDISC_CHANNELS = 3
-                    PIXDISC_OUTPUT_REDUCTION = 8
-                    disc_output_shape = (var_ref[0].shape[0], PIXDISC_CHANNELS, var_ref[0].shape[2] // PIXDISC_OUTPUT_REDUCTION, var_ref[0].shape[3] // PIXDISC_OUTPUT_REDUCTION)
+                    pixdisc_channels, pixdisc_output_reduction = self.netD.pixgan_parameters()
+                    disc_output_shape = (var_ref[0].shape[0], pixdisc_channels, var_ref[0].shape[2] // pixdisc_output_reduction, var_ref[0].shape[3] // pixdisc_output_reduction)
                     b, _, w, h = var_ref[0].shape
-                    real = torch.ones((b, PIXDISC_CHANNELS, w, h), device=var_ref[0].device)
-                    fake = torch.zeros((b, PIXDISC_CHANNELS, w, h), device=var_ref[0].device)
+                    real = torch.ones((b, pixdisc_channels, w, h), device=var_ref[0].device)
+                    fake = torch.zeros((b, pixdisc_channels, w, h), device=var_ref[0].device)
                     SWAP_MAX_DIM = w // 4
                     SWAP_MIN_DIM = 16
                     assert SWAP_MAX_DIM > 0
