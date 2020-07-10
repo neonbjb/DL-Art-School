@@ -92,14 +92,14 @@ class TorchCustomTrace:
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/debug.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../../options/train_div2k_pixgan_srg2.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
 
     netG = define_G(opt)
     dummyInput = torch.rand(1,3,32,32)
 
-    mode = 'memtrace'
+    mode = 'onnx'
     if mode == 'torchscript':
         print("Tracing generator network..")
         traced_netG = torch.jit.trace(netG, dummyInput)

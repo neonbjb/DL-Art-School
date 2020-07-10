@@ -230,7 +230,7 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
                 temp = 1 / temp
             self.set_temperature(temp)
             if step % 50 == 0:
-                [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts[i], step, "a%i" % (i+1,)) for i in range(len(self.switches))]
+                [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts, step, "a%i" % (i+1,)) for i in range(len(self.switches))]
 
     def get_debug_values(self, step):
         temp = self.switches[0].switch.temperature
