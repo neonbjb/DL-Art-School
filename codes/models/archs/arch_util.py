@@ -368,12 +368,14 @@ class ConvGnSilu(nn.Module):
 # Block that upsamples 2x and reduces incoming filters by 2x. It preserves structure by taking a passthrough feed
 # along with the feature representation.
 class ExpansionBlock(nn.Module):
-    def __init__(self, filters, block=ConvGnSilu):
+    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu):
         super(ExpansionBlock, self).__init__()
-        self.decimate = block(filters, filters // 2, kernel_size=1, bias=False, activation=False, norm=True)
-        self.process_passthrough = block(filters // 2, filters // 2, kernel_size=3, bias=True, activation=False, norm=True)
-        self.conjoin = block(filters, filters // 2, kernel_size=3, bias=False, activation=True, norm=False)
-        self.process = block(filters // 2, filters // 2, kernel_size=3, bias=False, activation=True, norm=True)
+        if filters_out is None:
+            filters_out = filters_in // 2
+        self.decimate = block(filters_in, filters_out, kernel_size=1, bias=False, activation=False, norm=True)
+        self.process_passthrough = block(filters_out, filters_out, kernel_size=3, bias=True, activation=False, norm=True)
+        self.conjoin = block(filters_in, filters_out, kernel_size=3, bias=False, activation=True, norm=False)
+        self.process = block(filters_out, filters_out, kernel_size=3, bias=False, activation=True, norm=True)
 
     # input is the feature signal with shape  (b, f, w, h)
     # passthrough is the structure signal with shape (b, f/2, w*2, h*2)

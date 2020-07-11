@@ -192,17 +192,17 @@ class Discriminator_UNet(nn.Module):
         self.conv4_0 = ConvGnLelu(nf * 8, nf * 8, kernel_size=3, bias=False)
         self.conv4_1 = ConvGnLelu(nf * 8, nf * 8, kernel_size=3, stride=2, bias=False)
 
-        self.up1 = ExpansionBlock(nf * 8, block=ConvGnLelu)
-        self.proc1 = ConvGnLelu(nf * 4, nf * 4, bias=False)
-        self.collapse1 = ConvGnLelu(nf * 4, 1, bias=True, norm=False, activation=False)
+        self.up1 = ExpansionBlock(nf * 8, nf * 8, block=ConvGnLelu)
+        self.proc1 = ConvGnLelu(nf * 8, nf * 8, bias=False)
+        self.collapse1 = ConvGnLelu(nf * 8, 1, bias=True, norm=False, activation=False)
 
-        self.up2 = ExpansionBlock(nf * 4, block=ConvGnLelu)
-        self.proc2 = ConvGnLelu(nf * 2, nf * 2, bias=False)
-        self.collapse2 = ConvGnLelu(nf * 2, 1, bias=True, norm=False, activation=False)
+        self.up2 = ExpansionBlock(nf * 8, nf * 4, block=ConvGnLelu)
+        self.proc2 = ConvGnLelu(nf * 4, nf * 4, bias=False)
+        self.collapse2 = ConvGnLelu(nf * 4, 1, bias=True, norm=False, activation=False)
 
-        self.up3 = ExpansionBlock(nf * 2, block=ConvGnLelu)
-        self.proc3 = ConvGnLelu(nf, nf, bias=False)
-        self.collapse3 = ConvGnLelu(nf, 1, bias=True, norm=False, activation=False)
+        self.up3 = ExpansionBlock(nf * 4, nf * 2, block=ConvGnLelu)
+        self.proc3 = ConvGnLelu(nf * 2, nf * 2, bias=False)
+        self.collapse3 = ConvGnLelu(nf * 2, 1, bias=True, norm=False, activation=False)
 
     def forward(self, x, flatten=True):
         x = x[0]
