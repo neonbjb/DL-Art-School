@@ -175,7 +175,7 @@ class Discriminator_VGG_PixLoss(nn.Module):
 
 class Discriminator_UNet(nn.Module):
     def __init__(self, in_nc, nf):
-        super(Discriminator_VGG_PixLoss, self).__init__()
+        super(Discriminator_UNet, self).__init__()
         # [64, 128, 128]
         self.conv0_0 = ConvGnLelu(in_nc, nf, kernel_size=3, bias=True, gn=False)
         self.conv0_1 = ConvGnLelu(nf, nf, kernel_size=3, stride=2, bias=False)
