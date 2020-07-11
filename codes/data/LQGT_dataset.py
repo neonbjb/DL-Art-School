@@ -191,7 +191,7 @@ class LQGTDataset(data.Dataset):
         # LQ needs to go to a PIL image to perform the compression-artifact transformation.
         img_LQ = (img_LQ * 255).astype(np.uint8)
         img_LQ = Image.fromarray(img_LQ)
-        if self.opt['use_compression_artifacts']:
+        if self.opt['use_compression_artifacts'] and random.random() > .25:
             qf = random.randrange(10, 70)
             corruption_buffer = BytesIO()
             img_LQ.save(corruption_buffer, "JPEG", quality=qf, optimice=True)
