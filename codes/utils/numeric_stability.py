@@ -78,11 +78,7 @@ def test_numeric_stability(mod: nn.Module, format, iterations=50, device='cuda')
             stds.append(torch.std(measure).detach())
     return torch.stack(means), torch.stack(stds)
 
-'''
-    def __init__(self, switch_filters, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes,
-                 trans_layers, transformation_filters, initial_temp=20, final_temperature_step=50000, heightened_temp_min=1,
-                 heightened_final_step=50000, upsample_factor=1, add_scalable_noise_to_transforms=False):
-                 '''
+
 if __name__ == "__main__":
     '''
     test_stability(functools.partial(nsg.NestedSwitchedGenerator,
@@ -107,8 +103,8 @@ if __name__ == "__main__":
                                      trans_layers=4,
                                      transformation_filters=64,
                                      upsample_factor=4),
-                   torch.randn(1, 3, 64, 64),
-                   device='cuda')
+                   torch.randn(1, 3, 32, 32),
+                   device='cpu')
 
     '''
     test_stability(functools.partial(srg1.ConfigurableSwitchedResidualGenerator,

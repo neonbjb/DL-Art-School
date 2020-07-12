@@ -347,20 +347,24 @@ class SRGANModel(BaseModel):
                     SWAP_MAX_DIM = w // 4
                     SWAP_MIN_DIM = 16
                     assert SWAP_MAX_DIM > 0
-                    random_swap_count = random.randint(0, 4)
-                    for i in range(random_swap_count):
-                        # Make the swap across fake_H and var_ref
-                        swap_x, swap_y = random.randint(0, w - SWAP_MIN_DIM), random.randint(0, h - SWAP_MIN_DIM)
-                        swap_w, swap_h = random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM), random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM)
-                        if swap_x + swap_w > w:
-                            swap_w = w - swap_x
-                        if swap_y + swap_h > h:
-                            swap_h = h - swap_y
-                        t = fake_H[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)].clone()
-                        fake_H[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = var_ref[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)]
-                        var_ref[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = t
-                        real[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 0.0
-                        fake[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 1.0
+                    if random.random() > .5:   # Make this only happen half the time. Earlier experiments had it happen
+                                               # more often and the model was "cheating" by using the presence of
+                                               # easily discriminated fake swaps to count the entire generated image
+                                               # as fake.
+                        random_swap_count = random.randint(0, 4)
+                        for i in range(random_swap_count):
+                            # Make the swap across fake_H and var_ref
+                            swap_x, swap_y = random.randint(0, w - SWAP_MIN_DIM), random.randint(0, h - SWAP_MIN_DIM)
+                            swap_w, swap_h = random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM), random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM)
+                            if swap_x + swap_w > w:
+                                swap_w = w - swap_x
+                            if swap_y + swap_h > h:
+                                swap_h = h - swap_y
+                            t = fake_H[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)].clone()
+                            fake_H[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = var_ref[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)]
+                            var_ref[0][:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = t
+                            real[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 0.0
+                            fake[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 1.0
 
                     # Interpolate down to the dimensionality that the discriminator uses.
                     real = F.interpolate(real, size=disc_output_shape[2:], mode="bilinear")

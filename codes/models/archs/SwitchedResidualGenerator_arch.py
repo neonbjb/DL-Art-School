@@ -11,12 +11,12 @@ from switched_conv_util import save_attention_to_image
 
 
 class MultiConvBlock(nn.Module):
-    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth, scale_init=1, bn=False, weight_init_factor=1):
+    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth, scale_init=1, norm=False, weight_init_factor=1):
         assert depth >= 2
         super(MultiConvBlock, self).__init__()
         self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, norm=bn, bias=False, weight_init_factor=weight_init_factor)] +
-                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, norm=bn, bias=False, weight_init_factor=weight_init_factor) for i in range(depth - 2)] +
+        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, norm=norm, bias=False, weight_init_factor=weight_init_factor)] +
+                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, norm=norm, bias=False, weight_init_factor=weight_init_factor) for i in range(depth - 2)] +
                                      [ConvBnLelu(filters_mid, filters_out, kernel_size, activation=False, norm=False, bias=False, weight_init_factor=weight_init_factor)])
         self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init))
         self.bias = nn.Parameter(torch.zeros(1))
@@ -167,7 +167,7 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
         self.final_conv = ConvBnLelu(transformation_filters, 3, norm=False, activation=False, bias=True)
         for _ in range(switch_depth):
             multiplx_fn = functools.partial(ConvBasisMultiplexer, transformation_filters, switch_filters, switch_reductions, switch_processing_layers, trans_counts)
-            pretransform_fn = functools.partial(ConvBnLelu, transformation_filters, transformation_filters, bn=False, bias=False, weight_init_factor=.1)
+            pretransform_fn = functools.partial(ConvBnLelu, transformation_filters, transformation_filters, norm=False, bias=False, weight_init_factor=.1)
             transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.5), transformation_filters, kernel_size=trans_kernel_sizes, depth=trans_layers, weight_init_factor=.1)
             switches.append(ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                        pre_transform_block=pretransform_fn, transform_block=transform_fn,
