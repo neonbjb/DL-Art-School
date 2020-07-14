@@ -204,12 +204,14 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
 
     def update_for_step(self, step, experiments_path='.'):
         if self.attentions:
-            temp = max(1, int(self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
-            if temp == 1 and self.heightened_final_step and self.heightened_final_step != 1:
+            temp = max(1,
+                1 + self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step)
+            if temp == 1 and self.heightened_final_step and step > self.final_temperature_step and \
+                    self.heightened_final_step != 1:
                 # Once the temperature passes (1) it enters an inverted curve to match the linear curve from above.
                 # without this, the attention specificity "spikes" incredibly fast in the last few iterations.
                 h_steps_total = self.heightened_final_step - self.final_temperature_step
-                h_steps_current = max(min(step - self.final_temperature_step, h_steps_total), 1)
+                h_steps_current = min(step - self.final_temperature_step, h_steps_total)
                 # The "gap" will represent the steps that need to be traveled as a linear function.
                 h_gap = 1 / self.heightened_temp_min
                 temp = h_gap * h_steps_current / h_steps_total
@@ -217,7 +219,7 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
                 temp = 1 / temp
             self.set_temperature(temp)
             if step % 50 == 0:
-                [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts, step, "a%i" % (i+1,)) for i in range(len(self.switches))]
+                save_attention_to_image(experiments_path, self.attentions[0], self.transformation_counts, step, "a%i" % (1,), l_mult=10)
 
     def get_debug_values(self, step):
         temp = self.switches[0].switch.temperature
@@ -229,6 +231,17 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
+
+
+    def load_state_dict(self, state_dict, strict=True):
+        # Support backwards compatibility where accumulator_index and accumulator_filled are not in this state_dict
+        t_state = self.state_dict()
+        if 'switches.0.switch.attention_norm.accumulator_index' not in state_dict.keys():
+            for i in range(4):
+                state_dict['switches.%i.switch.attention_norm.accumulator' % (i,)] = t_state['switches.%i.switch.attention_norm.accumulator' % (i,)]
+                state_dict['switches.%i.switch.attention_norm.accumulator_index' % (i,)] = t_state['switches.%i.switch.attention_norm.accumulator_index' % (i,)]
+                state_dict['switches.%i.switch.attention_norm.accumulator_filled' % (i,)] = t_state['switches.%i.switch.attention_norm.accumulator_filled' % (i,)]
+        super(DualOutputSRG, self).load_state_dict(state_dict, strict)
 
 
 class Interpolate(nn.Module):
@@ -323,17 +336,6 @@ class ConfigurableSwitchedResidualGenerator3(nn.Module):
         return val
 
 
-    def load_state_dict(self, state_dict, strict=True):
-        # Support backwards compatibility where accumulator_index and accumulator_filled are not in this state_dict
-        t_state = self.state_dict()
-        if 'switches.0.switch.attention_norm.accumulator_index' not in state_dict.keys():
-            for i in range(4):
-                state_dict['switches.%i.switch.attention_norm.accumulator' % (i,)] = t_state['switches.%i.switch.attention_norm.accumulator' % (i,)]
-                state_dict['switches.%i.switch.attention_norm.accumulator_index' % (i,)] = t_state['switches.%i.switch.attention_norm.accumulator_index' % (i,)]
-                state_dict['switches.%i.switch.attention_norm.accumulator_filled' % (i,)] = t_state['switches.%i.switch.attention_norm.accumulator_filled' % (i,)]
-        super(DualOutputSRG, self).load_state_dict(state_dict, strict)
-
-
 class DualOutputSRG(nn.Module):
     def __init__(self, switch_depth, switch_filters, switch_reductions, switch_processing_layers, trans_counts, trans_kernel_sizes,
                  trans_layers, transformation_filters, initial_temp=20, final_temperature_step=50000, heightened_temp_min=1,
@@ -398,12 +400,14 @@ class DualOutputSRG(nn.Module):
 
     def update_for_step(self, step, experiments_path='.'):
         if self.attentions:
-            temp = max(1, int(self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
-            if temp == 1 and self.heightened_final_step and self.heightened_final_step != 1:
+            temp = max(1,
+                1 + self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step)
+            if temp == 1 and self.heightened_final_step and step > self.final_temperature_step and \
+                    self.heightened_final_step != 1:
                 # Once the temperature passes (1) it enters an inverted curve to match the linear curve from above.
                 # without this, the attention specificity "spikes" incredibly fast in the last few iterations.
                 h_steps_total = self.heightened_final_step - self.final_temperature_step
-                h_steps_current = max(min(step - self.final_temperature_step, h_steps_total), 1)
+                h_steps_current = min(step - self.final_temperature_step, h_steps_total)
                 # The "gap" will represent the steps that need to be traveled as a linear function.
                 h_gap = 1 / self.heightened_temp_min
                 temp = h_gap * h_steps_current / h_steps_total
@@ -411,7 +415,7 @@ class DualOutputSRG(nn.Module):
                 temp = 1 / temp
             self.set_temperature(temp)
             if step % 50 == 0:
-                [save_attention_to_image(experiments_path, self.attentions[i], self.transformation_counts, step, "a%i" % (i+1,)) for i in range(len(self.switches))]
+                save_attention_to_image(experiments_path, self.attentions[0], self.transformation_counts, step, "a%i" % (1,), l_mult=10)
 
     def get_debug_values(self, step):
         temp = self.switches[0].switch.temperature
