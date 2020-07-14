@@ -294,9 +294,10 @@ class ConfigurableSwitchedResidualGenerator3(nn.Module):
 
     def update_for_step(self, step, experiments_path='.'):
         if self.attentions:
-            temp = max(1, int(
-                self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step))
-            if temp == 1 and self.heightened_final_step and self.heightened_final_step != 1:
+            temp = max(1,
+                1 + self.init_temperature * (self.final_temperature_step - step) / self.final_temperature_step)
+            if temp == 1 and self.heightened_final_step and step > self.final_temperature_step and \
+                    self.heightened_final_step != 1:
                 # Once the temperature passes (1) it enters an inverted curve to match the linear curve from above.
                 # without this, the attention specificity "spikes" incredibly fast in the last few iterations.
                 h_steps_total = self.heightened_final_step - self.final_temperature_step
