@@ -51,7 +51,6 @@ class Discriminator_VGG_128(nn.Module):
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
     def forward(self, x):
-        x = x[0]
         fea = self.lrelu(self.conv0_0(x))
         fea = self.lrelu(self.bn0_1(self.conv0_1(fea)))
 
@@ -127,7 +126,6 @@ class Discriminator_VGG_PixLoss(nn.Module):
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
     def forward(self, x, flatten=True):
-        x = x[0]
         fea0 = self.lrelu(self.conv0_0(x))
         fea0 = self.lrelu(self.bn0_1(self.conv0_1(fea0)))
 
@@ -205,7 +203,6 @@ class Discriminator_UNet(nn.Module):
         self.collapse3 = ConvGnLelu(nf * 2, 1, bias=True, norm=False, activation=False)
 
     def forward(self, x, flatten=True):
-        x = x[0]
         fea0 = self.conv0_0(x)
         fea0 = self.conv0_1(fea0)
 

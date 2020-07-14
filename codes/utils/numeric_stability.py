@@ -93,7 +93,7 @@ if __name__ == "__main__":
                    torch.randn(1, 3, 64, 64),
                    device='cuda')
     '''
-    test_stability(functools.partial(srg.ConfigurableSwitchedResidualGenerator2,
+    test_stability(functools.partial(srg.DualOutputSRG,
                                      switch_depth=4,
                                      switch_filters=64,
                                      switch_reductions=4,
