@@ -23,7 +23,7 @@ class GANLoss(nn.Module):
         self.real_label_val = real_label_val
         self.fake_label_val = fake_label_val
 
-        if self.gan_type == 'gan' or self.gan_type == 'ragan' or self.gan_type == 'pixgan':
+        if self.gan_type == 'gan' or self.gan_type == 'ragan' or self.gan_type == 'pixgan' or self.gan_type == "pixgan_fea":
             self.loss = nn.BCEWithLogitsLoss()
         elif self.gan_type == 'lsgan':
             self.loss = nn.MSELoss()
@@ -46,7 +46,7 @@ class GANLoss(nn.Module):
             return torch.empty_like(input).fill_(self.fake_label_val)
 
     def forward(self, input, target_is_real):
-        if self.gan_type == 'pixgan' and not isinstance(target_is_real, bool):
+        if 'pixgan' in self.gan_type and not isinstance(target_is_real, bool):
             target_label = target_is_real
         else:
             target_label = self.get_target_label(input, target_is_real)

@@ -271,7 +271,7 @@ class SRGANModel(BaseModel):
                     # it should target this value.
 
                 if self.l_gan_w > 0:
-                    if self.opt['train']['gan_type'] == 'gan' or self.opt['train']['gan_type'] == 'pixgan':
+                    if self.opt['train']['gan_type'] == 'gan' or 'pixgan' in self.opt['train']['gan_type']:
                         pred_g_fake = self.netD(fake_GenOut)
                         l_g_gan = self.l_gan_w * self.cri_gan(pred_g_fake, True)
                     elif self.opt['train']['gan_type'] == 'ragan':
@@ -324,6 +324,17 @@ class SRGANModel(BaseModel):
                 # Apply noise to the inputs to slow discriminator convergence.
                 var_ref = var_ref + noise
                 fake_H = fake_H + noise
+                l_d_fea_real = torch.zeros(1)
+                l_d_fea_fake = torch.zeros(1)
+                if self.opt['train']['gan_type'] == 'pixgan_fea':
+                    # Compute a feature loss which is added to the GAN loss computed later to guide the discriminator better.
+                    disc_fea_scale = .5
+                    _, fea_real = self.netD(var_ref, output_feature_vector=True)
+                    actual_fea = self.netF(var_ref)
+                    l_d_fea_real = self.cri_fea(fea_real, actual_fea) * disc_fea_scale / self.mega_batch_factor
+                    _, fea_fake = self.netD(fake_H, output_feature_vector=True)
+                    actual_fea = self.netF(fake_H)
+                    l_d_fea_fake = self.cri_fea(fea_fake, actual_fea) * disc_fea_scale / self.mega_batch_factor
                 if self.opt['train']['gan_type'] == 'gan':
                     # need to forward and backward separately, since batch norm statistics differ
                     # real
@@ -338,7 +349,7 @@ class SRGANModel(BaseModel):
                     l_d_fake_log = l_d_fake * self.mega_batch_factor
                     with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                         l_d_fake_scaled.backward()
-                if self.opt['train']['gan_type'] == 'pixgan':
+                if 'pixgan' in self.opt['train']['gan_type']:
                     # randomly determine portions of the image to swap to keep the discriminator honest.
                     pixdisc_channels, pixdisc_output_reduction = self.netD.module.pixgan_parameters()
                     disc_output_shape = (var_ref.shape[0], pixdisc_channels, var_ref.shape[2] // pixdisc_output_reduction, var_ref.shape[3] // pixdisc_output_reduction)
@@ -379,12 +390,14 @@ class SRGANModel(BaseModel):
                     pred_d_real = self.netD(var_ref)
                     l_d_real = self.cri_gan(pred_d_real, real) / self.mega_batch_factor
                     l_d_real_log = l_d_real * self.mega_batch_factor
+                    l_d_real += l_d_fea_real
                     with amp.scale_loss(l_d_real, self.optimizer_D, loss_id=2) as l_d_real_scaled:
                         l_d_real_scaled.backward()
                     # fake
                     pred_d_fake = self.netD(fake_H)
                     l_d_fake = self.cri_gan(pred_d_fake, fake) / self.mega_batch_factor
                     l_d_fake_log = l_d_fake * self.mega_batch_factor
+                    l_d_fake += l_d_fea_fake
                     with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                         l_d_fake_scaled.backward()
 
@@ -470,6 +483,10 @@ class SRGANModel(BaseModel):
         if self.l_gan_w > 0 and step > self.G_warmup:
             self.add_log_entry('l_d_real', l_d_real_log.item())
             self.add_log_entry('l_d_fake', l_d_fake_log.item())
+            self.add_log_entry('l_d_fea_fake', l_d_fea_fake.item() * self.mega_batch_factor)
+            self.add_log_entry('l_d_fea_real', l_d_fea_real.item() * self.mega_batch_factor)
+            self.add_log_entry('l_d_fake_total', l_d_fake.item() * self.mega_batch_factor)
+            self.add_log_entry('l_d_real_total', l_d_real.item() * self.mega_batch_factor)
             self.add_log_entry('D_fake', torch.mean(pred_d_fake.detach()))
             self.add_log_entry('D_diff', torch.mean(pred_d_fake) - torch.mean(pred_d_real))
 

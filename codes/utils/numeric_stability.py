@@ -3,6 +3,7 @@ from torch import nn
 import models.archs.SRG1_arch as srg1
 import models.archs.SwitchedResidualGenerator_arch as srg
 import models.archs.NestedSwitchGenerator as nsg
+import models.archs.discriminator_vgg_arch as disc
 import functools
 
 blacklisted_modules = [nn.Conv2d, nn.ReLU, nn.LeakyReLU, nn.BatchNorm2d, nn.Softmax]
@@ -93,6 +94,7 @@ if __name__ == "__main__":
                    torch.randn(1, 3, 64, 64),
                    device='cuda')
     '''
+    '''
     test_stability(functools.partial(srg.DualOutputSRG,
                                      switch_depth=4,
                                      switch_filters=64,
@@ -105,7 +107,7 @@ if __name__ == "__main__":
                                      upsample_factor=4),
                    torch.randn(1, 3, 32, 32),
                    device='cpu')
-
+    '''
     '''
     test_stability(functools.partial(srg1.ConfigurableSwitchedResidualGenerator,
                                      switch_filters=[32,32,32,32],
@@ -126,3 +128,6 @@ if __name__ == "__main__":
                    torch.randn(1, 3, 64, 64),
                    device='cuda')
     '''
+    test_stability(functools.partial(disc.Discriminator_UNet_FeaOut, 3, 64),
+                   torch.randn(1,3,128,128),
+                   device='cpu')

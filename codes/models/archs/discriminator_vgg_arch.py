@@ -237,3 +237,72 @@ class Discriminator_UNet(nn.Module):
     def pixgan_parameters(self):
         return 3, 4
 
+
+class Discriminator_UNet_FeaOut(nn.Module):
+    def __init__(self, in_nc, nf):
+        super(Discriminator_UNet_FeaOut, self).__init__()
+        # [64, 128, 128]
+        self.conv0_0 = ConvGnLelu(in_nc, nf, kernel_size=3, bias=True, activation=False)
+        self.conv0_1 = ConvGnLelu(nf, nf, kernel_size=3, stride=2, bias=False)
+        # [64, 64, 64]
+        self.conv1_0 = ConvGnLelu(nf, nf * 2, kernel_size=3, bias=False)
+        self.conv1_1 = ConvGnLelu(nf * 2, nf * 2, kernel_size=3, stride=2, bias=False)
+        # [128, 32, 32]
+        self.conv2_0 = ConvGnLelu(nf * 2, nf * 4, kernel_size=3, bias=False)
+        self.conv2_1 = ConvGnLelu(nf * 4, nf * 4, kernel_size=3, stride=2, bias=False)
+        # [256, 16, 16]
+        self.conv3_0 = ConvGnLelu(nf * 4, nf * 8, kernel_size=3, bias=False)
+        self.conv3_1 = ConvGnLelu(nf * 8, nf * 8, kernel_size=3, stride=2, bias=False)
+        # [512, 8, 8]
+        self.conv4_0 = ConvGnLelu(nf * 8, nf * 8, kernel_size=3, bias=False)
+        self.conv4_1 = ConvGnLelu(nf * 8, nf * 8, kernel_size=3, stride=2, bias=False)
+
+        self.up1 = ExpansionBlock(nf * 8, nf * 8, block=ConvGnLelu)
+        self.proc1 = ConvGnLelu(nf * 8, nf * 8, bias=False)
+        self.collapse1 = ConvGnLelu(nf * 8, 1, bias=True, norm=False, activation=False)
+
+        self.up2 = ExpansionBlock(nf * 8, nf * 4, block=ConvGnLelu)
+        self.proc2 = ConvGnLelu(nf * 4, nf * 4, bias=False)
+        self.collapse2 = ConvGnLelu(nf * 4, 1, bias=True, norm=False, activation=False)
+
+        self.up3 = ExpansionBlock(nf * 4, nf * 2, block=ConvGnLelu)
+        self.proc3 = ConvGnLelu(nf * 2, nf * 2, bias=False)
+        self.collapse3 = ConvGnLelu(nf * 2, 1, bias=True, norm=False, activation=False)
+
+    def forward(self, x, output_feature_vector=False):
+        fea0 = self.conv0_0(x)
+        fea0 = self.conv0_1(fea0)
+
+        fea1 = self.conv1_0(fea0)
+        fea1 = self.conv1_1(fea1)
+
+        fea2 = self.conv2_0(fea1)
+        fea2 = self.conv2_1(fea2)
+
+        fea3 = self.conv3_0(fea2)
+        fea3 = self.conv3_1(fea3)
+
+        feat = self.conv4_0(fea3)
+        fea4 = self.conv4_1(feat)
+
+        # And the pyramid network!
+        u1 = self.up1(fea4, fea3)
+        loss1 = self.collapse1(self.proc1(u1))
+        u2 = self.up2(u1, fea2)
+        loss2 = self.collapse2(self.proc2(u2))
+        u3 = self.up3(u2, fea1)
+        loss3 = self.collapse3(self.proc3(u3))
+        res = loss3.shape[2:]
+
+        # Compress all of the loss values into the batch dimension. The actual loss attached to this output will
+        # then know how to handle them.
+        combined_losses = torch.cat([F.interpolate(loss1, scale_factor=4),
+                                     F.interpolate(loss2, scale_factor=2),
+                                     F.interpolate(loss3, scale_factor=1)], dim=1)
+        if output_feature_vector:
+            return combined_losses.view(-1, 1), feat
+        else:
+            return combined_losses.view(-1, 1)
+
+    def pixgan_parameters(self):
+        return 3, 4
