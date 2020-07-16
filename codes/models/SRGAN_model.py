@@ -485,7 +485,7 @@ class SRGANModel(BaseModel):
             self.add_log_entry('l_d_fake', l_d_fake_log.item())
             self.add_log_entry('D_fake', torch.mean(pred_d_fake.detach()))
             self.add_log_entry('D_diff', torch.mean(pred_d_fake) - torch.mean(pred_d_real))
-        if isinstance(l_d_fea_real, torch.tensor):
+        if self.opt['train']['gan_type'] == 'pixgan_fea':
             self.add_log_entry('l_d_fea_fake', l_d_fea_fake.item() * self.mega_batch_factor)
             self.add_log_entry('l_d_fea_real', l_d_fea_real.item() * self.mega_batch_factor)
             self.add_log_entry('l_d_fake_total', l_d_fake.item() * self.mega_batch_factor)
