@@ -324,8 +324,8 @@ class SRGANModel(BaseModel):
                 # Apply noise to the inputs to slow discriminator convergence.
                 var_ref = var_ref + noise
                 fake_H = fake_H + noise
-                l_d_fea_real = torch.zeros(1)
-                l_d_fea_fake = torch.zeros(1)
+                l_d_fea_real = 0
+                l_d_fea_fake = 0
                 if self.opt['train']['gan_type'] == 'pixgan_fea':
                     # Compute a feature loss which is added to the GAN loss computed later to guide the discriminator better.
                     disc_fea_scale = .5
