@@ -70,6 +70,7 @@ class SRGANModel(BaseModel):
                 else:
                     raise NotImplementedError('Loss type [{:s}] not recognized.'.format(l_fea_type))
                 self.l_fea_w = train_opt['feature_weight']
+                self.l_fea_w_start = train_opt['feature_weight']
                 self.l_fea_w_decay_start = train_opt['feature_weight_decay_start']
                 self.l_fea_w_decay_steps = train_opt['feature_weight_decay_steps']
                 self.l_fea_w_minimum = train_opt['feature_weight_minimum']
@@ -263,7 +264,7 @@ class SRGANModel(BaseModel):
                     # Decay the influence of the feature loss. As the model trains, the GAN will play a stronger role
                     # in the resultant image.
                     if self.l_fea_w_decay_start and step > self.l_fea_w_decay_start:
-                        self.l_fea_w = max(self.l_fea_w_minimum, self.l_fea_w - self.l_fea_w_decay_step_size * (step - self.l_fea_w_decay_start))
+                        self.l_fea_w = max(self.l_fea_w_minimum, self.l_fea_w_start - self.l_fea_w_decay_step_size * (step - self.l_fea_w_decay_start))
 
                     # Note to future self: The BCELoss(0, 1) and BCELoss(0, 0) = .6931
                     # Effectively this means that the generator has only completely "won" when l_d_real and l_d_fake is
