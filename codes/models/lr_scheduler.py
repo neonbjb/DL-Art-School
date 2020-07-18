@@ -5,6 +5,26 @@ import torch
 from torch.optim.lr_scheduler import _LRScheduler
 
 
+# This scheduler is specifically designed to modulate the learning rate of several different param groups configured
+# by a generator or discriminator that slowly adds new stages one at a time, e.g. like progressive growing of GANs.
+class ProgressiveMultiStepLR(_LRScheduler):
+    def __init__(self, optimizer, milestones, group_starts, gamma=0.1):
+        self.milestones = Counter(milestones)
+        self.gamma = gamma
+        self.group_starts = group_starts
+        super(ProgressiveMultiStepLR, self).__init__(optimizer)
+
+    def get_lr(self):
+        group_lrs = []
+        assert len(self.optimizer.param_groups) == len(self.group_starts)
+        for group, group_start in zip(self.optimizer.param_groups, self.group_starts):
+            if self.last_epoch - group_start not in self.milestones:
+                group_lrs.append(group['lr'])
+            else:
+                group_lrs.append(group['lr'] * self.gamma)
+        return group_lrs
+
+
 class MultiStepLR_Restart(_LRScheduler):
     def __init__(self, optimizer, milestones, restarts=None, weights=None, gamma=0.1,
                  clear_state=False, force_lr=False, last_epoch=-1):

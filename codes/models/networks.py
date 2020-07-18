@@ -10,6 +10,7 @@ import models.archs.NestedSwitchGenerator as ng
 import models.archs.feature_arch as feature_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.SRG1_arch as srg1
+import models.archs.ProgressiveSrg_arch as psrg
 import functools
 
 # Generator
@@ -78,15 +79,14 @@ def define_G(opt, net_key='network_G'):
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
-    elif which_model == "DualOutputSRG":
-        netG = SwitchedGen_arch.DualOutputSRG(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
-                                                                      switch_reductions=opt_net['switch_reductions'],
-                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
-                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
-                                                                      transformation_filters=opt_net['transformation_filters'],
-                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
-                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
+    elif which_model == "ProgressiveSRG2":
+        netG = psrg.GrowingSRGBase(progressive_step_schedule=opt_net['schedule'], switch_reductions=opt_net['reductions'],
+                                   growth_fade_in_steps=opt_net['fade_in_steps'], switch_filters=opt_net['switch_filters'],
+                                   switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
+                                   trans_layers=opt_net['trans_layers'], transformation_filters=opt_net['transformation_filters'],
+                                   initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
+                                   upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'],
+                                   start_step=opt_net['start_step'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':

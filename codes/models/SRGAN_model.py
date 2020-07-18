@@ -103,12 +103,15 @@ class SRGANModel(BaseModel):
             # G
             wd_G = train_opt['weight_decay_G'] if train_opt['weight_decay_G'] else 0
             optim_params = []
-            for k, v in self.netG.named_parameters():  # can optimize for a part of the model
-                if v.requires_grad:
-                    optim_params.append(v)
-                else:
-                    if self.rank <= 0:
-                        logger.warning('Params [{:s}] will not optimize.'.format(k))
+            if train_opt['lr_scheme'] == 'ProgressiveMultiStepLR':
+                optim_params = self.netG.get_param_groups()
+            else:
+                for k, v in self.netG.named_parameters():  # can optimize for a part of the model
+                    if v.requires_grad:
+                        optim_params.append(v)
+                    else:
+                        if self.rank <= 0:
+                            logger.warning('Params [{:s}] will not optimize.'.format(k))
             self.optimizer_G = torch.optim.Adam(optim_params, lr=train_opt['lr_G'],
                                                 weight_decay=wd_G,
                                                 betas=(train_opt['beta1_G'], train_opt['beta2_G']))
@@ -148,6 +151,15 @@ class SRGANModel(BaseModel):
                                                          gamma=train_opt['lr_gamma'],
                                                          clear_state=train_opt['clear_state'],
                                                          force_lr=train_opt['force_lr']))
+            elif train_opt['lr_scheme'] == 'ProgressiveMultiStepLR':
+                # Only supported when there are two optimizers: G and D.
+                assert len(self.optimizers) == 2
+                self.schedulers.append(lr_scheduler.ProgressiveMultiStepLR(self.optimizer_G, train_opt['gen_lr_steps'],
+                                                                           self.netG.module.get_progressive_starts(),
+                                                                           train_opt['lr_gamma']))
+                self.schedulers.append(lr_scheduler.ProgressiveMultiStepLR(self.optimizer_D, train_opt['disc_lr_steps'],
+                                                                           [0],
+                                                                           train_opt['lr_gamma']))
             elif train_opt['lr_scheme'] == 'CosineAnnealingLR_Restart':
                 for optimizer in self.optimizers:
                     self.schedulers.append(
@@ -491,6 +503,12 @@ class SRGANModel(BaseModel):
             self.add_log_entry('l_d_fea_real', l_d_fea_real.item() * self.mega_batch_factor)
             self.add_log_entry('l_d_fake_total', l_d_fake.item() * self.mega_batch_factor)
             self.add_log_entry('l_d_real_total', l_d_real.item() * self.mega_batch_factor)
+
+        # Log learning rates.
+        for i, pg in enumerate(self.optimizer_G.param_groups):
+            self.add_log_entry('gen_lr_%i' % (i,), pg['lr'])
+        for i, pg in enumerate(self.optimizer_D.param_groups):
+            self.add_log_entry('disc_lr_%i' % (i,), pg['lr'])
 
         if step % self.corruptor_swapout_steps == 0 and step > 0:
             self.load_random_corruptor()
