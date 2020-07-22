@@ -182,6 +182,9 @@ class SRGANModel(BaseModel):
         self.load()  # load G and D if needed
         self.load_random_corruptor()
 
+        # Setting this to false triggers SRGAN to call the models update_model() function on the first iteration.
+        self.updated = True
+
     def feed_data(self, data, need_GT=True):
         _profile = True
         if _profile:
@@ -202,6 +205,10 @@ class SRGANModel(BaseModel):
             input_ref = data['ref'] if 'ref' in data else data['GT']
             self.var_ref = [t.to(self.device) for t in torch.chunk(input_ref, chunks=self.mega_batch_factor, dim=0)]
             self.pix = [t.to(self.device) for t in torch.chunk(data['PIX'], chunks=self.mega_batch_factor, dim=0)]
+
+        if not self.updated:
+            self.netG.module.update_model(self.optimizer_G, self.schedulers[0])
+            self.updated = True
 
     def optimize_parameters(self, step):
         _profile = False

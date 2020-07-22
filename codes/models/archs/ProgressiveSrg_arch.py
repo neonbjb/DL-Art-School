@@ -75,6 +75,32 @@ class GrowingSRGBase(nn.Module):
             param_groups.append({'params': sw_param_group})
         return param_groups
 
+    # This is a hacky way of modifying the underlying model while training. Since changing the model means changing
+    # the optimizer and the scheduler, these things are fed in. For ProgressiveSrg, this function adds an additional
+# switch to the end of the chain with depth=3 and an online time set at the end fo the function.
+    def update_model(self, opt, sched):
+        multiplx_fn = functools.partial(srg.ConvBasisMultiplexer, self.transformation_filters, self.switch_filters,
+                                    3, self.switch_processing_layers, self.transformation_counts)
+        pretransform_fn = functools.partial(ConvGnLelu, self.transformation_filters, self.transformation_filters, norm=False,
+                                            bias=False, weight_init_factor=.1)
+        transform_fn = functools.partial(srg.MultiConvBlock, self.transformation_filters, int(self.transformation_filters * 1.5),
+                                         self.transformation_filters, kernel_size=3, depth=self.trans_layers,
+                                         weight_init_factor=.1)
+        new_sw = srg.ConfigurableSwitchComputer(self.transformation_filters, multiplx_fn,
+                                                           pre_transform_block=pretransform_fn,
+                                                           transform_block=transform_fn,
+                                                           transform_count=self.transformation_counts, init_temp=self.init_temperature,
+                                                           add_scalable_noise_to_transforms=self.add_noise_to_transform,
+                                                           attention_norm=False).to('cuda')
+        self.progressive_switches.append(new_sw)
+        new_sw_param_group = []
+        for k, v in new_sw.named_parameters():
+            if v.requires_grad:
+                new_sw_param_group.append(v)
+        opt.add_param_group({'params': new_sw_param_group})
+        self.progressive_schedule.append(150000)
+        sched.group_starts.append(150000)
+
     def get_progressive_starts(self):
         # The base param group starts at step 0, the rest are defined via progressive_switches.
         return [0] + self.progressive_schedule
