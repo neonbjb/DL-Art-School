@@ -138,8 +138,8 @@ class ConfigurableSwitchComputer(nn.Module):
 
         x = self.pre_transform(x)
         xformed = [t.forward(x) for t in self.transforms]
-
         m = self.multiplexer(identity)
+
 
         outputs, attention = self.switch(xformed, m, True)
         outputs = identity + outputs * self.switch_scale * fixed_scale
@@ -186,6 +186,10 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
         assert self.upsample_factor == 2 or self.upsample_factor == 4
 
     def forward(self, x):
+        # This is a common bug when evaluating SRG2 generators. It needs to be configured properly in eval mode. Just fail.
+        if not self.train:
+            assert self.switches[0].switch.temperature == 1
+
         x = self.initial_conv(x)
 
         self.attentions = []
