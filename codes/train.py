@@ -203,7 +203,8 @@ def main():
                 message += ')] '
                 for k, v in logs.items():
                     if 'histogram' in k:
-                        tb_logger.add_histogram(k, v, current_step)
+                        if rank <= 0:
+                            tb_logger.add_histogram(k, v, current_step)
                     else:
                         message += '{:s}: {:.4e} '.format(k, v)
                         # tensorboard logger
