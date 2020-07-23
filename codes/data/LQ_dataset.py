@@ -6,6 +6,7 @@ import data.util as util
 import torchvision.transforms.functional as F
 from PIL import Image
 import os.path as osp
+import cv2
 
 
 class LQDataset(data.Dataset):
@@ -22,6 +23,7 @@ class LQDataset(data.Dataset):
         self.vertical_splits = self.opt['vertical_splits']
         self.paths_LQ, self.paths_GT = None, None
         self.LQ_env = None  # environment for lmdb
+        self.force_multiple = self.opt['force_multiple'] if 'force_multiple' in self.opt.keys() else 1
 
         self.paths_LQ, self.sizes_LQ = util.get_image_paths(self.data_type, opt['dataroot_LQ'])
         self.paths_LQ = self.paths_LQ[self.start_at:]
@@ -48,6 +50,13 @@ class LQDataset(data.Dataset):
             w_per_split = int(w / self.vertical_splits)
             left = w_per_split * split_index
             img_LQ = F.crop(img_LQ, 0, left, h, w_per_split)
+
+        # Enforce force_resize constraints.
+        h, w = img_LQ.size
+        if h % self.force_multiple != 0 or w % self.force_multiple != 0:
+            h, w = (w - w % self.force_multiple), (h - h % self.force_multiple)
+            img_LQ = img_LQ.resize((w, h))
+
         img_LQ = F.to_tensor(img_LQ)
 
         img_name = osp.splitext(osp.basename(LQ_path))[0]
