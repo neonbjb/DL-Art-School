@@ -42,8 +42,6 @@ def copy_state_dict(dict_from, dict_to):
 
 if __name__ == "__main__":
     os.chdir("..")
-    torch.backends.cudnn.benchmark = True
-    want_just_images = True
     model_from, opt_from = get_model_for_opt_file("../options/train_imgset_pixgan_progressive_srg2.yml")
     model_to, _ = get_model_for_opt_file("../options/train_imgset_pixgan_progressive_srg2_.yml")
 

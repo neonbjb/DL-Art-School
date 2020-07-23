@@ -116,9 +116,16 @@ class SRGANModel(BaseModel):
                                                 weight_decay=wd_G,
                                                 betas=(train_opt['beta1_G'], train_opt['beta2_G']))
             self.optimizers.append(self.optimizer_G)
+            optim_params = []
+            for k, v in self.netD.named_parameters():  # can optimize for a part of the model
+                if v.requires_grad:
+                    optim_params.append(v)
+                else:
+                    if self.rank <= 0:
+                        logger.warning('Params [{:s}] will not optimize.'.format(k))
             # D
             wd_D = train_opt['weight_decay_D'] if train_opt['weight_decay_D'] else 0
-            self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=train_opt['lr_D'],
+            self.optimizer_D = torch.optim.Adam(optim_params, lr=train_opt['lr_D'],
                                                 weight_decay=wd_D,
                                                 betas=(train_opt['beta1_D'], train_opt['beta2_D']))
             self.optimizers.append(self.optimizer_D)
@@ -219,6 +226,8 @@ class SRGANModel(BaseModel):
         # Some generators have variants depending on the current step.
         if hasattr(self.netG.module, "update_for_step"):
             self.netG.module.update_for_step(step, os.path.join(self.opt['path']['models'], ".."))
+        if hasattr(self.netD.module, "update_for_step"):
+            self.netD.module.update_for_step(step, os.path.join(self.opt['path']['models'], ".."))
 
         # G
         for p in self.netD.parameters():
@@ -323,7 +332,8 @@ class SRGANModel(BaseModel):
         # D
         if self.l_gan_w > 0 and step > self.G_warmup:
             for p in self.netD.parameters():
-                p.requires_grad = True
+                if p.dtype != torch.int64 and p.dtype != torch.bool:
+                    p.requires_grad = True
 
             noise = torch.randn_like(var_ref) * noise_theta
             noise.to(self.device)
@@ -610,6 +620,8 @@ class SRGANModel(BaseModel):
         # Some generators can do their own metric logging.
         if hasattr(self.netG.module, "get_debug_values"):
             return_log.update(self.netG.module.get_debug_values(step))
+        if hasattr(self.netD.module, "get_debug_values"):
+            return_log.update(self.netD.module.get_debug_values(step))
 
         return return_log
 
