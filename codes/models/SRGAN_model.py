@@ -41,6 +41,7 @@ class SRGANModel(BaseModel):
                 p.requires_grad = True
         else:
             self.netC = None
+        self.mega_batch_factor = 1
 
         # define losses, optimizer and scheduler
         if self.is_train:
