@@ -139,7 +139,8 @@ class ConfigurableSwitchComputer(nn.Module):
             rand_feature = torch.randn_like(x) * self.noise_scale
             x = x + rand_feature
 
-        x = self.pre_transform(x)
+        if self.pre_transform:
+            x = self.pre_transform(x)
         xformed = [t.forward(x) for t in self.transforms]
         m = self.multiplexer(identity)
 
@@ -255,6 +256,8 @@ class ConfigurableSwitchedResidualGenerator4(nn.Module):
 
         multiplx_fn = functools.partial(ConvBasisMultiplexer, transformation_filters, switch_filters, switch_reductions,
                                         switch_processing_layers, trans_counts)
+        half_multiplx_fn = functools.partial(ConvBasisMultiplexer, transformation_filters, switch_filters, switch_reductions,
+                                        switch_processing_layers, trans_counts // 2)
         transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.5),
                                          transformation_filters, kernel_size=trans_kernel_sizes, depth=trans_layers,
                                          weight_init_factor=.1)
@@ -265,12 +268,19 @@ class ConfigurableSwitchedResidualGenerator4(nn.Module):
                                                    transform_count=trans_counts, init_temp=initial_temp,
                                                    add_scalable_noise_to_transforms=add_scalable_noise_to_transforms)
         self.rdb2 = RRDB(transformation_filters)
-        self.sw1 = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
+        self.sw2 = ConfigurableSwitchComputer(transformation_filters, half_multiplx_fn,
+                                                   pre_transform_block=None, transform_block=transform_fn,
+                                                   attention_norm=attention_norm,
+                                                   transform_count=trans_counts // 2, init_temp=initial_temp,
+                                                   add_scalable_noise_to_transforms=add_scalable_noise_to_transforms)
+        self.rdb3 = RRDB(transformation_filters)
+        self.sw3 = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                    pre_transform_block=None, transform_block=transform_fn,
                                                    attention_norm=attention_norm,
                                                    transform_count=trans_counts, init_temp=initial_temp,
                                                    add_scalable_noise_to_transforms=add_scalable_noise_to_transforms)
-        self.rdb3 = RRDB(transformation_filters)
+        self.rdb4 = RRDB(transformation_filters)
+        self.switches = [self.sw1, self.sw2, self.sw3]
 
         self.final_conv = ConvBnLelu(transformation_filters, 3, norm=False, activation=False, bias=True)
         self.transformation_counts = trans_counts
@@ -290,10 +300,13 @@ class ConfigurableSwitchedResidualGenerator4(nn.Module):
         x = self.initial_conv(x)
 
         x = self.rdb1(x)
-        x = self.sw1(x, True)
+        x, a1 = self.sw1(x, True)
         x = self.rdb2(x)
-        x = self.sw2(x, True)
+        x, a2 = self.sw2(x, True)
         x = self.rdb3(x)
+        x, a3 = self.sw3(x, True)
+        x = self.rdb4(x)
+        self.attentions = [a1, a2, a3]
 
         x = self.upconv1(F.interpolate(x, scale_factor=2, mode="nearest"))
         if self.upsample_factor > 2:
