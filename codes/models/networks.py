@@ -79,6 +79,15 @@ def define_G(opt, net_key='network_G'):
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
+    elif which_model == "ConfigurableSwitchedResidualGenerator4":
+        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator4(switch_filters=opt_net['switch_filters'],
+                                                                      switch_reductions=opt_net['switch_reductions'],
+                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
+                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
+                                                                      transformation_filters=opt_net['transformation_filters'], attention_norm=opt_net['attention_norm'],
+                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
+                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
+                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
     elif which_model == "ProgressiveSRG2":
         netG = psrg.GrowingSRGBase(progressive_step_schedule=opt_net['schedule'], switch_reductions=opt_net['reductions'],
                                    growth_fade_in_steps=opt_net['fade_in_steps'], switch_filters=opt_net['switch_filters'],
