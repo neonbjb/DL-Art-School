@@ -50,6 +50,7 @@ class LQGTDataset(data.Dataset):
         # LR and HR do not need to be paired.
         if 'dataroot_GAN' in opt.keys():
             self.paths_GAN, self.sizes_GAN = util.get_image_paths(self.data_type, opt['dataroot_GAN'])
+            print('loaded %i images for use in training GAN only.' % (self.sizes_GAN,))
 
         assert self.paths_GT, 'Error: GT path is empty.'
         if self.paths_LQ and self.paths_GT:
