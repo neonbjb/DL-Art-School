@@ -235,7 +235,6 @@ class SRGANModel(BaseModel):
         else:
             # If not provided, use provided LQ for anyplace where the GAN would have been used.
             self.gan_img = self.var_L
-            self.gan_lq_img_use_prob = 0  # Safety valve for not goofing.
 
         if not self.updated:
             self.netG.module.update_model(self.optimizer_G, self.schedulers[0])
