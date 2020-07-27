@@ -540,16 +540,16 @@ class SRGANModel(BaseModel):
             if self.l_gan_w > 0:
                 self.add_log_entry('l_g_gan', l_g_gan_log.item())
             self.add_log_entry('l_g_total', l_g_total_log.item())
+            if self.opt['train']['gan_type'] == 'pixgan_fea':
+                self.add_log_entry('l_d_fea_fake', l_d_fea_fake.item() * self.mega_batch_factor)
+                self.add_log_entry('l_d_fea_real', l_d_fea_real.item() * self.mega_batch_factor)
+                self.add_log_entry('l_d_fake_total', l_d_fake.item() * self.mega_batch_factor)
+                self.add_log_entry('l_d_real_total', l_d_real.item() * self.mega_batch_factor)
         if self.l_gan_w > 0 and step > self.G_warmup:
             self.add_log_entry('l_d_real', l_d_real_log.item())
             self.add_log_entry('l_d_fake', l_d_fake_log.item())
             self.add_log_entry('D_fake', torch.mean(pred_d_fake.detach()))
             self.add_log_entry('D_diff', torch.mean(pred_d_fake) - torch.mean(pred_d_real))
-        if self.opt['train']['gan_type'] == 'pixgan_fea':
-            self.add_log_entry('l_d_fea_fake', l_d_fea_fake.item() * self.mega_batch_factor)
-            self.add_log_entry('l_d_fea_real', l_d_fea_real.item() * self.mega_batch_factor)
-            self.add_log_entry('l_d_fake_total', l_d_fake.item() * self.mega_batch_factor)
-            self.add_log_entry('l_d_real_total', l_d_real.item() * self.mega_batch_factor)
 
         # Log learning rates.
         for i, pg in enumerate(self.optimizer_G.param_groups):
