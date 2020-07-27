@@ -197,6 +197,9 @@ class SRGANModel(BaseModel):
             self.swapout_D_duration = 0
             self.swapout_duration = train_opt['swapout_duration'] if train_opt['swapout_duration'] else 0
 
+            # GAN LQ image params
+            self.gan_lq_img_use_prob = train_opt['gan_lowres_use_probability'] if train_opt['gan_lowres_use_probability'] else 0
+
         self.print_network()  # print network
         self.load()  # load G and D if needed
         self.load_random_corruptor()
@@ -224,6 +227,13 @@ class SRGANModel(BaseModel):
             input_ref = data['ref'] if 'ref' in data else data['GT']
             self.var_ref = [t.to(self.device) for t in torch.chunk(input_ref, chunks=self.mega_batch_factor, dim=0)]
             self.pix = [t.to(self.device) for t in torch.chunk(data['PIX'], chunks=self.mega_batch_factor, dim=0)]
+
+        if 'GAN' in data.keys():
+            self.gan_img = [t.to(self.device) for t in torch.chunk(data['GAN'], chunks=self.mega_batch_factor, dim=0)]
+        else:
+            # If not provided, use provided LQ for anyplace where the GAN would have been used.
+            self.gan_img = self.var_L
+            self.gan_lq_img_use_prob = 0  # Safety valve for not goofing.
 
         if not self.updated:
             self.netG.module.update_model(self.optimizer_G, self.schedulers[0])
@@ -274,8 +284,13 @@ class SRGANModel(BaseModel):
         self.fea_GenOut = []
         self.fake_H = []
         var_ref_skips = []
-        for var_L, var_H, var_ref, pix in zip(self.var_L, self.var_H, self.var_ref, self.pix):
-            fea_GenOut, fake_GenOut = self.netG(var_L)
+        for var_L, var_LGAN, var_H, var_ref, pix in zip(self.var_L, self.gan_img, self.var_H, self.var_ref, self.pix):
+            if random.random() > self.gan_lq_img_use_prob:
+                fea_GenOut, fake_GenOut = self.netG(var_L)
+                using_gan_img = False
+            else:
+                fea_GenOut, fake_GenOut = self.netG(var_LGAN)
+                using_gan_img = True
 
             if _profile:
                 print("Gen forward %f" % (time() - _t,))
@@ -286,11 +301,14 @@ class SRGANModel(BaseModel):
 
             l_g_total = 0
             if step % self.D_update_ratio == 0 and step >= self.D_init_iters:
-                if self.cri_pix:  # pixel loss
+                if using_gan_img:
+                    l_g_pix_log = None
+                    l_g_fea_log = None
+                if self.cri_pix and not using_gan_img:  # pixel loss
                     l_g_pix = self.l_pix_w * self.cri_pix(fea_GenOut, pix)
                     l_g_pix_log = l_g_pix / self.l_pix_w
                     l_g_total += l_g_pix
-                if self.cri_fea:  # feature loss
+                if self.cri_fea and not using_gan_img:  # feature loss
                     real_fea = self.netF(pix).detach()
                     fake_fea = self.netF(fea_GenOut)
                     fea_w = self.l_fea_sched.get_weight_for_step(step)
@@ -348,10 +366,14 @@ class SRGANModel(BaseModel):
             self.optimizer_D.zero_grad()
             real_disc_images = []
             fake_disc_images = []
-            for var_L, var_H, var_ref, pix in zip(self.var_L, self.var_H, self.var_ref, self.pix):
+            for var_L, var_LGAN, var_H, var_ref, pix in zip(self.var_L, self.gan_img, self.var_H, self.var_ref, self.pix):
+                if random.random() > self.gan_lq_img_use_prob:
+                    gen_input = var_L
+                else:
+                    gen_input = var_LGAN
                 # Re-compute generator outputs (post-update).
                 with torch.no_grad():
-                    _, fake_H = self.netG(var_L)
+                    _, fake_H = self.netG(gen_input)
                     # The following line detaches all generator outputs that are not None.
                     fake_H = fake_H.detach()
 
@@ -510,9 +532,9 @@ class SRGANModel(BaseModel):
 
         # Log metrics
         if step % self.D_update_ratio == 0 and step >= self.D_init_iters:
-            if self.cri_pix:
+            if self.cri_pix and l_g_pix_log is not None:
                 self.add_log_entry('l_g_pix', l_g_pix_log.item())
-            if self.cri_fea:
+            if self.cri_fea and l_g_fea_log is not None:
                 self.add_log_entry('feature_weight', fea_w)
                 self.add_log_entry('l_g_fea', l_g_fea_log.item())
             if self.l_gan_w > 0:

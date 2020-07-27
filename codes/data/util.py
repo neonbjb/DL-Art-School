@@ -62,8 +62,10 @@ def get_image_paths(data_type, dataroot, weights=[]):
                     for j in range(extends):
                         paths.extend(_get_paths_from_images(r))
                 paths = sorted(paths)
+                sizes = len(paths)
             else:
                 paths = sorted(_get_paths_from_images(dataroot))
+                sizes = len(paths)
         else:
             raise NotImplementedError('data_type [{:s}] is not recognized.'.format(data_type))
     return paths, sizes

@@ -27,6 +27,7 @@ class LQGTDataset(data.Dataset):
         self.paths_LQ, self.paths_GT = None, None
         self.sizes_LQ, self.sizes_GT = None, None
         self.paths_PIX, self.sizes_PIX = None, None
+        self.paths_GAN, self.sizes_GAN = None, None
         self.LQ_env, self.GT_env, self.PIX_env = None, None, None  # environments for lmdbs
         self.force_multiple = self.opt['force_multiple'] if 'force_multiple' in self.opt.keys() else 1
 
@@ -45,6 +46,10 @@ class LQGTDataset(data.Dataset):
         self.doCrop = opt['doCrop']
         if 'dataroot_PIX' in opt.keys():
             self.paths_PIX, self.sizes_PIX = util.get_image_paths(self.data_type, opt['dataroot_PIX'])
+        # dataroot_GAN is an alternative source of LR images specifically for use in computing the GAN loss, where
+        # LR and HR do not need to be paired.
+        if 'dataroot_GAN' in opt.keys():
+            self.paths_GAN, self.sizes_GAN = util.get_image_paths(self.data_type, opt['dataroot_GAN'])
 
         assert self.paths_GT, 'Error: GT path is empty.'
         if self.paths_LQ and self.paths_GT:
@@ -127,6 +132,11 @@ class LQGTDataset(data.Dataset):
             if img_LQ.ndim == 2:
                 img_LQ = np.expand_dims(img_LQ, axis=2)
 
+        img_GAN = None
+        if self.paths_GAN:
+            GAN_path = self.paths_GAN[index % self.sizes_GAN]
+            img_GAN = util.read_img(self.LQ_env, GAN_path)
+
         # Enforce force_resize constraints.
         h, w, _ = img_LQ.shape
         if h % self.force_multiple != 0 or w % self.force_multiple != 0:
@@ -149,11 +159,15 @@ class LQGTDataset(data.Dataset):
                 rnd_h = random.randint(0, max(0, H - LQ_size))
                 rnd_w = random.randint(0, max(0, W - LQ_size))
                 img_LQ = img_LQ[rnd_h:rnd_h + LQ_size, rnd_w:rnd_w + LQ_size, :]
+                if img_GAN is not None:
+                    img_GAN = img_GAN[rnd_h:rnd_h + LQ_size, rnd_w:rnd_w + LQ_size, :]
                 rnd_h_GT, rnd_w_GT = int(rnd_h * scale), int(rnd_w * scale)
                 img_GT = img_GT[rnd_h_GT:rnd_h_GT + GT_size, rnd_w_GT:rnd_w_GT + GT_size, :]
                 img_PIX = img_PIX[rnd_h_GT:rnd_h_GT + GT_size, rnd_w_GT:rnd_w_GT + GT_size, :]
             else:
                 img_LQ = cv2.resize(img_LQ, (LQ_size, LQ_size), interpolation=cv2.INTER_LINEAR)
+                if img_GAN is not None:
+                    img_GAN = cv2.resize(img_GAN, (LQ_size, LQ_size), interpolation=cv2.INTER_LINEAR)
                 img_GT = cv2.resize(img_GT, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
                 img_PIX = cv2.resize(img_PIX, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
 
@@ -186,6 +200,8 @@ class LQGTDataset(data.Dataset):
         if img_GT.shape[2] == 3:
             img_GT = cv2.cvtColor(img_GT, cv2.COLOR_BGR2RGB)
             img_LQ = cv2.cvtColor(img_LQ, cv2.COLOR_BGR2RGB)
+            if img_GAN is not None:
+                img_GAN = cv2.cvtColor(img_GAN, cv2.COLOR_BGR2RGB)
             img_PIX = cv2.cvtColor(img_PIX, cv2.COLOR_BGR2RGB)
 
         # LQ needs to go to a PIL image to perform the compression-artifact transformation.
@@ -204,13 +220,18 @@ class LQGTDataset(data.Dataset):
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_PIX = torch.from_numpy(np.ascontiguousarray(np.transpose(img_PIX, (2, 0, 1)))).float()
         img_LQ = F.to_tensor(img_LQ)
+        if img_GAN is not None:
+            img_GAN = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GAN, (2, 0, 1)))).float()
 
         lq_noise = torch.randn_like(img_LQ) * 5 / 255
         img_LQ += lq_noise
 
         if LQ_path is None:
             LQ_path = GT_path
-        return {'LQ': img_LQ, 'GT': img_GT, 'PIX': img_PIX, 'LQ_path': LQ_path, 'GT_path': GT_path}
+        d = {'LQ': img_LQ, 'GT': img_GT, 'PIX': img_PIX, 'LQ_path': LQ_path, 'GT_path': GT_path}
+        if img_GAN is not None:
+            d['GAN'] = img_GAN
+        return d
 
     def __len__(self):
         return len(self.paths_GT)
