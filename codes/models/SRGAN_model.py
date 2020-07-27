@@ -389,7 +389,7 @@ class SRGANModel(BaseModel):
                 l_d_fea_fake = 0
                 if self.opt['train']['gan_type'] == 'pixgan_fea':
                     # Compute a feature loss which is added to the GAN loss computed later to guide the discriminator better.
-                    disc_fea_scale = .5
+                    disc_fea_scale = .1
                     _, fea_real = self.netD(var_ref, output_feature_vector=True)
                     actual_fea = self.netF(var_ref)
                     l_d_fea_real = self.cri_fea(fea_real, actual_fea) * disc_fea_scale / self.mega_batch_factor
