@@ -106,6 +106,12 @@ class SRGANModel(BaseModel):
                 else:
                     self.netF = DataParallel(self.netF)
 
+            # You can feed in a list of frozen pre-trained discriminators. These are treated the same as feature losses.
+            self.fixed_disc_nets = []
+            if 'fixed_discriminators' in opt.keys():
+                for opt_fdisc in opt['fixed_discriminators'].keys():
+                    self.fixed_disc_nets.append(networks.define_fixed_D(opt['fixed_discriminator'][opt_fdisc]).to(self.device))
+
             # GD gan loss
             self.cri_gan = GANLoss(train_opt['gan_type'], 1.0, 0.0).to(self.device)
             self.l_gan_w = train_opt['gan_weight']
@@ -338,7 +344,15 @@ class SRGANModel(BaseModel):
                     # Note to future self: The BCELoss(0, 1) and BCELoss(0, 0) = .6931
                     # Effectively this means that the generator has only completely "won" when l_d_real and l_d_fake is
                     # equal to this value. If I ever come up with an algorithm that tunes fea/gan weights automatically,
-                    # it should target this value.
+                    # it should target this
+
+                l_g_fix_disc = 0
+                for fixed_disc in self.fixed_disc_nets:
+                    weight = fixed_disc.fdisc_weight
+                    real_fea = fixed_disc(pix).detach()
+                    fake_fea = fixed_disc(fea_GenOut)
+                    l_g_fix_disc += weight * self.cri_fea(fake_fea, real_fea)
+                l_g_total += l_g_fix_disc
 
                 if self.l_gan_w > 0:
                     if self.opt['train']['gan_type'] == 'gan' or 'pixgan' in self.opt['train']['gan_type']:

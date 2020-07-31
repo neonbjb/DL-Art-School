@@ -12,6 +12,7 @@ import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.SRG1_arch as srg1
 import models.archs.ProgressiveSrg_arch as psrg
 import functools
+from collections import OrderedDict
 
 # Generator
 def define_G(opt, net_key='network_G'):
@@ -113,10 +114,7 @@ def define_G(opt, net_key='network_G'):
     return netG
 
 
-# Discriminator
-def define_D(opt):
-    img_sz = opt['datasets']['train']['target_size']
-    opt_net = opt['network_D']
+def define_D_net(opt_net, img_sz=None):
     which_model = opt_net['which_model_D']
 
     if which_model == 'discriminator_vgg_128':
@@ -139,6 +137,32 @@ def define_D(opt):
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD
+
+# Discriminator
+def define_D(opt):
+    img_sz = opt['datasets']['train']['target_size']
+    opt_net = opt['network_D']
+    return define_D_net(opt_net, img_sz)
+
+def define_fixed_D(opt):
+    # Note that this will not work with "old" VGG-style discriminators with dense blocks until the img_size parameter is added.
+    net = define_D_net(opt)
+
+    # Load the model parameters:
+    load_net = torch.load(opt['pretrained_path'])
+    load_net_clean = OrderedDict()  # remove unnecessary 'module.'
+    for k, v in load_net.items():
+        if k.startswith('module.'):
+            load_net_clean[k[7:]] = v
+        else:
+            load_net_clean[k] = v
+    net.load_state_dict(load_net_clean)
+
+    # Put into eval mode, freeze the parameters and set the 'weight' field.
+    net.eval()
+    for k, v in net.named_parameters():
+        v.requires_grad = False
+    net.fdisc_weight = opt['weight']
 
 
 # Define network used for perceptual loss
