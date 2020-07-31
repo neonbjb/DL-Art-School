@@ -6,7 +6,7 @@ from torch.nn.parallel import DataParallel, DistributedDataParallel
 import models.networks as networks
 import models.lr_scheduler as lr_scheduler
 from models.base_model import BaseModel
-from models.loss import GANLoss
+from models.loss import GANLoss, FDPLLoss
 from apex import amp
 from data.weight_scheduler import get_scheduler_for_opt
 import torch.nn.functional as F
@@ -61,6 +61,16 @@ class SRGANModel(BaseModel):
             else:
                 logger.info('Remove pixel loss.')
                 self.cri_pix = None
+
+            # FDPL loss.
+            if 'fdpl_loss' in train_opt.keys():
+                fdpl_opt = train_opt['fdpl_loss']
+                self.fdpl_weight = fdpl_opt['weight']
+                self.fdpl_enabled = self.fdpl_weight > 0
+                if self.fdpl_enabled:
+                    self.cri_fdpl = FDPLLoss(fdpl_opt['data_mean'], self.device)
+            else:
+                self.fdpl_enabled = False
 
             # G feature loss
             if train_opt['feature_weight'] and train_opt['feature_weight'] > 0:
@@ -305,10 +315,14 @@ class SRGANModel(BaseModel):
                 if using_gan_img:
                     l_g_pix_log = None
                     l_g_fea_log = None
+                    l_g_fdpl = None
                 if self.cri_pix and not using_gan_img:  # pixel loss
                     l_g_pix = self.l_pix_w * self.cri_pix(fea_GenOut, pix)
                     l_g_pix_log = l_g_pix / self.l_pix_w
                     l_g_total += l_g_pix
+                if self.fdpl_enabled and not using_gan_img:
+                    l_g_fdpl = self.cri_fdpl(fea_GenOut, pix)
+                    l_g_total += l_g_fdpl * self.fdpl_weight
                 if self.cri_fea and not using_gan_img:  # feature loss
                     real_fea = self.netF(pix).detach()
                     fake_fea = self.netF(fea_GenOut)
@@ -535,6 +549,8 @@ class SRGANModel(BaseModel):
         if step % self.D_update_ratio == 0 and step >= self.D_init_iters:
             if self.cri_pix and l_g_pix_log is not None:
                 self.add_log_entry('l_g_pix', l_g_pix_log.item())
+            if self.fdpl_enabled and l_g_fdpl is not None:
+                self.add_log_entry('l_g_fdpl', l_g_fdpl.item())
             if self.cri_fea and l_g_fea_log is not None:
                 self.add_log_entry('feature_weight', fea_w)
                 self.add_log_entry('l_g_fea', l_g_fea_log.item())

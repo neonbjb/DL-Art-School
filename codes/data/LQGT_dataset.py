@@ -172,7 +172,7 @@ class LQGTDataset(data.Dataset):
                 img_GT = cv2.resize(img_GT, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
                 img_PIX = cv2.resize(img_PIX, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
 
-                if self.opt['doResizeLoss']:
+                if 'doResizeLoss' in self.opt.keys() and self.opt['doResizeLoss']:
                     r = random.randrange(0, 10)
                     if r > 5:
                         img_LQ = cv2.resize(img_LQ, (int(LQ_size/2), int(LQ_size/2)), interpolation=cv2.INTER_LINEAR)
@@ -215,7 +215,7 @@ class LQGTDataset(data.Dataset):
             corruption_buffer.seek(0)
             img_LQ = Image.open(corruption_buffer)
 
-        if self.opt['grayscale']:
+        if 'grayscale' in self.opt.keys() and self.opt['grayscale']:
             img_LQ = ImageOps.grayscale(img_LQ).convert('RGB')
 
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
