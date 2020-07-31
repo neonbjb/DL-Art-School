@@ -164,6 +164,8 @@ def define_fixed_D(opt):
         v.requires_grad = False
     net.fdisc_weight = opt['weight']
 
+    return net
+
 
 # Define network used for perceptual loss
 def define_F(opt, use_bn=False, for_training=False):
