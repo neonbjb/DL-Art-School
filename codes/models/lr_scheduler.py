@@ -54,6 +54,12 @@ class MultiStepLR_Restart(_LRScheduler):
             for group in self.optimizer.param_groups
         ]
 
+    # Allow this scheduler to use newly appointed milestones partially through a training run..
+    def load_state_dict(self, s):
+        milestones_cache = self.milestones
+        super(MultiStepLR_Restart, self).load_state_dict(s)
+        self.milestones = milestones_cache
+
 
 class CosineAnnealingLR_Restart(_LRScheduler):
     def __init__(self, optimizer, T_period, restarts=None, weights=None, eta_min=0, last_epoch=-1):
