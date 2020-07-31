@@ -168,7 +168,7 @@ def define_fixed_D(opt):
 
 
 # Define network used for perceptual loss
-def define_F(opt, use_bn=False, for_training=False):
+def define_F(opt, use_bn=False, for_training=False, load_path=None):
     gpu_ids = opt['gpu_ids']
     device = torch.device('cuda' if gpu_ids else 'cpu')
     if 'which_model_F' not in opt['train'].keys() or opt['train']['which_model_F'] == 'vgg':
@@ -186,5 +186,21 @@ def define_F(opt, use_bn=False, for_training=False):
     elif opt['train']['which_model_F'] == 'wide_resnet':
         netF = feature_arch.WideResnetFeatureExtractor(use_input_norm=True, device=device)
 
-    netF.eval()  # No need to train
+    if load_path:
+        # Load the model parameters:
+        load_net = torch.load(load_path)
+        load_net_clean = OrderedDict()  # remove unnecessary 'module.'
+        for k, v in load_net.items():
+            if k.startswith('module.'):
+                load_net_clean[k[7:]] = v
+            else:
+                load_net_clean[k] = v
+        netF.load_state_dict(load_net_clean)
+
+        # Put into eval mode, freeze the parameters and set the 'weight' field.
+        netF.eval()
+        for k, v in netF.named_parameters():
+            v.requires_grad = False
+        netF.fdisc_weight = opt['weight']
+
     return netF

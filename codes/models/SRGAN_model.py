@@ -42,6 +42,7 @@ class SRGANModel(BaseModel):
         else:
             self.netC = None
         self.mega_batch_factor = 1
+        self.disjoint_data = False
 
         # define losses, optimizer and scheduler
         if self.is_train:
@@ -101,16 +102,28 @@ class SRGANModel(BaseModel):
                 self.cri_fea = None
             if self.cri_fea:  # load VGG perceptual loss
                 self.netF = networks.define_F(opt, use_bn=False).to(self.device)
+                self.lr_netF = None
+                if 'lr_fea_path' in train_opt.keys():
+                    self.lr_netF = networks.define_F(opt, use_bn=False, load_path=train_opt['lr_fea_path']).to(self.device)
+                    self.disjoint_data = True
+
                 if opt['dist']:
                     pass  # do not need to use DistributedDataParallel for netF
                 else:
                     self.netF = DataParallel(self.netF)
+                    if self.lr_netF:
+                        self.lr_netF = DataParallel(self.lr_netF)
 
             # You can feed in a list of frozen pre-trained discriminators. These are treated the same as feature losses.
             self.fixed_disc_nets = []
             if 'fixed_discriminators' in opt.keys():
                 for opt_fdisc in opt['fixed_discriminators'].keys():
-                    self.fixed_disc_nets.append(networks.define_fixed_D(opt['fixed_discriminators'][opt_fdisc]).to(self.device))
+                    netFD = networks.define_fixed_D(opt['fixed_discriminators'][opt_fdisc]).to(self.device)
+                    if opt['dist']:
+                        pass  # do not need to use DistributedDataParallel for netF
+                    else:
+                        netFD = DataParallel(netFD)
+                    self.fixed_disc_nets.append(netFD)
 
             # GD gan loss
             self.cri_gan = GANLoss(train_opt['gan_type'], 1.0, 0.0).to(self.device)
@@ -330,7 +343,10 @@ class SRGANModel(BaseModel):
                     l_g_fdpl = self.cri_fdpl(fea_GenOut, pix)
                     l_g_total += l_g_fdpl * self.fdpl_weight
                 if self.cri_fea and not using_gan_img:  # feature loss
-                    real_fea = self.netF(pix).detach()
+                    if self.lr_netF is not None:
+                        real_fea = self.lr_netF(var_L, interpolate_factor=self.opt['scale'])
+                    else:
+                        real_fea = self.netF(pix).detach()
                     fake_fea = self.netF(fea_GenOut)
                     fea_w = self.l_fea_sched.get_weight_for_step(step)
                     l_g_fea = fea_w * self.cri_fea(fake_fea, real_fea)
@@ -346,7 +362,7 @@ class SRGANModel(BaseModel):
                     # equal to this value. If I ever come up with an algorithm that tunes fea/gan weights automatically,
                     # it should target this
 
-                l_g_fix_disc = 0
+                l_g_fix_disc = torch.zeros(1, requires_grad=False).squeeze()
                 for fixed_disc in self.fixed_disc_nets:
                     weight = fixed_disc.fdisc_weight
                     real_fea = fixed_disc(pix).detach()
@@ -439,33 +455,34 @@ class SRGANModel(BaseModel):
                     with amp.scale_loss(l_d_fake, self.optimizer_D, loss_id=1) as l_d_fake_scaled:
                         l_d_fake_scaled.backward()
                 if 'pixgan' in self.opt['train']['gan_type']:
-                    # randomly determine portions of the image to swap to keep the discriminator honest.
-                    pixdisc_channels, pixdisc_output_reduction = self.netD.module.pixgan_parameters()
-                    disc_output_shape = (var_ref.shape[0], pixdisc_channels, var_ref.shape[2] // pixdisc_output_reduction, var_ref.shape[3] // pixdisc_output_reduction)
-                    b, _, w, h = var_ref.shape
-                    real = torch.ones((b, pixdisc_channels, w, h), device=var_ref.device)
-                    fake = torch.zeros((b, pixdisc_channels, w, h), device=var_ref.device)
-                    SWAP_MAX_DIM = w // 4
-                    SWAP_MIN_DIM = 16
-                    assert SWAP_MAX_DIM > 0
-                    if random.random() > .5:   # Make this only happen half the time. Earlier experiments had it happen
-                                               # more often and the model was "cheating" by using the presence of
-                                               # easily discriminated fake swaps to count the entire generated image
-                                               # as fake.
-                        random_swap_count = random.randint(0, 4)
-                        for i in range(random_swap_count):
-                            # Make the swap across fake_H and var_ref
-                            swap_x, swap_y = random.randint(0, w - SWAP_MIN_DIM), random.randint(0, h - SWAP_MIN_DIM)
-                            swap_w, swap_h = random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM), random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM)
-                            if swap_x + swap_w > w:
-                                swap_w = w - swap_x
-                            if swap_y + swap_h > h:
-                                swap_h = h - swap_y
-                            t = fake_H[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)].clone()
-                            fake_H[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = var_ref[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)]
-                            var_ref[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = t
-                            real[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 0.0
-                            fake[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 1.0
+                    if not self.disjoint_data:
+                        # randomly determine portions of the image to swap to keep the discriminator honest.
+                        pixdisc_channels, pixdisc_output_reduction = self.netD.module.pixgan_parameters()
+                        disc_output_shape = (var_ref.shape[0], pixdisc_channels, var_ref.shape[2] // pixdisc_output_reduction, var_ref.shape[3] // pixdisc_output_reduction)
+                        b, _, w, h = var_ref.shape
+                        real = torch.ones((b, pixdisc_channels, w, h), device=var_ref.device)
+                        fake = torch.zeros((b, pixdisc_channels, w, h), device=var_ref.device)
+                        SWAP_MAX_DIM = w // 4
+                        SWAP_MIN_DIM = 16
+                        assert SWAP_MAX_DIM > 0
+                        if random.random() > .5:   # Make this only happen half the time. Earlier experiments had it happen
+                                                   # more often and the model was "cheating" by using the presence of
+                                                   # easily discriminated fake swaps to count the entire generated image
+                                                   # as fake.
+                            random_swap_count = random.randint(0, 4)
+                            for i in range(random_swap_count):
+                                # Make the swap across fake_H and var_ref
+                                swap_x, swap_y = random.randint(0, w - SWAP_MIN_DIM), random.randint(0, h - SWAP_MIN_DIM)
+                                swap_w, swap_h = random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM), random.randint(SWAP_MIN_DIM, SWAP_MAX_DIM)
+                                if swap_x + swap_w > w:
+                                    swap_w = w - swap_x
+                                if swap_y + swap_h > h:
+                                    swap_h = h - swap_y
+                                t = fake_H[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)].clone()
+                                fake_H[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = var_ref[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)]
+                                var_ref[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = t
+                                real[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 0.0
+                                fake[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 1.0
 
                     # Interpolate down to the dimensionality that the discriminator uses.
                     real = F.interpolate(real, size=disc_output_shape[2:], mode="bilinear")

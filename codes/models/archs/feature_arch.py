@@ -26,8 +26,10 @@ class VGGFeatureExtractor(nn.Module):
         for k, v in self.features.named_parameters():
             v.requires_grad = False
 
-    def forward(self, x):
-        # Assume input range is [0, 1]
+    def forward(self, x, interpolate_factor=1):
+        if interpolate_factor > 1:
+            x = F.interpolate(x, scale_factor=interpolate_factor, mode='bicubic')
+
         if self.use_input_norm:
             x = (x - self.mean) / self.std
         output = self.features(x)

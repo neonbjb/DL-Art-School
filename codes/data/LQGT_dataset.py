@@ -15,10 +15,9 @@ class LQGTDataset(data.Dataset):
     Read LQ (Low Quality, e.g. LR (Low Resolution), blurry, etc) and GT image pairs.
     If only GT images are provided, generate LQ images on-the-fly.
     """
-
     def get_lq_path(self, i):
         which_lq = random.randint(0, len(self.paths_LQ)-1)
-        return self.paths_LQ[which_lq][i]
+        return self.paths_LQ[which_lq][i % len(self.paths_LQ[which_lq])]
 
     def __init__(self, opt):
         super(LQGTDataset, self).__init__()
@@ -53,11 +52,6 @@ class LQGTDataset(data.Dataset):
             print('loaded %i images for use in training GAN only.' % (self.sizes_GAN,))
 
         assert self.paths_GT, 'Error: GT path is empty.'
-        if self.paths_LQ and self.paths_GT:
-            assert len(self.paths_LQ[0]) == len(
-                self.paths_GT
-            ), 'GT and LQ datasets have different number of images - {}, {}.'.format(
-                len(self.paths_LQ[0]), len(self.paths_GT))
         self.random_scale_list = [1]
 
     def _init_lmdb(self):
@@ -85,7 +79,7 @@ class LQGTDataset(data.Dataset):
         GT_size = self.opt['target_size']
 
         # get GT image
-        GT_path = self.paths_GT[index]
+        GT_path = self.paths_GT[index % len(self.paths_GT)]
         resolution = [int(s) for s in self.sizes_GT[index].split('_')
                       ] if self.data_type == 'lmdb' else None
         img_GT = util.read_img(self.GT_env, GT_path, resolution)
