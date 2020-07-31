@@ -67,7 +67,8 @@ def parse(opt_path, is_train=True):
 
     # network
     if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
-        opt['network_G']['scale'] = scale
+        if 'network_G' in opt.keys():
+            opt['network_G']['scale'] = scale
 
     return opt
 

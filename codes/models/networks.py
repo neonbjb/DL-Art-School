@@ -142,7 +142,7 @@ def define_D(opt):
 
 
 # Define network used for perceptual loss
-def define_F(opt, use_bn=False):
+def define_F(opt, use_bn=False, for_training=False):
     gpu_ids = opt['gpu_ids']
     device = torch.device('cuda' if gpu_ids else 'cpu')
     if 'which_model_F' not in opt['train'].keys() or opt['train']['which_model_F'] == 'vgg':
@@ -151,8 +151,12 @@ def define_F(opt, use_bn=False):
             feature_layer = 49
         else:
             feature_layer = 34
-        netF = feature_arch.VGGFeatureExtractor(feature_layer=feature_layer, use_bn=use_bn,
-                                              use_input_norm=True, device=device)
+        if for_training:
+            netF = feature_arch.TrainableVGGFeatureExtractor(feature_layer=feature_layer, use_bn=use_bn,
+                                                  use_input_norm=True, device=device)
+        else:
+            netF = feature_arch.VGGFeatureExtractor(feature_layer=feature_layer, use_bn=use_bn,
+                                                    use_input_norm=True, device=device)
     elif opt['train']['which_model_F'] == 'wide_resnet':
         netF = feature_arch.WideResnetFeatureExtractor(use_input_norm=True, device=device)
 

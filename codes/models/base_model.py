@@ -110,7 +110,8 @@ class BaseModel():
             state['schedulers'].append(s.state_dict())
         for o in self.optimizers:
             state['optimizers'].append(o.state_dict())
-        state['amp'] = amp.state_dict()
+        if 'amp_opt_level' in self.opt.keys():
+            state['amp'] = amp.state_dict()
         save_filename = '{}.state'.format(iter_step)
         save_path = os.path.join(self.opt['path']['training_state'], save_filename)
         torch.save(state, save_path)

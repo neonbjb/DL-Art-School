@@ -32,7 +32,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_pixgan_srg2_switched_disc.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_feature_net.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -235,6 +235,8 @@ def main():
                             model.test()
 
                             visuals = model.get_current_visuals()
+                            if visuals is None:
+                                continue
 
                             sr_img = util.tensor2img(visuals['rlt'][b])  # uint8
                             #gt_img = util.tensor2img(visuals['GT'][b])  # uint8

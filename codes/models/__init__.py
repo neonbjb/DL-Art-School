@@ -9,9 +9,8 @@ def create_model(opt):
         from .SR_model import SRModel as M
     elif model == 'srgan' or model == 'corruptgan':  # GAN-based super resolution(SRGAN / ESRGAN), or corruption use same logic
         from .SRGAN_model import SRGANModel as M
-    # video restoration
-    elif model == 'video_base':
-        from .Video_base_model import VideoBaseModel as M
+    elif model == 'feat':
+        from .feature_model import FeatureModel as M
     else:
         raise NotImplementedError('Model [{:s}] not recognized.'.format(model))
     m = M(opt)
