@@ -29,6 +29,8 @@ def norm(norm_type, nc):
         layer = nn.BatchNorm2d(nc, affine=True)
     elif norm_type == 'instance':
         layer = nn.InstanceNorm2d(nc, affine=False)
+    elif norm_type == 'group':
+        layer = nn.GroupNorm(8, nc)
     else:
         raise NotImplementedError('normalization layer [{:s}] is not found'.format(norm_type))
     return layer
