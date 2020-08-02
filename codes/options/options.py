@@ -115,7 +115,11 @@ def check_resume(opt, resume_iter):
         opt['path']['pretrain_model_G'] = osp.join(opt['path']['models'],
                                                    '{}_G.pth'.format(resume_iter))
         logger.info('Set [pretrain_model_G] to ' + opt['path']['pretrain_model_G'])
-        if 'gan' in opt['model']:
+        if 'gan' in opt['model'] or 'spsr' in opt['model']:
             opt['path']['pretrain_model_D'] = osp.join(opt['path']['models'],
                                                        '{}_D.pth'.format(resume_iter))
             logger.info('Set [pretrain_model_D] to ' + opt['path']['pretrain_model_D'])
+        if 'spsr' in opt['model']:
+            opt['path']['pretrain_model_D_grad'] = osp.join(opt['path']['models'],
+                                                       '{}_D_grad.pth'.format(resume_iter))
+            logger.info('Set [pretrain_model_D_grad] to ' + opt['path']['pretrain_model_D_grad'])

@@ -11,6 +11,8 @@ import models.archs.feature_arch as feature_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.SRG1_arch as srg1
 import models.archs.ProgressiveSrg_arch as psrg
+import models.archs.SPSR_arch as spsr
+import models.archs.arch_util as arch_util
 import functools
 from collections import OrderedDict
 
@@ -97,6 +99,12 @@ def define_G(opt, net_key='network_G'):
                                    initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                    upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'],
                                    start_step=opt_net['start_step'])
+    elif which_model == 'spsr_net':
+        netG = spsr.SPSRNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
+                            nb=opt_net['nb'], gc=opt_net['gc'], upscale=opt_net['scale'], norm_type=opt_net['norm_type'],
+                            act_type='leakyrelu', mode=opt_net['mode'], upsample_mode='upconv')
+        if opt['is_train']:
+            arch_util.initialize_weights(netG, scale=.1)
 
     # image corruption
     elif which_model == 'HighToLowResNet':
@@ -119,6 +127,8 @@ def define_D_net(opt_net, img_sz=None):
 
     if which_model == 'discriminator_vgg_128':
         netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz // 128, extra_conv=opt_net['extra_conv'])
+    elif which_model == 'discriminator_vgg_128_gn':
+        netD = SRGAN_arch.Discriminator_VGG_128_GN(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz // 128)
     elif which_model == 'discriminator_resnet':
         netD = DiscriminatorResnet_arch.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
     elif which_model == 'discriminator_resnet_passthrough':

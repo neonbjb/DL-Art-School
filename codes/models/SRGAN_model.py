@@ -9,6 +9,7 @@ from models.base_model import BaseModel
 from models.loss import GANLoss, FDPLLoss
 from apex import amp
 from data.weight_scheduler import get_scheduler_for_opt
+from .archs.SPSR_arch import ImageGradient, ImageGradientNoPadding
 import torch.nn.functional as F
 import glob
 import random
@@ -27,11 +28,18 @@ class SRGANModel(BaseModel):
         else:
             self.rank = -1  # non dist training
         train_opt = opt['train']
+        self.spsr_enabled = 'spsr' in opt['model']
+
+        # Only pixgan and gan are currently supported in spsr_mode
+        if self.spsr_enabled:
+            assert train_opt['gan_type'] == 'pixgan' or train_opt['gan_type'] == 'gan'
 
         # define networks and load pretrained models
         self.netG = networks.define_G(opt).to(self.device)
         if self.is_train:
             self.netD = networks.define_D(opt).to(self.device)
+            if self.spsr_enabled:
+                self.netD_grad = networks.define_D(opt).to(self.device)  # D_grad
 
         if 'network_C' in opt.keys():
             self.netC = networks.define_G(opt, net_key='network_C').to(self.device)
@@ -72,6 +80,33 @@ class SRGANModel(BaseModel):
                     self.cri_fdpl = FDPLLoss(fdpl_opt['data_mean'], self.device)
             else:
                 self.fdpl_enabled = False
+
+            if self.spsr_enabled:
+                spsr_opt = train_opt['spsr']
+                self.branch_pretrain = spsr_opt['branch_pretrain'] if spsr_opt['branch_pretrain'] else 0
+                self.branch_init_iters = spsr_opt['branch_init_iters'] if spsr_opt['branch_init_iters'] else 1
+                if spsr_opt['gradient_pixel_weight'] > 0:
+                    self.cri_pix_grad = nn.MSELoss().to(self.device)
+                    self.l_pix_grad_w = spsr_opt['gradient_pixel_weight']
+                else:
+                    self.cri_pix_grad = None
+                if spsr_opt['gradient_gan_weight'] > 0:
+                    self.cri_grad_gan = GANLoss(train_opt['gan_type'], 1.0, 0.0).to(self.device)
+                    self.l_gan_grad_w = spsr_opt['gradient_gan_weight']
+                else:
+                    self.cri_grad_gan = None
+                if spsr_opt['pixel_branch_weight'] > 0:
+                    l_pix_type = spsr_opt['pixel_branch_criterion']
+                    if l_pix_type == 'l1':
+                        self.cri_pix_branch = nn.L1Loss().to(self.device)
+                    elif l_pix_type == 'l2':
+                        self.cri_pix_branch = nn.MSELoss().to(self.device)
+                    else:
+                        raise NotImplementedError('Loss type [{:s}] not recognized.'.format(l_pix_type))
+                    self.l_pix_branch_w = spsr_opt['pixel_branch_weight']
+                else:
+                    logger.info('Remove G_grad pixel loss.')
+                    self.cri_pix_branch = None
 
             # G feature loss
             if train_opt['feature_weight'] and train_opt['feature_weight'] > 0:
@@ -139,7 +174,7 @@ class SRGANModel(BaseModel):
             self.corruptor_usage_prob = train_opt['corruptor_usage_probability'] if train_opt['corruptor_usage_probability'] else .5
 
             # optimizers
-            # G
+            # G optimizer
             wd_G = train_opt['weight_decay_G'] if train_opt['weight_decay_G'] else 0
             optim_params = []
             if train_opt['lr_scheme'] == 'ProgressiveMultiStepLR':
@@ -155,6 +190,7 @@ class SRGANModel(BaseModel):
                                                 weight_decay=wd_G,
                                                 betas=(train_opt['beta1_G'], train_opt['beta2_G']))
             self.optimizers.append(self.optimizer_G)
+            # D optimizer
             optim_params = []
             for k, v in self.netD.named_parameters():  # can optimize for a part of the model
                 if v.requires_grad:
@@ -162,16 +198,40 @@ class SRGANModel(BaseModel):
                 else:
                     if self.rank <= 0:
                         logger.warning('Params [{:s}] will not optimize.'.format(k))
-            # D
             wd_D = train_opt['weight_decay_D'] if train_opt['weight_decay_D'] else 0
             self.optimizer_D = torch.optim.Adam(optim_params, lr=train_opt['lr_D'],
                                                 weight_decay=wd_D,
                                                 betas=(train_opt['beta1_D'], train_opt['beta2_D']))
             self.optimizers.append(self.optimizer_D)
 
-            # AMP
-            [self.netG, self.netD], [self.optimizer_G, self.optimizer_D] = \
-                amp.initialize([self.netG, self.netD], [self.optimizer_G, self.optimizer_D], opt_level=self.amp_level, num_losses=3)
+            if self.spsr_enabled:
+                # D_grad optimizer
+                optim_params = []
+                for k, v in self.netD_grad.named_parameters():  # can optimize for a part of the model
+                    if v.requires_grad:
+                        optim_params.append(v)
+                    else:
+                        if self.rank <= 0:
+                            logger.warning('Params [{:s}] will not optimize.'.format(k))
+                # D
+                wd_D = train_opt['weight_decay_D'] if train_opt['weight_decay_D'] else 0
+                self.optimizer_D_grad = torch.optim.Adam(optim_params, lr=train_opt['lr_D'],
+                                                    weight_decay=wd_D,
+                                                    betas=(train_opt['beta1_D'], train_opt['beta2_D']))
+                self.optimizers.append(self.optimizer_D_grad)
+
+            if self.spsr_enabled:
+                self.get_grad = ImageGradient().to(self.device)
+                self.get_grad_nopadding = ImageGradientNoPadding().to(self.device)
+                [self.netG, self.netD, self.netD_grad, self.get_grad, self.get_grad_nopadding], \
+                [self.optimizer_G, self.optimizer_D, self.optimizer_D_grad] = \
+                    amp.initialize([self.netG, self.netD, self.netD_grad, self.get_grad, self.get_grad_nopadding],
+                                   [self.optimizer_G, self.optimizer_D, self.optimizer_D_grad],
+                                   opt_level=self.amp_level, num_losses=3)
+            else:
+                # AMP
+                [self.netG, self.netD], [self.optimizer_G, self.optimizer_D] = \
+                    amp.initialize([self.netG, self.netD], [self.optimizer_G, self.optimizer_D], opt_level=self.amp_level, num_losses=3)
 
             # DataParallel
             if opt['dist']:
@@ -188,6 +248,8 @@ class SRGANModel(BaseModel):
                     self.netD = DataParallel(self.netD)
                 self.netG.train()
                 self.netD.train()
+                if self.spsr_enabled:
+                    self.netD_grad.train()
 
             # schedulers
             if train_opt['lr_scheme'] == 'MultiStepLR':
@@ -208,6 +270,10 @@ class SRGANModel(BaseModel):
                 self.schedulers.append(lr_scheduler.ProgressiveMultiStepLR(self.optimizer_D, train_opt['disc_lr_steps'],
                                                                            [0],
                                                                            train_opt['lr_gamma']))
+                if self.spsr_enabled:
+                    self.schedulers.append(lr_scheduler.ProgressiveMultiStepLR(self.optimizer_D_grad, train_opt['disc_lr_steps'],
+                                                                               [0],
+                                                                               train_opt['lr_gamma']))
             elif train_opt['lr_scheme'] == 'CosineAnnealingLR_Restart':
                 for optimizer in self.optimizers:
                     self.schedulers.append(
@@ -284,18 +350,22 @@ class SRGANModel(BaseModel):
         # G
         for p in self.netD.parameters():
             p.requires_grad = False
-
-        if step >= self.D_init_iters:
-            self.optimizer_G.zero_grad()
+        if self.spsr_enabled:
+            for p in self.netD_grad.parameters():
+                p.requires_grad = False
 
         self.swapout_D(step)
         self.swapout_G(step)
 
         # Turning off G-grad is required to enable mega-batching and D_update_ratio to work together for some reason.
         if step % self.D_update_ratio == 0 and step >= self.D_init_iters:
-            for p in self.netG.parameters():
-                if p.dtype != torch.int64 and p.dtype != torch.bool:
-                    p.requires_grad = True
+            if self.spsr_enabled and self.branch_pretrain and step < self.branch_init_iters:
+                for k, v in self.netG.named_parameters():
+                    v.requires_grad = '_branch_pretrain' in k
+            else:
+                for p in self.netG.parameters():
+                    if p.dtype != torch.int64 and p.dtype != torch.bool:
+                        p.requires_grad = True
         else:
             for p in self.netG.parameters():
                 p.requires_grad = False
@@ -310,17 +380,32 @@ class SRGANModel(BaseModel):
             print("Misc setup %f" % (time() - _t,))
             _t = time()
 
+        if step >= self.D_init_iters:
+            self.optimizer_G.zero_grad()
         self.fake_GenOut = []
         self.fea_GenOut = []
         self.fake_H = []
+        self.spsr_grad_GenOut = []
         var_ref_skips = []
         for var_L, var_LGAN, var_H, var_ref, pix in zip(self.var_L, self.gan_img, self.var_H, self.var_ref, self.pix):
-            if random.random() > self.gan_lq_img_use_prob:
-                fea_GenOut, fake_GenOut = self.netG(var_L)
+            if self.spsr_enabled:
+                # SPSR models have outputs from three different branches.
+                fake_H_branch, fake_GenOut, grad_LR = self.netG(var_L)
+                fea_GenOut = fake_GenOut
                 using_gan_img = False
+                # Get image gradients for later use.
+                fake_H_grad = self.get_grad(fake_GenOut)
+                var_H_grad = self.get_grad(var_H)
+                var_ref_grad = self.get_grad(var_ref)
+                var_H_grad_nopadding = self.get_grad_nopadding(var_H)
+                self.spsr_grad_GenOut.append(grad_LR)
             else:
-                fea_GenOut, fake_GenOut = self.netG(var_LGAN)
-                using_gan_img = True
+                if random.random() > self.gan_lq_img_use_prob:
+                    fea_GenOut, fake_GenOut = self.netG(var_L)
+                    using_gan_img = False
+                else:
+                    fea_GenOut, fake_GenOut = self.netG(var_LGAN)
+                    using_gan_img = True
 
             if _profile:
                 print("Gen forward %f" % (time() - _t,))
@@ -339,6 +424,13 @@ class SRGANModel(BaseModel):
                     l_g_pix = self.l_pix_w * self.cri_pix(fea_GenOut, pix)
                     l_g_pix_log = l_g_pix / self.l_pix_w
                     l_g_total += l_g_pix
+                if self.spsr_enabled and self.cri_pix_grad:  # gradient pixel loss
+                    l_g_pix_grad = self.l_pix_grad_w * self.cri_pix_grad(fake_H_grad, var_H_grad)
+                    l_g_total += l_g_pix_grad
+                if self.spsr_enabled and self.cri_pix_branch:  # branch pixel loss
+                    l_g_pix_grad_branch = self.l_pix_branch_w * self.cri_pix_branch(fake_H_branch,
+                                                                                    var_H_grad_nopadding)
+                    l_g_total += l_g_pix_grad_branch
                 if self.fdpl_enabled and not using_gan_img:
                     l_g_fdpl = self.cri_fdpl(fea_GenOut, pix)
                     l_g_total += l_g_fdpl * self.fdpl_weight
@@ -370,6 +462,7 @@ class SRGANModel(BaseModel):
                     l_g_fix_disc = l_g_fix_disc + weight * self.cri_fea(fake_fea, real_fea)
                 l_g_total += l_g_fix_disc
 
+
                 if self.l_gan_w > 0:
                     if self.opt['train']['gan_type'] == 'gan' or 'pixgan' in self.opt['train']['gan_type']:
                         pred_g_fake = self.netD(fake_GenOut)
@@ -382,6 +475,14 @@ class SRGANModel(BaseModel):
                             self.cri_gan(pred_g_fake - torch.mean(pred_d_real), True)) / 2
                     l_g_gan_log = l_g_gan / self.l_gan_w
                     l_g_total += l_g_gan
+
+                if self.spsr_enabled and self.cri_grad_gan:  # grad G gan + cls loss
+                    pred_g_fake_grad = self.netD_grad(fake_H_grad)
+                    pred_d_real_grad = self.netD_grad(var_ref_grad).detach()
+
+                    l_g_gan_grad = self.l_gan_grad_w * (self.cri_grad_gan(pred_d_real_grad - torch.mean(pred_g_fake_grad), False) +
+                                                        self.cri_grad_gan(pred_g_fake_grad - torch.mean(pred_d_real_grad), True)) /2
+                    l_g_total += l_g_gan_grad
 
                 # Scale the loss down by the batch factor.
                 l_g_total_log = l_g_total
@@ -418,8 +519,10 @@ class SRGANModel(BaseModel):
                     gen_input = var_LGAN
                 # Re-compute generator outputs (post-update).
                 with torch.no_grad():
-                    _, fake_H = self.netG(gen_input)
-                    # The following line detaches all generator outputs that are not None.
+                    if self.spsr_enabled:
+                        _, fake_H, _ = self.netG(gen_input)
+                    else:
+                        _, fake_H = self.netG(gen_input)
                     fake_H = fake_H.detach()
 
                     if _profile:
@@ -546,10 +649,35 @@ class SRGANModel(BaseModel):
                 self.fake_H.append(fake_H.detach())
             self.optimizer_D.step()
 
-
             if _profile:
                 print("Disc step %f" % (time() - _t,))
                 _t = time()
+
+            # D_grad.
+            if self.spsr_enabled and self.cri_grad_gan and step >= self.G_warmup:
+                for p in self.netD_grad.parameters():
+                    p.requires_grad = True
+                self.optimizer_D_grad.zero_grad()
+
+                for var_ref, fake_H in zip(self.var_ref, self.fake_H):
+                    fake_H_grad = self.get_grad(fake_H)
+                    var_ref_grad = self.get_grad(var_ref)
+                    pred_d_real_grad = self.netD_grad(var_ref_grad)
+                    pred_d_fake_grad = self.netD_grad(fake_H_grad.detach())  # detach to avoid BP to G
+                    if self.opt['train']['gan_type'] == 'gan':
+                        l_d_real_grad = self.cri_grad_gan(pred_d_real_grad - torch.mean(pred_d_fake_grad), True)
+                        l_d_fake_grad = self.cri_grad_gan(pred_d_fake_grad - torch.mean(pred_d_real_grad), False)
+                    elif self.opt['train']['gan_type'] == 'pixgan':
+                        real = torch.ones_like(pred_d_real_grad)
+                        fake = torch.zeros_like(pred_d_fake_grad)
+                        l_d_real_grad = self.cri_grad_gan(pred_d_real_grad - torch.mean(pred_d_fake_grad), real)
+                        l_d_fake_grad = self.cri_grad_gan(pred_d_fake_grad - torch.mean(pred_d_real_grad), fake)
+                    l_d_total_grad = (l_d_real_grad + l_d_fake_grad) / 2
+                    l_d_total_grad /= self.mega_batch_factor
+                    with amp.scale_loss(l_d_total_grad, self.optimizer_D_grad, loss_id=2) as l_d_total_grad_scaled:
+                        l_d_total_grad_scaled.backward()
+                self.optimizer_D_grad.step()
+
 
         # Log sample images from first microbatch.
         if step % self.img_debug_steps == 0:
@@ -562,6 +690,8 @@ class SRGANModel(BaseModel):
             os.makedirs(os.path.join(sample_save_path, "pix"), exist_ok=True)
             os.makedirs(os.path.join(sample_save_path, "disc"), exist_ok=True)
             os.makedirs(os.path.join(sample_save_path, "ref"), exist_ok=True)
+            if self.spsr_enabled:
+                os.makedirs(os.path.join(sample_save_path, "gen_grad"), exist_ok=True)
 
             # fed_LQ is not chunked.
             for i in range(self.mega_batch_factor):
@@ -570,6 +700,8 @@ class SRGANModel(BaseModel):
                 utils.save_image(self.pix[i].cpu(), os.path.join(sample_save_path, "pix", "%05i_%02i.png" % (step, i)))
                 utils.save_image(self.fake_GenOut[i].cpu(), os.path.join(sample_save_path, "gen", "%05i_%02i.png" % (step, i)))
                 utils.save_image(self.fea_GenOut[i].cpu(), os.path.join(sample_save_path, "gen_fea", "%05i_%02i.png" % (step, i)))
+                if self.spsr_enabled:
+                    utils.save_image(self.spsr_grad_GenOut[i].cpu(), os.path.join(sample_save_path, "gen_grad", "%05i_%02i.png" % (step, i)))
                 if self.l_gan_w > 0 and step >= self.G_warmup and 'pixgan' in self.opt['train']['gan_type']:
                     utils.save_image(var_ref_skips[i].cpu(), os.path.join(sample_save_path, "ref", "%05i_%02i.png" % (step, i)))
                     utils.save_image(self.fake_H[i], os.path.join(sample_save_path, "disc_fake", "fake%05i_%02i.png" % (step, i)))
@@ -594,11 +726,19 @@ class SRGANModel(BaseModel):
                 self.add_log_entry('l_d_fea_real', l_d_fea_real.item() * self.mega_batch_factor)
                 self.add_log_entry('l_d_fake_total', l_d_fake.item() * self.mega_batch_factor)
                 self.add_log_entry('l_d_real_total', l_d_real.item() * self.mega_batch_factor)
+            if self.spsr_enabled:
+                if self.cri_pix_branch:
+                    self.add_log_entry('l_g_pix_grad_branch', l_g_pix_grad_branch.item())
         if self.l_gan_w > 0 and step >= self.G_warmup:
             self.add_log_entry('l_d_real', l_d_real_log.item())
             self.add_log_entry('l_d_fake', l_d_fake_log.item())
             self.add_log_entry('D_fake', torch.mean(pred_d_fake.detach()))
             self.add_log_entry('D_diff', torch.mean(pred_d_fake) - torch.mean(pred_d_real))
+            if self.spsr_enabled:
+                self.add_log_entry('l_d_real_grad', l_d_real_grad.item())
+                self.add_log_entry('l_d_fake_grad', l_d_fake_grad.item())
+                self.add_log_entry('D_fake', torch.mean(pred_d_fake_grad.detach()))
+                self.add_log_entry('D_diff', torch.mean(pred_d_fake_grad) - torch.mean(pred_d_real_grad))
 
         # Log learning rates.
         for i, pg in enumerate(self.optimizer_G.param_groups):
@@ -685,7 +825,16 @@ class SRGANModel(BaseModel):
     def test(self):
         self.netG.eval()
         with torch.no_grad():
-            self.fake_GenOut = [self.netG(self.var_L[0])]
+            if self.spsr_enabled:
+                self.fake_H_branch = []
+                self.fake_GenOut = []
+                self.grad_LR = []
+                fake_H_branch, fake_GenOut, grad_LR = self.netG(self.var_L[0])
+                self.fake_H_branch.append(fake_H_branch)
+                self.fake_GenOut.append(fake_GenOut)
+                self.grad_LR.append(grad_LR)
+            else:
+                self.fake_GenOut = [self.netG(self.var_L[0])]
         self.netG.train()
 
     # Fetches a summary of the log.
@@ -713,6 +862,9 @@ class SRGANModel(BaseModel):
         out_dict['rlt'] = gen_batch.detach().float().cpu()
         if need_GT:
             out_dict['GT'] = self.var_H[0].detach().float().cpu()
+        if self.spsr_enabled:
+            out_dict['SR_branch'] = self.fake_H_branch[0].float().cpu()
+            out_dict['LR_grad'] = self.grad_LR[0].float().cpu()
         return out_dict
 
     def print_network(self):
@@ -762,6 +914,11 @@ class SRGANModel(BaseModel):
         if self.opt['is_train'] and load_path_D is not None:
             logger.info('Loading model for D [{:s}] ...'.format(load_path_D))
             self.load_network(load_path_D, self.netD, self.opt['path']['strict_load'])
+        if self.spsr_enabled:
+            load_path_D_grad = self.opt['path']['pretrain_model_D_grad']
+            if self.opt['is_train'] and load_path_D_grad is not None:
+                logger.info('Loading pretrained model for D_grad [{:s}] ...'.format(load_path_D_grad))
+                self.load_network(load_path_D_grad, self.netD_grad)
 
     def load_random_corruptor(self):
         if self.netC is None:
@@ -774,3 +931,4 @@ class SRGANModel(BaseModel):
     def save(self, iter_step):
         self.save_network(self.netG, 'G', iter_step)
         self.save_network(self.netD, 'D', iter_step)
+        self.save_network(self.netD_grad, 'D_grad', iter_step)
