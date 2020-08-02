@@ -11,6 +11,8 @@ def create_model(opt):
         from .SRGAN_model import SRGANModel as M
     elif model == 'feat':
         from .feature_model import FeatureModel as M
+    if model == 'spsr':
+        from .SPSR_model import SPSRModel as M
     else:
         raise NotImplementedError('Model [{:s}] not recognized.'.format(model))
     m = M(opt)
