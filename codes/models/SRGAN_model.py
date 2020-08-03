@@ -416,10 +416,11 @@ class SRGANModel(BaseModel):
 
             l_g_total = 0
             if step % self.D_update_ratio == 0 and step >= self.D_init_iters:
-                if using_gan_img:
-                    l_g_pix_log = None
-                    l_g_fea_log = None
-                    l_g_fdpl = None
+                fea_w = self.l_fea_sched.get_weight_for_step(step)
+                l_g_pix_log = None
+                l_g_fea_log = None
+                l_g_fdpl = None
+                l_g_fea_log = None
                 if self.cri_pix and not using_gan_img:  # pixel loss
                     l_g_pix = self.l_pix_w * self.cri_pix(fea_GenOut, pix)
                     l_g_pix_log = l_g_pix / self.l_pix_w
@@ -434,13 +435,12 @@ class SRGANModel(BaseModel):
                 if self.fdpl_enabled and not using_gan_img:
                     l_g_fdpl = self.cri_fdpl(fea_GenOut, pix)
                     l_g_total += l_g_fdpl * self.fdpl_weight
-                if self.cri_fea and not using_gan_img:  # feature loss
+                if self.cri_fea and not using_gan_img and fea_w > 0:  # feature loss
                     if self.lr_netF is not None:
                         real_fea = self.lr_netF(var_L, interpolate_factor=self.opt['scale'])
                     else:
                         real_fea = self.netF(pix).detach()
                     fake_fea = self.netF(fea_GenOut)
-                    fea_w = self.l_fea_sched.get_weight_for_step(step)
                     l_g_fea = fea_w * self.cri_fea(fake_fea, real_fea)
                     l_g_fea_log = l_g_fea / fea_w
                     l_g_total += l_g_fea
