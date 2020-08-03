@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from models.archs import SPSR_util as B
 from .RRDBNet_arch import RRDB
+from models.archs.arch_util import ConvGnLelu, ExpansionBlock, UpconvBlock
 
 
 class ImageGradient(nn.Module):
@@ -91,7 +92,7 @@ class SPSRNet(nn.Module):
         LR_conv = B.conv_block(nf, nf, kernel_size=3, norm_type=norm_type, act_type=None, mode=mode)
 
         if upsample_mode == 'upconv':
-            upsample_block = B.upconv_blcok
+            upsample_block = B.upconv_block
         elif upsample_mode == 'pixelshuffle':
             upsample_block = B.pixelshuffle_block
         else:
@@ -129,7 +130,7 @@ class SPSRNet(nn.Module):
         self.b_LR_conv = B.conv_block(nf, nf, kernel_size=3, norm_type=norm_type, act_type=None, mode=mode)
 
         if upsample_mode == 'upconv':
-            upsample_block = B.upconv_blcok
+            upsample_block = B.upconv_block
         elif upsample_mode == 'pixelshuffle':
             upsample_block = B.pixelshuffle_block
         else:
@@ -221,6 +222,117 @@ class SPSRNet(nn.Module):
         x_out = self._branch_pretrain_HR_conv0(x_out)
         x_out = self._branch_pretrain_HR_conv1(x_out)
         
+        #########
+        return x_out_branch, x_out, x_grad
+
+
+class SPSRNetSimplified(nn.Module):
+    def __init__(self, in_nc, out_nc, nf, nb, upscale=4):
+        super(SPSRNetSimplified, self).__init__()
+        n_upscale = int(math.log(upscale, 2))
+
+        # Feature branch
+        self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False)
+        self.model_shortcut_blk = nn.Sequential(*[RRDB(nf, gc=32) for _ in range(nb)])
+        self.feature_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False)
+        self.model_upsampler = nn.Sequential(*[UpconvBlock(nf, nf, block=ConvGnLelu, norm=False, activation=False, bias=False) for _ in range(n_upscale)])
+        self.feature_hr_conv1 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=False)
+        self.feature_hr_conv2 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False, bias=False)
+
+        # Grad branch
+        self.get_g_nopadding = ImageGradientNoPadding()
+        self.b_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False, bias=False)
+        self.b_concat_decimate_1 = ConvGnLelu(2 * nf, nf, kernel_size=1, norm=False, activation=False, bias=False)
+        self.b_proc_block_1 = RRDB(nf, gc=32)
+        self.b_concat_decimate_2 = ConvGnLelu(2 * nf, nf, kernel_size=1, norm=False, activation=False, bias=False)
+        self.b_proc_block_2 = RRDB(nf, gc=32)
+        self.b_concat_decimate_3 = ConvGnLelu(2 * nf, nf, kernel_size=1, norm=False, activation=False, bias=False)
+        self.b_proc_block_3 = RRDB(nf, gc=32)
+        self.b_concat_decimate_4 = ConvGnLelu(2 * nf, nf, kernel_size=1, norm=False, activation=False, bias=False)
+        self.b_proc_block_4 = RRDB(nf, gc=32)
+        # Upsampling
+        self.grad_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=False)
+        b_upsampler = nn.Sequential(*[UpconvBlock(nf, nf, block=ConvGnLelu, norm=False, activation=False, bias=False) for _ in range(n_upscale)])
+        grad_hr_conv1 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=False)
+        grad_hr_conv2 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False, bias=False)
+        self.branch_upsample = B.sequential(*b_upsampler, grad_hr_conv1, grad_hr_conv2)
+        # Conv used to output grad branch shortcut.
+        self.grad_branch_output_conv = ConvGnLelu(nf, out_nc, kernel_size=1, norm=False, activation=False, bias=False)
+
+        # Conjoin branch.
+        # Note: "_branch_pretrain" is a special tag used to denote parameters that get pretrained before the rest.
+        self._branch_pretrain_concat = ConvGnLelu(nf * 2, nf, kernel_size=1, norm=False, activation=False, bias=False)
+        self._branch_pretrain_block = RRDB(nf * 2, gc=32)
+        self._branch_pretrain_HR_conv0 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=False)
+        self._branch_pretrain_HR_conv1 = ConvGnLelu(nf, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
+
+    def forward(self, x):
+
+        x_grad = self.get_g_nopadding(x)
+        x = self.model_fea_conv(x)
+
+        x_ori = x
+        for i in range(5):
+            x = self.model_shortcut_blk[i](x)
+        x_fea1 = x
+
+        for i in range(5):
+            x = self.model_shortcut_blk[i + 5](x)
+        x_fea2 = x
+
+        for i in range(5):
+            x = self.model_shortcut_blk[i + 10](x)
+        x_fea3 = x
+
+        for i in range(5):
+            x = self.model_shortcut_blk[i + 15](x)
+        x_fea4 = x
+
+        x = self.model_shortcut_blk[20:](x)
+        x = self.feature_lr_conv(x)
+
+        # short cut
+        x = x_ori + x
+        x = self.model_upsampler(x)
+        x = self.feature_hr_conv1(x)
+        x = self.feature_hr_conv2(x)
+
+        x_b_fea = self.b_fea_conv(x_grad)
+        x_cat_1 = torch.cat([x_b_fea, x_fea1], dim=1)
+
+        x_cat_1 = self.b_concat_decimate_1(x_cat_1)
+        x_cat_1 = self.b_proc_block_1(x_cat_1)
+
+        x_cat_2 = torch.cat([x_cat_1, x_fea2], dim=1)
+
+        x_cat_2 = self.b_concat_decimate_2(x_cat_2)
+        x_cat_2 = self.b_proc_block_2(x_cat_2)
+
+        x_cat_3 = torch.cat([x_cat_2, x_fea3], dim=1)
+
+        x_cat_3 = self.b_concat_decimate_3(x_cat_3)
+        x_cat_3 = self.b_proc_block_3(x_cat_3)
+
+        x_cat_4 = torch.cat([x_cat_3, x_fea4], dim=1)
+
+        x_cat_4 = self.b_concat_decimate_4(x_cat_4)
+        x_cat_4 = self.b_proc_block_4(x_cat_4)
+
+        x_cat_4 = self.grad_lr_conv(x_cat_4)
+
+        # short cut
+        x_cat_4 = x_cat_4 + x_b_fea
+        x_branch = self.branch_upsample(x_cat_4)
+        x_out_branch = self.grad_branch_output_conv(x_branch)
+
+        ########
+        x_branch_d = x_branch
+        x__branch_pretrain_cat = torch.cat([x_branch_d, x], dim=1)
+        x__branch_pretrain_cat = self._branch_pretrain_block(x__branch_pretrain_cat)
+        x_out = self._branch_pretrain_concat(x__branch_pretrain_cat)
+        x_out = self._branch_pretrain_HR_conv0(x_out)
+        x_out = self._branch_pretrain_HR_conv1(x_out)
+
         #########
         return x_out_branch, x_out, x_grad
 

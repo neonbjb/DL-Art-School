@@ -389,3 +389,32 @@ class ExpansionBlock(nn.Module):
         p = self.process_passthrough(passthrough)
         x = self.conjoin(torch.cat([x, p], dim=1))
         return self.process(x)
+
+
+# Similar to ExpansionBlock but does not upsample.
+class ConjoinBlock(nn.Module):
+    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True):
+        super(ConjoinBlock, self).__init__()
+        if filters_out is None:
+            filters_out = filters_in
+        self.decimate = block(filters_in*2, filters_out, kernel_size=1, bias=False, activation=False, norm=norm)
+        self.process = block(filters_out, filters_out, kernel_size=3, bias=False, activation=True, norm=norm)
+
+    # input is the feature signal with shape  (b, f, w, h)
+    # passthrough is the structure signal with shape (b, f/2, w*2, h*2)
+    # output is conjoined upsample with shape (b, f/2, w*2, h*2)
+    def forward(self, input, passthrough):
+        x = torch.cat([input, passthrough], dim=1)
+        x = self.decimate(x)
+        return self.process(x)
+
+
+# Basic convolutional upsampling block that uses interpolate.
+class UpconvBlock(nn.Module):
+    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True, activation=True, bias=False):
+        super(UpconvBlock, self).__init__()
+        self.process = block(filters_out, filters_out, kernel_size=3, bias=bias, activation=activation, norm=norm)
+
+    def forward(self, x):
+        x = F.interpolate(x, scale_factor=2, mode="nearest")
+        return self.process(x)

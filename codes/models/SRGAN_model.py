@@ -394,9 +394,8 @@ class SRGANModel(BaseModel):
                 fea_GenOut = fake_GenOut
                 using_gan_img = False
                 # Get image gradients for later use.
-                fake_H_grad = self.get_grad(fake_GenOut)
-                var_H_grad = self.get_grad(var_H)
-                var_ref_grad = self.get_grad(var_ref)
+                fake_H_grad = self.get_grad_nopadding(fake_GenOut)
+                var_ref_grad = self.get_grad_nopadding(var_ref)
                 var_H_grad_nopadding = self.get_grad_nopadding(var_H)
                 self.spsr_grad_GenOut.append(grad_LR)
             else:
@@ -426,7 +425,7 @@ class SRGANModel(BaseModel):
                     l_g_pix_log = l_g_pix / self.l_pix_w
                     l_g_total += l_g_pix
                 if self.spsr_enabled and self.cri_pix_grad:  # gradient pixel loss
-                    l_g_pix_grad = self.l_pix_grad_w * self.cri_pix_grad(fake_H_grad, var_H_grad)
+                    l_g_pix_grad = self.l_pix_grad_w * self.cri_pix_grad(fake_H_grad, var_H_grad_nopadding)
                     l_g_total += l_g_pix_grad
                 if self.spsr_enabled and self.cri_pix_branch:  # branch pixel loss
                     l_g_pix_grad_branch = self.l_pix_branch_w * self.cri_pix_branch(fake_H_branch,
@@ -660,8 +659,8 @@ class SRGANModel(BaseModel):
                 self.optimizer_D_grad.zero_grad()
 
                 for var_ref, fake_H in zip(self.var_ref, self.fake_H):
-                    fake_H_grad = self.get_grad(fake_H)
-                    var_ref_grad = self.get_grad(var_ref)
+                    fake_H_grad = self.get_grad_nopadding(fake_H)
+                    var_ref_grad = self.get_grad_nopadding(var_ref)
                     pred_d_real_grad = self.netD_grad(var_ref_grad)
                     pred_d_fake_grad = self.netD_grad(fake_H_grad.detach())  # detach to avoid BP to G
                     if self.opt['train']['gan_type'] == 'gan':

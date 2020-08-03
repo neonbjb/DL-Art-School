@@ -105,6 +105,9 @@ def define_G(opt, net_key='network_G'):
                             act_type='leakyrelu', mode=opt_net['mode'], upsample_mode='upconv')
         if opt['is_train']:
             arch_util.initialize_weights(netG, scale=.1)
+    elif which_model == 'spsr_net_improved':
+        netG = spsr.SPSRNetSimplified(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
+                            nb=opt_net['nb'], upscale=opt_net['scale'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
