@@ -6,3 +6,5 @@ tb-nightly
 future
 scp
 tqdm
+matplotlib
+scipy
