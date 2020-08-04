@@ -15,6 +15,7 @@ class BaseModel():
         self.is_train = opt['is_train']
         self.schedulers = []
         self.optimizers = []
+        self.disc_optimizers = []
 
     def feed_data(self, data):
         pass
