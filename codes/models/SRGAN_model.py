@@ -404,7 +404,7 @@ class SRGANModel(BaseModel):
                 # Get image gradients for later use.
                 fake_H_grad = self.get_grad_nopadding(fake_GenOut)
                 var_H_grad_nopadding = self.get_grad_nopadding(var_H)
-                self.spsr_grad_GenOut.append(grad_LR)
+                self.spsr_grad_GenOut.append(fake_H_branch)
             else:
                 if random.random() > self.gan_lq_img_use_prob:
                     fea_GenOut, fake_GenOut = self.netG(var_L)
