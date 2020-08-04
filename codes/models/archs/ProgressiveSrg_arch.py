@@ -266,7 +266,7 @@ class GrowingUnetDiscBase(nn.Module):
                 disc_age = self.latest_step - self.progressive_schedule[i]
                 fade_in = min(1, disc_age * self.growth_fade_in_per_step)
             mean_weight += fade_in
-            base_loss += F.interpolate(l, size=res, mode="bilinear") * fade_in
+            base_loss += F.interpolate(l, size=res, mode="bilinear", align_corners=False) * fade_in
         base_loss /= mean_weight
 
         return base_loss.view(-1, 1)

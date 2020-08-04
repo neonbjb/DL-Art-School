@@ -47,7 +47,7 @@ if __name__ == '__main__':
         im = rgb2ycbcr(train_data['GT'].double())
         im_LR = rgb2ycbcr(F.interpolate(train_data['LQ'].double(),
                                         size=im.shape[2:],
-                                        mode="bicubic"))
+                                        mode="bicubic", align_corners=False))
         patches_hr = extract_patches_2d(img=im, patch_shape=(patch_size,patch_size), batch_first=True)
         patches_hr = dct_2d(patches_hr, norm='ortho')
         patches_lr = extract_patches_2d(img=im_LR, patch_shape=(patch_size,patch_size), batch_first=True)

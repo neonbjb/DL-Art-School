@@ -506,22 +506,21 @@ class SRGANModel(BaseModel):
             noise.to(self.device)
             real_disc_images = []
             fake_disc_images = []
-            for var_L, var_LGAN, var_H, var_ref, pix in zip(self.var_L, self.gan_img, self.var_H, self.var_ref, self.pix):
+            for fake_GenOut, var_LGAN, var_H, var_ref, pix in zip(self.fake_GenOut, self.gan_img, self.var_H, self.var_ref, self.pix):
                 if random.random() > self.gan_lq_img_use_prob:
-                    gen_input = var_L
+                    fake_H = fake_GenOut.clone().detach().requires_grad_(False)
                 else:
-                    gen_input = var_LGAN
-                # Re-compute generator outputs (post-update).
-                with torch.no_grad():
-                    if self.spsr_enabled:
-                        _, fake_H, _ = self.netG(gen_input)
-                    else:
-                        _, fake_H = self.netG(gen_input)
-                    fake_H = fake_H.detach()
+                    # Re-compute generator outputs with the GAN inputs.
+                    with torch.no_grad():
+                        if self.spsr_enabled:
+                            _, fake_H, _ = self.netG(var_LGAN)
+                        else:
+                            _, fake_H = self.netG(var_LGAN)
+                        fake_H = fake_H.detach()
 
-                    if _profile:
-                        print("Gen forward for disc %f" % (time() - _t,))
-                        _t = time()
+                        if _profile:
+                            print("Gen forward for disc %f" % (time() - _t,))
+                            _t = time()
 
                 # Apply noise to the inputs to slow discriminator convergence.
                 var_ref = var_ref + noise
@@ -583,8 +582,8 @@ class SRGANModel(BaseModel):
                                 fake[:, :, swap_x:(swap_x+swap_w), swap_y:(swap_y+swap_h)] = 1.0
 
                     # Interpolate down to the dimensionality that the discriminator uses.
-                    real = F.interpolate(real, size=disc_output_shape[2:], mode="bilinear")
-                    fake = F.interpolate(fake, size=disc_output_shape[2:], mode="bilinear")
+                    real = F.interpolate(real, size=disc_output_shape[2:], mode="bilinear", align_corners=False)
+                    fake = F.interpolate(fake, size=disc_output_shape[2:], mode="bilinear", align_corners=False)
 
                     # We're also assuming that this is exactly how the flattened discriminator output is generated.
                     real = real.view(-1, 1)
