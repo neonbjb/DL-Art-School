@@ -652,7 +652,7 @@ class SRGANModel(BaseModel):
                 for p in self.netD_grad.parameters():
                     p.requires_grad = True
                 self.optimizer_D_grad.zero_grad()
-                for var_ref, fake_H in zip(self.var_ref_skips, self.fake_H):
+                for var_ref, fake_H in zip(var_ref_skips, self.fake_H):
                     fake_H_grad = self.get_grad_nopadding(fake_H)
                     var_ref_grad = self.get_grad_nopadding(var_ref)
                     pred_d_real_grad = self.netD_grad(var_ref_grad)
