@@ -382,7 +382,6 @@ class SPSRNetSimplifiedNoSkip(nn.Module):
         self._branch_pretrain_HR_conv1 = ConvGnLelu(nf, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
 
     def forward(self, x):
-
         x_grad = self.get_g_nopadding(x)
         x = self.model_fea_conv(x)
 
