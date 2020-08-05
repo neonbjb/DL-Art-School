@@ -388,19 +388,12 @@ class SPSRNetSimplifiedNoSkip(nn.Module):
         x_ori = x
         for i in range(5):
             x = self.model_shortcut_blk[i](x)
-        x_fea1 = x
-
         for i in range(5):
             x = self.model_shortcut_blk[i + 5](x)
-        x_fea2 = x
-
         for i in range(5):
             x = self.model_shortcut_blk[i + 10](x)
-        x_fea3 = x
-
         for i in range(5):
             x = self.model_shortcut_blk[i + 15](x)
-        x_fea4 = x
 
         x = self.model_shortcut_blk[20:](x)
         x = self.feature_lr_conv(x)
@@ -430,7 +423,6 @@ class SPSRNetSimplifiedNoSkip(nn.Module):
         x_out = self._branch_pretrain_concat(x__branch_pretrain_cat)
         x_out = self._branch_pretrain_HR_conv0(x_out)
         x_out = self._branch_pretrain_HR_conv1(x_out)
-
         #########
         return x_out_branch, x_out, x_grad
 
