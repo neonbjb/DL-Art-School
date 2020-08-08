@@ -140,13 +140,14 @@ class Discriminator_VGG_128_GN(nn.Module):
 
 class CrossCompareBlock(nn.Module):
     def __init__(self, nf_in, nf_out):
+        super(CrossCompareBlock, self).__init__()
         self.conv_hr_merge = ConvGnLelu(nf_in * 2, nf_in, kernel_size=1, bias=False, activation=False, norm=True)
         self.proc_hr = ConvGnLelu(nf_in, nf_out, kernel_size=3, bias=False, activation=True, norm=True)
         self.proc_lr = ConvGnLelu(nf_in, nf_out, kernel_size=3, bias=False, activation=True, norm=True)
         self.reduce_hr = ConvGnLelu(nf_out, nf_out, kernel_size=3, stride=2, bias=False, activation=True, norm=True)
         self.reduce_lr = ConvGnLelu(nf_out, nf_out, kernel_size=3, stride=2, bias=False, activation=True, norm=True)
 
-    def forward(self, lr, hr):
+    def forward(self, hr, lr):
         hr = self.conv_hr_merge(torch.cat([hr, lr], dim=1))
         hr = self.proc_hr(hr)
         hr = self.reduce_hr(hr)
@@ -154,7 +155,7 @@ class CrossCompareBlock(nn.Module):
         lr = self.proc_lr(lr)
         lr = self.reduce_lr(lr)
 
-        return lr, hr
+        return hr, lr
 
 
 class CrossCompareDiscriminator(nn.Module):
@@ -177,17 +178,23 @@ class CrossCompareDiscriminator(nn.Module):
         self.fproc_conv = ConvGnLelu(nf * 8, nf, norm=True, bias=True, activation=True)
         self.out_conv = ConvGnLelu(nf, 1, norm=False, bias=False, activation=False)
 
-    def forward(self, lr, hr):
+        self.scale = scale * 16
+
+    def forward(self, hr, lr):
         hr = self.init_conv_hr(hr)
         hr = self.second_conv(hr)
         lr = self.init_conv_lr(lr)
 
-        lr, hr = self.cross1(lr, hr)
-        lr, hr = self.cross2(lr, hr)
-        lr, hr = self.cross3(lr, hr)
-        _, hr = self.cross4(lr, hr)
+        hr, lr = self.cross1(hr, lr)
+        hr, lr = self.cross2(hr, lr)
+        hr, lr = self.cross3(hr, lr)
+        hr, _ = self.cross4(hr, lr)
 
-        return self.out_conv(self.fproc_conv(hr))
+        return self.out_conv(self.fproc_conv(hr)).view(-1, 1)
+
+    # Returns tuple of (number_output_channels, scale_of_output_reduction (1/n))
+    def pixgan_parameters(self):
+        return 3, self.scale
 
 
 class Discriminator_VGG_PixLoss(nn.Module):
