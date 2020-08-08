@@ -7,6 +7,7 @@ from .RRDBNet_arch import RRDB
 from models.archs.arch_util import ConvGnLelu, UpconvBlock
 from models.archs.SwitchedResidualGenerator_arch import MultiConvBlock, ConvBasisMultiplexer, ConfigurableSwitchComputer
 from switched_conv_util import save_attention_to_image_rgb
+from switched_conv import compute_attention_specificity
 import functools
 
 
@@ -428,7 +429,7 @@ class SPSRNetSimplifiedNoSkip(nn.Module):
 
 
 class SwitchedSpsr(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, nb, upscale=4):
+    def __init__(self, in_nc, out_nc, nf, upscale=4):
         super(SwitchedSpsr, self).__init__()
         n_upscale = int(math.log(upscale, 2))
 
@@ -442,7 +443,7 @@ class SwitchedSpsr(nn.Module):
                                         switch_processing_layers, trans_counts)
         pretransform_fn = functools.partial(ConvGnLelu, transformation_filters, transformation_filters, norm=False, bias=False, weight_init_factor=.1)
         transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.5),
-                                         transformation_filters, kernel_size=3, depth=trans_layers,
+                                         transformation_filters, kernel_size=3, depth=3,
                                          weight_init_factor=.1)
 
         # Feature branch
@@ -512,10 +513,12 @@ class SwitchedSpsr(nn.Module):
         x_out_branch = self.grad_branch_output_conv(x_grad)
 
         x__branch_pretrain_cat = torch.cat([x_grad, x_fea], dim=1)
+        x__branch_pretrain_cat = self._branch_pretrain_concat(x__branch_pretrain_cat)
         x__branch_pretrain_cat, a4 = self._branch_pretrain_sw(x__branch_pretrain_cat, True)
-        x_out = self._branch_pretrain_concat(x__branch_pretrain_cat)
-        x_out = self._branch_pretrain_HR_conv0(x_out)
+        x_out = self._branch_pretrain_HR_conv0(x__branch_pretrain_cat)
         x_out = self._branch_pretrain_HR_conv1(x_out)
+
+        self.attentions = [a1, a2, a3, a4]
 
         return x_out_branch, x_out, x_grad
 
