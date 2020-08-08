@@ -9,6 +9,7 @@ from models.archs.SwitchedResidualGenerator_arch import MultiConvBlock, ConvBasi
 from switched_conv_util import save_attention_to_image_rgb
 from switched_conv import compute_attention_specificity
 import functools
+import os
 
 
 class ImageGradient(nn.Module):
