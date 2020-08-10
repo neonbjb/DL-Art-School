@@ -531,7 +531,7 @@ class SwitchedSpsr(nn.Module):
             temp = max(1, 1 + self.init_temperature *
                        (self.final_temperature_step - step) / self.final_temperature_step)
             self.set_temperature(temp)
-            if step % 10 == 0:
+            if step % 200 == 0:
                 output_path = os.path.join(experiments_path, "attention_maps", "a%i")
                 prefix = "attention_map_%i_%%i.png" % (step,)
                 [save_attention_to_image_rgb(output_path % (i,), self.attentions[i], self.transformation_counts, prefix, step) for i in range(len(self.attentions))]
@@ -546,8 +546,6 @@ class SwitchedSpsr(nn.Module):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
-
-
 
 
 class SwitchedSpsrLr(nn.Module):
@@ -657,7 +655,7 @@ class SwitchedSpsrLr(nn.Module):
             temp = max(1, 1 + self.init_temperature *
                        (self.final_temperature_step - step) / self.final_temperature_step)
             self.set_temperature(temp)
-            if step % 10 == 0:
+            if step % 200 == 0:
                 output_path = os.path.join(experiments_path, "attention_maps", "a%i")
                 prefix = "attention_map_%i_%%i.png" % (step,)
                 [save_attention_to_image_rgb(output_path % (i,), self.attentions[i], self.transformation_counts, prefix, step) for i in range(len(self.attentions))]
