@@ -134,11 +134,13 @@ class ConfigurableSwitchComputer(nn.Module):
         # depending on its needs.
         self.psc_scale = nn.Parameter(torch.full((1,), float(.1)))
 
-    def forward(self, x, output_attention_weights=False, att_in=None, fixed_scale=1):
+    def forward(self, x, output_attention_weights=False, identity=None, att_in=None, fixed_scale=1):
         if att_in is None:
             att_in = x
 
-        identity = x
+        if identity is None:
+            identity = x
+
         if self.add_noise:
             rand_feature = torch.randn_like(x) * self.noise_scale
             x = x + rand_feature

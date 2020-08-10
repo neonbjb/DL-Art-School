@@ -113,6 +113,8 @@ def define_G(opt, net_key='network_G'):
                             nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == "spsr_switched":
         netG = spsr.SwitchedSpsr(in_nc=3, out_nc=3, nf=opt_net['nf'], upscale=opt_net['scale'])
+    elif which_model == "spsr_switched_lr":
+        netG = spsr.SwitchedSpsrLr(in_nc=3, out_nc=3, nf=opt_net['nf'], upscale=opt_net['scale'])
 
     # image corruption
     elif which_model == 'HighToLowResNet':
