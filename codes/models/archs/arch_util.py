@@ -433,6 +433,21 @@ class ConjoinBlock(nn.Module):
         return self.process(x)
 
 
+# Similar to ExpansionBlock2 but does not upsample.
+class ConjoinBlock2(nn.Module):
+    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True):
+        super(ConjoinBlock2, self).__init__()
+        if filters_out is None:
+            filters_out = filters_in
+        self.process = block(filters_in*2, filters_in*2, kernel_size=3, bias=False, activation=True, norm=norm)
+        self.decimate = block(filters_in*2, filters_out, kernel_size=1, bias=False, activation=False, norm=norm)
+
+    def forward(self, input, passthrough):
+        x = torch.cat([input, passthrough], dim=1)
+        x = self.process(x)
+        return self.decimate(x)
+
+
 # Basic convolutional upsampling block that uses interpolate.
 class UpconvBlock(nn.Module):
     def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True, activation=True, bias=False):

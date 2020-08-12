@@ -161,7 +161,7 @@ def main():
         current_step = resume_state['iter']
         model.resume_training(resume_state)  # handle optimizers and schedulers
     else:
-        current_step = 0
+        current_step = -1
         start_epoch = 0
 
     #### training
