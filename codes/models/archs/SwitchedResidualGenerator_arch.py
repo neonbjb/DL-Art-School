@@ -4,7 +4,7 @@ from switched_conv import BareConvSwitch, compute_attention_specificity, Attenti
 import torch.nn.functional as F
 import functools
 from collections import OrderedDict
-from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock
+from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2
 from models.archs.RRDBNet_arch import ResidualDenseBlock_5C, RRDB
 from models.archs.spinenet_arch import SpineNet
 from switched_conv_util import save_attention_to_image_rgb
@@ -47,13 +47,16 @@ class HalvingProcessingBlock(nn.Module):
 # This is a classic u-net architecture with the goal of assigning each individual pixel an individual transform
 # switching set.
 class ConvBasisMultiplexer(nn.Module):
-    def __init__(self, input_channels, base_filters, reductions, processing_depth, multiplexer_channels, use_gn=True):
+    def __init__(self, input_channels, base_filters, reductions, processing_depth, multiplexer_channels, use_gn=True, use_exp2=False):
         super(ConvBasisMultiplexer, self).__init__()
         self.filter_conv = ConvGnSilu(input_channels, base_filters, bias=True)
         self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(base_filters * 2 ** i) for i in range(reductions)])
         reduction_filters = base_filters * 2 ** reductions
         self.processing_blocks = nn.Sequential(OrderedDict([('block%i' % (i,), ConvGnSilu(reduction_filters, reduction_filters, bias=False)) for i in range(processing_depth)]))
-        self.expansion_blocks = nn.ModuleList([ExpansionBlock(reduction_filters // (2 ** i)) for i in range(reductions)])
+        if use_exp2:
+            self.expansion_blocks = nn.ModuleList([ExpansionBlock2(reduction_filters // (2 ** i)) for i in range(reductions)])
+        else:
+            self.expansion_blocks = nn.ModuleList([ExpansionBlock(reduction_filters // (2 ** i)) for i in range(reductions)])
 
         gap = base_filters - multiplexer_channels
         cbl1_out = ((base_filters - (gap // 2)) // 4) * 4   # Must be multiples of 4 to use with group norm.

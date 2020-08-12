@@ -494,10 +494,11 @@ class SRGANModel(BaseModel):
 
                 if self.spsr_enabled and self.cri_grad_gan:
                     if self.opt['train']['gan_type'] == 'crossgan':
-                        pred_g_fake_grad = self.netD(fake_H_grad, var_L)
+                        pred_g_fake_grad = self.netD_grad(fake_H_grad, var_L)
+                        pred_g_fake_grad_branch = self.netD_grad(fake_H_branch, var_L)
                     else:
-                        pred_g_fake_grad = self.netD(fake_H_grad)
-                    pred_g_fake_grad_branch = self.netD_grad(fake_H_branch)
+                        pred_g_fake_grad = self.netD_grad(fake_H_grad)
+                        pred_g_fake_grad_branch = self.netD_grad(fake_H_branch)
                     if self.opt['train']['gan_type'] in ['gan', 'pixgan', 'pixgan_fea', 'crossgan']:
                         l_g_gan_grad = self.l_gan_grad_w * self.cri_grad_gan(pred_g_fake_grad, True)
                         l_g_gan_grad_branch = self.l_gan_grad_w * self.cri_grad_gan(pred_g_fake_grad_branch, True)
@@ -685,19 +686,23 @@ class SRGANModel(BaseModel):
                 for p in self.netD_grad.parameters():
                     p.requires_grad = True
                 self.optimizer_D_grad.zero_grad()
-                for var_ref, fake_H, fake_H_grad_branch in zip(var_ref_skips, self.fake_H, self.spsr_grad_GenOut):
+                for var_L, var_ref, fake_H, fake_H_grad_branch in zip(self.var_L, var_ref_skips, self.fake_H, self.spsr_grad_GenOut):
                     fake_H_grad = self.get_grad_nopadding(fake_H).detach()
                     var_ref_grad = self.get_grad_nopadding(var_ref)
-                    pred_d_real_grad = self.netD_grad(var_ref_grad)
-                    pred_d_fake_grad = self.netD_grad(fake_H_grad)   # Tensor already detached above.
-                    # var_ref and fake_H already has noise added to it. We **must** add noise to fake_H_grad_branch too.
                     fake_H_grad_branch = fake_H_grad_branch.detach() + noise
-                    pred_d_fake_grad_branch = self.netD_grad(fake_H_grad_branch)
-                    if self.opt['train']['gan_type'] == 'gan':
+                    if self.opt['train']['gan_type'] == 'crossgan':
+                        pred_d_real_grad = self.netD_grad(var_ref_grad, var_L)
+                        pred_d_fake_grad = self.netD_grad(fake_H_grad, var_L)   # Tensor already detached above.
+                        # var_ref and fake_H already has noise added to it. We **must** add noise to fake_H_grad_branch too.
+                        pred_d_fake_grad_branch = self.netD_grad(fake_H_grad_branch, var_L)
+                    else:
+                        pred_d_real_grad = self.netD_grad(var_ref_grad)
+                        pred_d_fake_grad = self.netD_grad(fake_H_grad)   # Tensor already detached above.
+                        # var_ref and fake_H already has noise added to it. We **must** add noise to fake_H_grad_branch too.
+                        pred_d_fake_grad_branch = self.netD_grad(fake_H_grad_branch)
+                    if self.opt['train']['gan_type'] == 'gan' or self.opt['train']['gan_type'] == 'crossgan':
                         l_d_real_grad = self.cri_gan(pred_d_real_grad, True)
                         l_d_fake_grad = (self.cri_gan(pred_d_fake_grad, False) + self.cri_gan(pred_d_fake_grad_branch, False)) / 2
-                    elif self.opt['train']['gan_type'] == 'crossgan':
-                        assert False
                     elif self.opt['train']['gan_type'] == 'pixgan':
                         real = torch.ones_like(pred_d_real_grad)
                         fake = torch.zeros_like(pred_d_fake_grad)

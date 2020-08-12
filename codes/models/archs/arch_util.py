@@ -391,6 +391,30 @@ class ExpansionBlock(nn.Module):
         return self.process(x)
 
 
+# Block that upsamples 2x and reduces incoming filters by 2x. It preserves structure by taking a passthrough feed
+# along with the feature representation.
+# Differs from ExpansionBlock because it performs all processing in 2xfilter space and decimates at the last step.
+class ExpansionBlock2(nn.Module):
+    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu):
+        super(ExpansionBlock2, self).__init__()
+        if filters_out is None:
+            filters_out = filters_in // 2
+        self.decimate = block(filters_in, filters_out, kernel_size=1, bias=False, activation=False, norm=True)
+        self.process_passthrough = block(filters_out, filters_out, kernel_size=3, bias=True, activation=False, norm=True)
+        self.conjoin = block(filters_out*2, filters_out*2, kernel_size=3, bias=False, activation=True, norm=False)
+        self.reduce = block(filters_out*2, filters_out, kernel_size=3, bias=False, activation=True, norm=True)
+
+    # input is the feature signal with shape  (b, f, w, h)
+    # passthrough is the structure signal with shape (b, f/2, w*2, h*2)
+    # output is conjoined upsample with shape (b, f/2, w*2, h*2)
+    def forward(self, input, passthrough):
+        x = F.interpolate(input, scale_factor=2, mode="nearest")
+        x = self.decimate(x)
+        p = self.process_passthrough(passthrough)
+        x = self.conjoin(torch.cat([x, p], dim=1))
+        return self.reduce(x)
+
+
 # Similar to ExpansionBlock but does not upsample.
 class ConjoinBlock(nn.Module):
     def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True):
