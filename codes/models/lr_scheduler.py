@@ -5,6 +5,30 @@ import torch
 from torch.optim.lr_scheduler import _LRScheduler
 
 
+def get_scheduler_for_name(name, optimizers, scheduler_opt):
+    schedulers = []
+    for o in optimizers:
+        if name == 'MultiStepLR':
+            sched = MultiStepLR_Restart(o, scheduler_opt['gen_lr_steps'],
+                                             restarts=scheduler_opt['restarts'],
+                                             weights=scheduler_opt['restart_weights'],
+                                             gamma=scheduler_opt['lr_gamma'],
+                                             clear_state=scheduler_opt['clear_state'],
+                                             force_lr=scheduler_opt['force_lr'])
+        elif name == 'ProgressiveMultiStepLR':
+            sched = ProgressiveMultiStepLR(o, scheduler_opt['gen_lr_steps'],
+                                             scheduler_opt['progressive_starts'],
+                                             scheduler_opt['lr_gamma'])
+        elif name == 'CosineAnnealingLR_Restart':
+            sched = CosineAnnealingLR_Restart(
+                        o, scheduler_opt['T_period'], eta_min=scheduler_opt['eta_min'],
+                        restarts=scheduler_opt['restarts'], weights=scheduler_opt['restart_weights'])
+        else:
+            raise NotImplementedError('Scheduler not available')
+        schedulers.append(sched)
+    return schedulers
+
+
 # This scheduler is specifically designed to modulate the learning rate of several different param groups configured
 # by a generator or discriminator that slowly adds new stages one at a time, e.g. like progressive growing of GANs.
 class ProgressiveMultiStepLR(_LRScheduler):
