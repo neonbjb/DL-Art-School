@@ -1,6 +1,6 @@
 
 
-def create_step(opt_step):
+def create_step(opt, opt_step, netsG, netsD):
     pass
 
 
