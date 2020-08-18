@@ -228,11 +228,11 @@ class SPSRNet(nn.Module):
         x_out = self._branch_pretrain_HR_conv1(x_out)
         
         #########
-        return x_out_branch, x_out, x_grad
+        return x_out_branch, x_out, x_gradn
 
 
 class SwitchedSpsr(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, upscale=4):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4):
         super(SwitchedSpsr, self).__init__()
         n_upscale = int(math.log(upscale, 2))
 
@@ -241,7 +241,7 @@ class SwitchedSpsr(nn.Module):
         switch_filters = nf
         switch_reductions = 3
         switch_processing_layers = 2
-        self.transformation_counts = 8
+        self.transformation_counts = xforms
         multiplx_fn = functools.partial(ConvBasisMultiplexer, transformation_filters, switch_filters, switch_reductions,
                                         switch_processing_layers, self.transformation_counts, use_exp2=True)
         pretransform_fn = functools.partial(ConvGnLelu, transformation_filters, transformation_filters, norm=False, bias=False, weight_init_factor=.1)
