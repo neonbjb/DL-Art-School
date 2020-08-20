@@ -113,7 +113,8 @@ def define_G(opt, net_key='network_G'):
                             nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == "spsr_switched":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.SwitchedSpsr(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'])
+        netG = spsr.SwitchedSpsr(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
 
     # image corruption
     elif which_model == 'HighToLowResNet':

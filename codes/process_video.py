@@ -123,6 +123,7 @@ if __name__ == "__main__":
     minivid_crf = opt['minivid_crf']
     vid_output = opt['mini_vid_output_folder'] if 'mini_vid_output_folder' in opt.keys() else dataset_dir
     vid_counter = opt['minivid_start_no'] if 'minivid_start_no' in opt.keys() else 0
+    img_index = opt['generator_img_index']
     ffmpeg_proc = None
 
     tq = tqdm(test_loader)
@@ -132,7 +133,7 @@ if __name__ == "__main__":
         model.test()
 
         if isinstance(model.fake_H, tuple):
-            visuals = model.fake_H[0].detach().float().cpu()
+            visuals = model.fake_H[img_index].detach().float().cpu()
         else:
             visuals = model.fake_H.detach().float().cpu()
         for i in range(visuals.shape[0]):
