@@ -13,6 +13,8 @@ def create_model(opt):
         from .feature_model import FeatureModel as M
     elif model == 'spsr':
         from .SPSR_model import SPSRModel as M
+    elif model == 'extensibletrainer':
+        from .ExtensibleTrainer import ExtensibleTrainer as M
     else:
         raise NotImplementedError('Model [{:s}] not recognized.'.format(model))
     m = M(opt)

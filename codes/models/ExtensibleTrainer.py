@@ -1,22 +1,18 @@
 import logging
-from collections import OrderedDict
-import torch
-import torch.nn as nn
-from torch.nn.parallel import DataParallel, DistributedDataParallel
-import models.networks as networks
-from models.steps.steps import create_step
-import models.lr_scheduler as lr_scheduler
-from models.base_model import BaseModel
-from models.loss import GANLoss, FDPLLoss
-from apex import amp
-from data.weight_scheduler import get_scheduler_for_opt
-from .archs.SPSR_arch import ImageGradient, ImageGradientNoPadding
-import torch.nn.functional as F
-import glob
-import random
-
-import torchvision.utils as utils
 import os
+import random
+from collections import OrderedDict
+
+import torch
+import torch.nn.functional as F
+import torchvision.utils as utils
+from apex import amp
+from torch.nn.parallel import DataParallel, DistributedDataParallel
+
+import models.lr_scheduler as lr_scheduler
+import models.networks as networks
+from models.base_model import BaseModel
+from models.steps.steps import ConfigurableStep
 
 logger = logging.getLogger('base')
 
@@ -31,15 +27,20 @@ class ExtensibleTrainer(BaseModel):
         train_opt = opt['train']
         self.mega_batch_factor = 1
 
+        # env is used as a global state to store things that subcomponents might need.
+        env = {'device': self.device,
+               'rank': self.rank,
+               'opt': opt}
+
         self.netsG = {}
         self.netsD = {}
         self.networks = []
         for name, net in opt['networks'].items():
             if net['type'] == 'generator':
-                new_net = networks.define_G(net)
+                new_net = networks.define_G(net, None, opt['scale']).to(self.device)
                 self.netsG[name] = new_net
             elif net['type'] == 'discriminator':
-                new_net = networks.define_D(net)
+                new_net = networks.define_D_net(net, opt['datasets']['train']['target_size']).to(self.device)
                 self.netsD[name] = new_net
             else:
                 raise NotImplementedError("Can only handle generators and discriminators")
@@ -51,7 +52,7 @@ class ExtensibleTrainer(BaseModel):
                 self.mega_batch_factor = 1
 
             # Initialize amp.
-            amp_nets, amp_opts = amp.initialize(self.networks, self.optimizers, opt_level=opt['amp_level'], num_losses=len(self.optimizers))
+            amp_nets, amp_opts = amp.initialize(self.networks, self.optimizers, opt_level=opt['amp_opt_level'], num_losses=len(opt['steps']))
             # self.networks is stored unwrapped. It should never be used for forward() or backward() passes, instead use
             # self.netG and self.netD for that.
             self.networks = amp_nets
@@ -76,15 +77,18 @@ class ExtensibleTrainer(BaseModel):
             for dnet in dnets:
                 for net_dict in [self.netsD, self.netsG]:
                     for k, v in net_dict.items():
-                        if v == dnet:
+                        if v == dnet.module:
                             net_dict[k] = dnet
                             found += 1
             assert found == len(self.networks)
 
+            env['generators'] = self.netsG
+            env['discriminators'] = self.netsD
+
             # Initialize the training steps
             self.steps = []
-            for step in opt['steps']:
-                step = create_step(step, self.netsG, self.netsD)
+            for step_name, step in opt['steps'].items():
+                step = ConfigurableStep(step, env)
                 self.steps.append(step)
                 self.optimizers.extend(step.get_optimizers())
 
@@ -113,8 +117,8 @@ class ExtensibleTrainer(BaseModel):
                 net.update_for_step(step, os.path.join(self.opt['path']['models'], ".."))
 
         # Iterate through the steps, performing them one at a time.
-        state = {'lr': self.var_L, 'hr': self.var_H, 'ref': self.var_ref}
-        for s in self.steps:
+        state = {'lq': self.var_L, 'hq': self.var_H, 'ref': self.var_ref}
+        for step_num, s in enumerate(self.steps):
             # Only set requires_grad=True for the network being trained.
             nets_to_train = s.get_networks_trained()
             for name, net in self.networks.items():
@@ -126,8 +130,20 @@ class ExtensibleTrainer(BaseModel):
                         p.requires_grad = False
 
             # Now do a forward and backward pass for each gradient accumulation step.
+            new_states = {}
             for m in range(self.mega_batch_factor):
-                state = s.do_forward_backward(state, m)
+                ns = s.do_forward_backward(state, m, step_num)
+                for k, v in ns.items():
+                    if k not in new_states.keys():
+                        new_states[k] = [v.detach()]
+                    else:
+                        new_states[k].append(v.detach())
+
+            # Push the detached new state tensors into the state map for use with the next step.
+            for k, v in new_states.items():
+                # Overwriting existing state keys is not supported.
+                assert k not in state.keys()
+                state[k] = v
 
             # And finally perform optimization.
             s.do_step()

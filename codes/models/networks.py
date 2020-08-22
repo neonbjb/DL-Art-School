@@ -17,10 +17,14 @@ import functools
 from collections import OrderedDict
 
 # Generator
-def define_G(opt, net_key='network_G'):
-    opt_net = opt[net_key]
+def define_G(opt, net_key='network_G', scale=None):
+    if net_key is not None:
+        opt_net = opt[net_key]
+    else:
+        opt_net = opt
+    if scale is None:
+        scale = opt['scale']
     which_model = opt_net['which_model_G']
-    scale = opt['scale']
 
     # image restoration
     if which_model == 'MSRResNet':
