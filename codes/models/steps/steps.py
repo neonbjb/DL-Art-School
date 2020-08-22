@@ -72,7 +72,7 @@ class ConfigurableStep(Module):
     # Performs all forward and backward passes for this step given an input state. All input states are lists of
     # chunked tensors. Use grad_accum_step to dereference these steps. Should return a dict of tensors that later
     # steps might use. These tensors are automatically detached and accumulated into chunks.
-    def do_forward_backward(self, state, grad_accum_step, amp_loss_id):
+    def do_forward_backward(self, state, grad_accum_step, amp_loss_id, backward=True):
         # First, do a forward pass with the generator.
         results = self.gen(state[self.step_opt['generator_input']][grad_accum_step])
         # Extract the resultants into a "new_state" dict per the configuration.
@@ -92,17 +92,18 @@ class ConfigurableStep(Module):
             local_state.update(injected)
             new_state.update(injected)
 
-        # Finally, compute the losses.
-        total_loss = 0
-        for loss_name, loss in self.losses.items():
-            l = loss(self.training_net, local_state)
-            self.loss_accumulator.add_loss(loss_name, l)
-            total_loss += l * self.weights[loss_name]
-        self.loss_accumulator.add_loss("total", total_loss)
+        if backward:
+            # Finally, compute the losses.
+            total_loss = 0
+            for loss_name, loss in self.losses.items():
+                l = loss(self.training_net, local_state)
+                self.loss_accumulator.add_loss(loss_name, l)
+                total_loss += l * self.weights[loss_name]
+            self.loss_accumulator.add_loss("total", total_loss)
 
-        # Get dem grads!
-        with amp.scale_loss(total_loss, self.optimizers, amp_loss_id) as scaled_loss:
-            scaled_loss.backward()
+            # Get dem grads!
+            with amp.scale_loss(total_loss, self.optimizers, amp_loss_id) as scaled_loss:
+                scaled_loss.backward()
 
         return new_state
 

@@ -63,7 +63,7 @@ class SPSRModel(BaseModel):
                 logger.info('Remove feature loss.')
                 self.cri_fea = None
             if self.cri_fea:  # load VGG perceptual loss
-                self.netF = networks.define_F(opt, use_bn=False).to(self.device)
+                self.netF = networks.define_F(use_bn=False).to(self.device)
 
             # GD gan loss
             self.cri_gan = GANLoss(train_opt['gan_type'], 1.0, 0.0).to(self.device)

@@ -20,8 +20,8 @@ class FeatureModel(BaseModel):
             self.rank = -1  # non dist training
         train_opt = opt['train']
 
-        self.fea_train = networks.define_F(opt, for_training=True).to(self.device)
-        self.net_ref = networks.define_F(opt).to(self.device)
+        self.fea_train = networks.define_F(for_training=True).to(self.device)
+        self.net_ref = networks.define_F().to(self.device)
 
         self.load()
 

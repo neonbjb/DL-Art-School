@@ -132,10 +132,10 @@ class SRGANModel(BaseModel):
                 logger.info('Remove feature loss.')
                 self.cri_fea = None
             if self.cri_fea:  # load VGG perceptual loss
-                self.netF = networks.define_F(opt, use_bn=False).to(self.device)
+                self.netF = networks.define_F(use_bn=False).to(self.device)
                 self.lr_netF = None
                 if 'lr_fea_path' in train_opt.keys():
-                    self.lr_netF = networks.define_F(opt, use_bn=False, load_path=train_opt['lr_fea_path']).to(self.device)
+                    self.lr_netF = networks.define_F(use_bn=False, load_path=train_opt['lr_fea_path']).to(self.device)
                     self.disjoint_data = True
 
                 if opt['dist']:

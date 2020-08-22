@@ -20,7 +20,7 @@ def create_generator_loss(opt_loss, env):
 
 class ConfigurableLoss(nn.Module):
     def __init__(self, opt, env):
-        super(self, ConfigurableLoss).__init__()
+        super(ConfigurableLoss, self).__init__()
         self.opt = opt
         self.env = env
 
@@ -30,16 +30,16 @@ class ConfigurableLoss(nn.Module):
 
 def get_basic_criterion_for_name(name, device):
     if name == 'l1':
-        return nn.L1Loss(device=device)
+        return nn.L1Loss().to(device)
     elif name == 'l2':
-        return nn.MSELoss(device=device)
+        return nn.MSELoss().to(device)
     else:
         raise NotImplementedError
 
 
 class PixLoss(ConfigurableLoss):
     def __init__(self, opt, env):
-        super(self, PixLoss).__init__(opt, env)
+        super(PixLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
 
@@ -49,21 +49,21 @@ class PixLoss(ConfigurableLoss):
 
 class FeatureLoss(ConfigurableLoss):
     def __init__(self, opt, env):
-        super(self, FeatureLoss).__init__(opt, env)
+        super(FeatureLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
-        self.netF = define_F(opt).to(self.env['device'])
+        self.netF = define_F(which_model=opt['which_model_F']).to(self.env['device'])
 
     def forward(self, net, state):
         with torch.no_grad():
             logits_real = self.netF(state[self.opt['real']])
-            logits_fake = self.netF(state[self.opt['fake']])
+        logits_fake = self.netF(state[self.opt['fake']])
         return self.criterion(logits_fake, logits_real)
 
 
 class GeneratorGanLoss(ConfigurableLoss):
     def __init__(self, opt, env):
-        super(self, GeneratorGanLoss).__init__(opt, env)
+        super(GeneratorGanLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = GANLoss(opt['gan_type'], 1.0, 0.0).to(env['device'])
         self.netD = env['discriminators'][opt['discriminator']]
@@ -86,7 +86,7 @@ class GeneratorGanLoss(ConfigurableLoss):
 
 class DiscriminatorGanLoss(ConfigurableLoss):
     def __init__(self, opt, env):
-        super(self, DiscriminatorGanLoss).__init__(opt, env)
+        super(DiscriminatorGanLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = GANLoss(opt['gan_type'], 1.0, 0.0).to(env['device'])
 
