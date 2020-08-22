@@ -195,7 +195,6 @@ def define_fixed_D(opt):
 
 # Define network used for perceptual loss
 def define_F(which_model='vgg', use_bn=False, for_training=False, load_path=None):
-    device = torch.device('cuda' if gpu_ids else 'cpu')
     if which_model == 'vgg':
         # PyTorch pretrained VGG19-54, before ReLU.
         if use_bn:
