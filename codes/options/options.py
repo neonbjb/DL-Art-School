@@ -112,14 +112,21 @@ def check_resume(opt, resume_iter):
                 'pretrain_model_D', None) is not None:
             logger.warning('pretrain_model path will be ignored when resuming training.')
 
-        opt['path']['pretrain_model_G'] = osp.join(opt['path']['models'],
-                                                   '{}_G.pth'.format(resume_iter))
-        logger.info('Set [pretrain_model_G] to ' + opt['path']['pretrain_model_G'])
-        if 'gan' in opt['model'] or 'spsr' in opt['model']:
-            opt['path']['pretrain_model_D'] = osp.join(opt['path']['models'],
-                                                       '{}_D.pth'.format(resume_iter))
-            logger.info('Set [pretrain_model_D] to ' + opt['path']['pretrain_model_D'])
-        if 'spsr' in opt['model']:
-            opt['path']['pretrain_model_D_grad'] = osp.join(opt['path']['models'],
-                                                       '{}_D_grad.pth'.format(resume_iter))
-            logger.info('Set [pretrain_model_D_grad] to ' + opt['path']['pretrain_model_D_grad'])
+        if opt['model'] == 'extensibletrainer':
+            for k in opt['networks'].keys():
+                pt_key = 'pretrain_model_%s' % (k,)
+                opt['path'][pt_key] = osp.join(opt['path']['models'],
+                                          '{}_{}.pth'.format(resume_iter, k))
+                logger.info('Set model [%s] to %s' % (k, opt['path'][pt_key]))
+        else:
+            opt['path']['pretrain_model_G'] = osp.join(opt['path']['models'],
+                                                       '{}_G.pth'.format(resume_iter))
+            logger.info('Set [pretrain_model_G] to ' + opt['path']['pretrain_model_G'])
+            if 'gan' in opt['model'] or 'spsr' in opt['model']:
+                opt['path']['pretrain_model_D'] = osp.join(opt['path']['models'],
+                                                           '{}_D.pth'.format(resume_iter))
+                logger.info('Set [pretrain_model_D] to ' + opt['path']['pretrain_model_D'])
+            if 'spsr' in opt['model']:
+                opt['path']['pretrain_model_D_grad'] = osp.join(opt['path']['models'],
+                                                           '{}_D_grad.pth'.format(resume_iter))
+                logger.info('Set [pretrain_model_D_grad] to ' + opt['path']['pretrain_model_D_grad'])

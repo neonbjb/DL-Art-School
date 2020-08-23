@@ -2,7 +2,7 @@ import torch
 
 # Utility class that stores detached, named losses in a rotating buffer for smooth metric outputting.
 class LossAccumulator:
-    def __init__(self, buffer_sz=10):
+    def __init__(self, buffer_sz=50):
         self.buffer_sz = buffer_sz
         self.buffers = {}
 
@@ -15,6 +15,6 @@ class LossAccumulator:
 
     def as_dict(self):
         result = {}
-        for k, v in self.buffers:
-            result["loss_" + k] = torch.mean(v)
+        for k, v in self.buffers.items():
+            result["loss_" + k] = torch.mean(v[1])
         return result

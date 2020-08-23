@@ -223,10 +223,10 @@ def define_F(which_model='vgg', use_bn=False, for_training=False, load_path=None
                 load_net_clean[k] = v
         netF.load_state_dict(load_net_clean)
 
+    if not for_training:
         # Put into eval mode, freeze the parameters and set the 'weight' field.
         netF.eval()
         for k, v in netF.named_parameters():
             v.requires_grad = False
-        netF.fdisc_weight = opt['weight']
 
     return netF

@@ -19,11 +19,9 @@ class ConfigurableStep(Module):
         self.step_opt = opt_step
         self.env = env
         self.opt = env['opt']
-        self.gen = env['generators'][opt_step['generator']]
-        self.discs = env['discriminators']
         self.gen_outputs = opt_step['generator_outputs']
-        self.training_net = env['generators'][opt_step['training']] if opt_step['training'] in env['generators'].keys() else env['discriminators'][opt_step['training']]
         self.loss_accumulator = LossAccumulator()
+        self.optimizers = None
 
         self.injectors = []
         if 'injectors' in self.step_opt.keys():
@@ -37,12 +35,13 @@ class ConfigurableStep(Module):
             self.weights[loss_name] = loss['weight']
         self.losses = OrderedDict(losses)
 
-        # Intentionally abstract so subclasses can have alternative optimizers.
-        self.define_optimizers()
-
     # Subclasses should override this to define individual optimizers. They should all go into self.optimizers.
     #  This default implementation defines a single optimizer for all Generator parameters.
+    #  Must be called after networks are initialized and wrapped.
     def define_optimizers(self):
+        self.training_net = self.env['generators'][self.step_opt['training']] \
+            if self.step_opt['training'] in self.env['generators'].keys() \
+            else self.env['discriminators'][self.step_opt['training']]
         optim_params = []
         for k, v in self.training_net.named_parameters():  # can optimize for a part of the model
             if v.requires_grad:
@@ -73,12 +72,7 @@ class ConfigurableStep(Module):
     # chunked tensors. Use grad_accum_step to dereference these steps. Should return a dict of tensors that later
     # steps might use. These tensors are automatically detached and accumulated into chunks.
     def do_forward_backward(self, state, grad_accum_step, amp_loss_id, backward=True):
-        # First, do a forward pass with the generator.
-        results = self.gen(state[self.step_opt['generator_input']][grad_accum_step])
-        # Extract the resultants into a "new_state" dict per the configuration.
         new_state = {}
-        for i, gen_out in enumerate(self.gen_outputs):
-            new_state[gen_out] = results[i]
 
         # Prepare a de-chunked state dict which will be used for the injectors & losses.
         local_state = {}
@@ -97,16 +91,25 @@ class ConfigurableStep(Module):
             total_loss = 0
             for loss_name, loss in self.losses.items():
                 l = loss(self.training_net, local_state)
-                self.loss_accumulator.add_loss(loss_name, l)
                 total_loss += l * self.weights[loss_name]
-            self.loss_accumulator.add_loss("total", total_loss)
+                # Record metrics.
+                self.loss_accumulator.add_loss(loss_name, l)
+                for n, v in loss.extra_metrics():
+                    self.loss_accumulator.add_loss("%s_%s" % (loss_name, n), v)
+            self.loss_accumulator.add_loss("%s_total" % (self.step_opt['training'],), total_loss)
+            # Scale the loss down by the accumulation factor.
+            total_loss = total_loss / self.env['mega_batch_factor']
 
             # Get dem grads!
             with amp.scale_loss(total_loss, self.optimizers, amp_loss_id) as scaled_loss:
                 scaled_loss.backward()
 
+        # Detach all state variables. Within the step, gradients can flow. Once these variables leave the step
+        # we must release the gradients.
+        for k, v in new_state.items():
+            if isinstance(v, torch.Tensor):
+                new_state[k] = v.detach()
         return new_state
-
 
     # Performs the optimizer step after all gradient accumulation is completed. Default implementation simply steps()
     # all self.optimizers.

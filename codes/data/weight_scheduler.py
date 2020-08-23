@@ -48,6 +48,8 @@ def get_scheduler_for_opt(opt):
         return LinearDecayWeightScheduler(opt['initial_weight'], opt['steps'], opt['lower_bound'], opt['start_step'])
     elif opt['type'] == 'sinusoidal':
         return SinusoidalWeightScheduler(opt['upper_weight'], opt['lower_weight'], opt['period'], opt['start_step'])
+    else:
+        raise NotImplementedError
 
 
 # Do some testing.

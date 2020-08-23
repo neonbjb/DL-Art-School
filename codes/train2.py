@@ -161,7 +161,7 @@ def main():
         current_step = resume_state['iter']
         model.resume_training(resume_state)  # handle optimizers and schedulers
     else:
-        current_step = -1 if 'start_step' not in opt.keys() else opt['start_step']
+        current_step = 0 if 'start_step' not in opt.keys() else opt['start_step']
         start_epoch = 0
 
     #### training
@@ -215,7 +215,7 @@ def main():
                     logger.info(message)
             #### validation
             if opt['datasets'].get('val', None) and current_step % opt['train']['val_freq'] == 0:
-                if opt['model'] in ['sr', 'srgan', 'corruptgan', 'spsrgan'] and rank <= 0:  # image restoration validation
+                if opt['model'] in ['sr', 'srgan', 'corruptgan', 'spsrgan', 'extensibletrainer'] and rank <= 0:  # image restoration validation
                     model.force_restore_swapout()
                     val_batch_sz = 1 if 'batch_size' not in opt['datasets']['val'].keys() else opt['datasets']['val']['batch_size']
                     # does not support multi-GPU validation

@@ -385,7 +385,7 @@ class SRGANModel(BaseModel):
             print("Misc setup %f" % (time() - _t,))
             _t = time()
 
-        if step >= self.D_init_iters:
+        if step >= self.init_iters:
             self.optimizer_G.zero_grad()
         self.fake_GenOut = []
         self.fea_GenOut = []
