@@ -178,6 +178,9 @@ class SRGANModel(BaseModel):
                 if self.use_corrupted_feature_input:
                     logger.info("Corrupting inputs into the feature network..")
                     self.feature_corruptor = GaussianBlur()
+                else:
+                    logger.info("Using normal inputs into feature network..")
+                    print(train_opt)
                 self.netF = networks.define_F(use_bn=False).to(self.device)
                 self.lr_netF = None
                 if 'lr_fea_path' in train_opt.keys():
