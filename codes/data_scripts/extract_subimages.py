@@ -20,12 +20,12 @@ def main():
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\flickr2k\\Flickr2K_HR'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\flickr2k\\1024px'
-        opt['crop_sz'] = 1024  # the size of each sub-image
-        opt['step'] = 880  # step of the sliding crop window
-        opt['thres_sz'] = 240  # size threshold
-        opt['resize_final_img'] = 1
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\images'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\square_context'
+        opt['crop_sz'] = 4096  # the size of each sub-image
+        opt['step'] = 4096  # step of the sliding crop window
+        opt['thres_sz'] = 256  # size threshold
+        opt['resize_final_img'] = .5
         opt['only_resize'] = False
         extract_single(opt, split_img)
     elif mode == 'pair':
@@ -93,6 +93,8 @@ def extract_single(opt, split_img=False):
 
     pool = Pool(opt['n_thread'])
     for path in img_list:
+        # If this fails, change it and the imwrite below to the write extension.
+        assert ".jpg" in path
         if split_img:
             pool.apply_async(worker, args=(path, opt, True, False), callback=update)
             pool.apply_async(worker, args=(path, opt, True, True), callback=update)
@@ -122,7 +124,6 @@ def worker(path, opt, split_mode=False, left_img=True):
     # Uncomment to filter any image that doesnt meet a threshold size.
     if min(h,w) < 1024:
         return
-
     left = 0
     right = w
     if split_mode:
@@ -163,8 +164,6 @@ def worker(path, opt, split_mode=False, left_img=True):
             else:
                 crop_img = img[x:x + crop_sz, y:y + crop_sz, :]
             crop_img = np.ascontiguousarray(crop_img)
-            # If this fails, change it and the imwrite below to the write extension.
-            assert ".png" in img_name
             if 'resize_final_img' in opt.keys():
                 # Resize too.
                 resize_factor = opt['resize_final_img']
@@ -173,7 +172,7 @@ def worker(path, opt, split_mode=False, left_img=True):
                 crop_img = cv2.resize(crop_img, dsize, interpolation = cv2.INTER_AREA)
             cv2.imwrite(
                 osp.join(opt['save_folder'],
-                         img_name.replace('.png', '_l{:05d}_s{:03d}.png'.format(left, index))), crop_img,
+                         img_name.replace('.jpg', '_l{:05d}_s{:03d}.png'.format(left, index))), crop_img,
                 [cv2.IMWRITE_PNG_COMPRESSION, opt['compression_level']])
     return 'Processing {:s} ...'.format(img_name)
 

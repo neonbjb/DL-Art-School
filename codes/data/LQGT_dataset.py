@@ -218,8 +218,9 @@ class LQGTDataset(data.Dataset):
         if img_GAN is not None:
             img_GAN = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GAN, (2, 0, 1)))).float()
 
-        lq_noise = torch.randn_like(img_LQ) * self.opt['lq_noise'] / 255
-        img_LQ += lq_noise
+        if 'lq_noise' in self.opt.keys():
+            lq_noise = torch.randn_like(img_LQ) * self.opt['lq_noise'] / 255
+            img_LQ += lq_noise
 
         if LQ_path is None:
             LQ_path = GT_path
