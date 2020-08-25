@@ -268,7 +268,7 @@ class SRGANModel(BaseModel):
                 self.get_grad_nopadding = ImageGradientNoPadding().to(self.device)
                 [self.netG, self.netD, self.netD_grad, self.get_grad_nopadding], \
                 [self.optimizer_G, self.optimizer_D, self.optimizer_D_grad] = \
-                    amp.initialize([self.netG, self.netD, self.netD_grad, self.get_grad, self.get_grad_nopadding],
+                    amp.initialize([self.netG, self.netD, self.netD_grad, self.get_grad_nopadding],
                                    [self.optimizer_G, self.optimizer_D, self.optimizer_D_grad],
                                    opt_level=self.amp_level, num_losses=3)
             else:
