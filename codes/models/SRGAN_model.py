@@ -840,7 +840,7 @@ class SRGANModel(BaseModel):
             self.add_log_entry('l_d_fake', l_d_fake_log.detach().item())
             self.add_log_entry('D_fake', torch.mean(pred_d_fake.detach()))
             self.add_log_entry('D_diff', torch.mean(pred_d_fake.detach()) - torch.mean(pred_d_real.detach()))
-            if self.spsr_enabled and self.l_gan_grad_w > 0:
+            if self.spsr_enabled and self.cri_grad_gan > 0:
                 self.add_log_entry('l_d_real_grad', l_d_real_grad.detach().item())
                 self.add_log_entry('l_d_fake_grad', l_d_fake_grad.detach().item())
                 self.add_log_entry('D_fake_grad', torch.mean(pred_d_fake_grad.detach()))
