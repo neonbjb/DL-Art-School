@@ -77,7 +77,7 @@ class SRGANModel(BaseModel):
         if self.is_train:
             self.netD = networks.define_D(opt).to(self.device)
             if self.spsr_enabled:
-                self.netD_grad = networks.define_D(opt).to(self.device)  # D_grad
+                self.netD_grad = networks.define_D(opt, wrap=True).to(self.device)  # D_grad
 
         if 'network_C' in opt.keys():
             self.netC = networks.define_G(opt, net_key='network_C').to(self.device)
