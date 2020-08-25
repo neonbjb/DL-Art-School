@@ -135,12 +135,12 @@ class LQGTDataset(data.Dataset):
         # Enforce force_resize constraints.
         h, w, _ = img_LQ.shape
         if h % self.force_multiple != 0 or w % self.force_multiple != 0:
-            h, w = (w - w % self.force_multiple), (h - h % self.force_multiple)
-            img_LQ = cv2.resize(img_LQ, (h, w))
+            h, w = (h - h % self.force_multiple), (w - w % self.force_multiple)
+            img_LQ = img_LQ[:h, :w, :]
             h *= scale
             w *= scale
-            img_GT = cv2.resize(img_GT, (h, w))
-            img_PIX = cv2.resize(img_LQ, (h, w))
+            img_GT = img_GT[:h, :w, :]
+            img_PIX = img_PIX[:h, :w, :]
 
         if self.opt['phase'] == 'train':
             H, W, _ = img_GT.shape
