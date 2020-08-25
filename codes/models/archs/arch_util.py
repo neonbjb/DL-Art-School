@@ -415,32 +415,16 @@ class ExpansionBlock2(nn.Module):
         return self.reduce(x)
 
 
-# Similar to ExpansionBlock but does not upsample.
+# Similar to ExpansionBlock2 but does not upsample.
 class ConjoinBlock(nn.Module):
-    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True):
+    def __init__(self, filters_in, filters_out=None, filters_pt=None, block=ConvGnSilu, norm=True):
         super(ConjoinBlock, self).__init__()
         if filters_out is None:
             filters_out = filters_in
-        self.decimate = block(filters_in*2, filters_out, kernel_size=1, bias=False, activation=False, norm=norm)
-        self.process = block(filters_out, filters_out, kernel_size=3, bias=False, activation=True, norm=norm)
-
-    # input is the feature signal with shape  (b, f, w, h)
-    # passthrough is the structure signal with shape (b, f/2, w*2, h*2)
-    # output is conjoined upsample with shape (b, f/2, w*2, h*2)
-    def forward(self, input, passthrough):
-        x = torch.cat([input, passthrough], dim=1)
-        x = self.decimate(x)
-        return self.process(x)
-
-
-# Similar to ExpansionBlock2 but does not upsample.
-class ConjoinBlock2(nn.Module):
-    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True):
-        super(ConjoinBlock2, self).__init__()
-        if filters_out is None:
-            filters_out = filters_in
-        self.process = block(filters_in*2, filters_in*2, kernel_size=3, bias=False, activation=True, norm=norm)
-        self.decimate = block(filters_in*2, filters_out, kernel_size=1, bias=False, activation=False, norm=norm)
+        if filters_pt is None:
+            filters_pt = filters_in
+        self.process = block(filters_in + filters_pt, filters_in + filters_pt, kernel_size=3, bias=False, activation=True, norm=norm)
+        self.decimate = block(filters_in + filters_pt, filters_out, kernel_size=1, bias=False, activation=False, norm=norm)
 
     def forward(self, input, passthrough):
         x = torch.cat([input, passthrough], dim=1)

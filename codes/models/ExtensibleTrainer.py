@@ -127,6 +127,11 @@ class ExtensibleTrainer(BaseModel):
         input_ref = data['ref'] if 'ref' in data else data['GT']
         self.ref = [t.to(self.device) for t in torch.chunk(input_ref, chunks=self.mega_batch_factor, dim=0)]
 
+        self.dstate = {'lq': self.lq, 'hq': self.hq, 'ref': self.ref}
+        for k, v in data.items():
+            if k not in ['LQ', 'ref', 'GT'] and isinstance(v, torch.Tensor):
+                self.dstate[k] = [t.to(self.device) for t in torch.chunk(v, chunks=self.mega_batch_factor, dim=0)]
+
     def optimize_parameters(self, step):
         self.env['step'] = step
 
@@ -136,7 +141,7 @@ class ExtensibleTrainer(BaseModel):
                 net.update_for_step(step, os.path.join(self.opt['path']['models'], ".."))
 
         # Iterate through the steps, performing them one at a time.
-        state = {'lq': self.lq, 'hq': self.hq, 'ref': self.ref}
+        state = self.dstate
         for step_num, s in enumerate(self.steps):
             # Only set requires_grad=True for the network being trained.
             nets_to_train = s.get_networks_trained()
@@ -195,7 +200,7 @@ class ExtensibleTrainer(BaseModel):
 
         with torch.no_grad():
             # Iterate through the steps, performing them one at a time.
-            state = {'lq': self.lq, 'hq': self.hq, 'ref': self.ref}
+            state = self.dstate
             for step_num, s in enumerate(self.steps):
                 ns = s.do_forward_backward(state, 0, step_num, backward=False)
                 for k, v in ns.items():

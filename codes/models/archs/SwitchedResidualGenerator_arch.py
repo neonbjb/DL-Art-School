@@ -4,7 +4,7 @@ from switched_conv import BareConvSwitch, compute_attention_specificity, Attenti
 import torch.nn.functional as F
 import functools
 from collections import OrderedDict
-from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2
+from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConjoinBlock
 from models.archs.RRDBNet_arch import ResidualDenseBlock_5C, RRDB
 from models.archs.spinenet_arch import SpineNet
 from switched_conv_util import save_attention_to_image_rgb
@@ -92,6 +92,87 @@ class CachedBackboneWrapper:
     def get_forward_result(self):
         return self.cache
 
+# torch.gather() which operates across 2d images.
+def gather_2d(input, index):
+    b, c, h, w = input.shape
+    nodim = input.view(b, c, h * w)
+    ind_nd = index[:, 0]*w + index[:, 1]
+    ind_nd = ind_nd.unsqueeze(1)
+    ind_nd = ind_nd.repeat((1, c))
+    ind_nd = ind_nd.unsqueeze(2)
+    result = torch.gather(nodim, dim=2, index=ind_nd)
+    return result.squeeze()
+
+
+# Computes a linear latent by performing processing on the reference image and returning the filters of a single point,
+# which should be centered on the image patch being processed.
+#
+# Output is base_filters * 8.
+class ReferenceImageBranch(nn.Module):
+    def __init__(self, base_filters=64):
+        super(ReferenceImageBranch, self).__init__()
+        self.filter_conv = ConvGnSilu(4, base_filters, bias=True)
+        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(base_filters * 2 ** i) for i in range(3)])
+        reduction_filters = base_filters * 2 ** 3
+        self.processing_blocks = nn.Sequential(OrderedDict([('block%i' % (i,), ConvGnSilu(reduction_filters, reduction_filters, bias=False)) for i in range(4)]))
+
+    # center_point is a [b,2] long tensor describing the center point of where the patch was taken from the reference
+    # image.
+    def forward(self, x, center_point):
+        x = self.filter_conv(x)
+        reduction_identities = []
+        for b in self.reduction_blocks:
+            reduction_identities.append(x)
+            x = b(x)
+        x = self.processing_blocks(x)
+        return gather_2d(x, center_point // 8)
+
+
+# This is similar to ConvBasisMultiplexer, except that it takes a linear reference tensor as a second input to
+# provide better results. It also has fixed parameterization in several places
+class ReferencingConvMultiplexer(nn.Module):
+    def __init__(self, input_channels, base_filters, multiplexer_channels, use_gn=True):
+        super(ReferencingConvMultiplexer, self).__init__()
+        self.filter_conv = ConvGnSilu(input_channels, multiplexer_channels, bias=True)
+        self.ref_proc = nn.Linear(512, 512)
+        self.ref_red = nn.Linear(512, base_filters * 2)
+        self.feature_norm = torch.nn.InstanceNorm2d(base_filters)
+        self.style_norm = torch.nn.InstanceNorm1d(base_filters)
+
+        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(base_filters * 2 ** i) for i in range(3)])
+        reduction_filters = base_filters * 2 ** 3
+        self.processing_blocks = nn.Sequential(OrderedDict([('block%i' % (i,), ConvGnSilu(reduction_filters, reduction_filters, bias=False)) for i in range(2)]))
+        self.expansion_blocks = nn.ModuleList([ExpansionBlock2(reduction_filters // (2 ** i)) for i in range(3)])
+
+        gap = base_filters - multiplexer_channels
+        cbl1_out = ((base_filters - (gap // 2)) // 4) * 4   # Must be multiples of 4 to use with group norm.
+        self.cbl1 = ConvGnSilu(base_filters, cbl1_out, norm=use_gn, bias=False, num_groups=4)
+        cbl2_out = ((base_filters - (3 * gap // 4)) // 4) * 4
+        self.cbl2 = ConvGnSilu(cbl1_out, cbl2_out, norm=use_gn, bias=False, num_groups=4)
+        self.cbl3 = ConvGnSilu(cbl2_out, multiplexer_channels, bias=True, norm=False)
+
+    def forward(self, x, ref):
+        # Start by fusing the reference vector and the input. Follows the ADAIn formula.
+        x = self.feature_norm(self.filter_conv(x))
+        ref = self.ref_proc(ref)
+        ref = self.ref_red(ref)
+        b, c = ref.shape
+        ref = self.style_norm(ref.view(b, 2, c // 2))
+        x = x * ref[:, 0, :].unsqueeze(dim=2).unsqueeze(dim=3).expand(x.shape) + ref[:, 1, :].unsqueeze(dim=2).unsqueeze(dim=3).expand(x.shape)
+
+        reduction_identities = []
+        for b in self.reduction_blocks:
+            reduction_identities.append(x)
+            x = b(x)
+        x = self.processing_blocks(x)
+        for i, b in enumerate(self.expansion_blocks):
+            x = b(x, reduction_identities[-i - 1])
+
+        x = self.cbl1(x)
+        x = self.cbl2(x)
+        x = self.cbl3(x)
+        return x
+
 
 class BackboneMultiplexer(nn.Module):
     def __init__(self, backbone: CachedBackboneWrapper, transform_count):
@@ -151,7 +232,10 @@ class ConfigurableSwitchComputer(nn.Module):
         if self.pre_transform:
             x = self.pre_transform(x)
         xformed = [t.forward(x) for t in self.transforms]
-        m = self.multiplexer(att_in)
+        if isinstance(att_in, tuple):
+            m = self.multiplexer(*att_in)
+        else:
+            m = self.multiplexer(att_in)
 
 
         outputs, attention = self.switch(xformed, m, True)

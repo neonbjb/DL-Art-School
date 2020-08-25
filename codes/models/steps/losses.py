@@ -78,7 +78,7 @@ class GeneratorGanLoss(ConfigurableLoss):
         netD = self.env['discriminators'][self.opt['discriminator']]
         if self.opt['gan_type'] in ['gan', 'pixgan', 'pixgan_fea', 'crossgan']:
             if self.opt['gan_type'] == 'crossgan':
-                pred_g_fake = netD(state[self.opt['fake']], state['lq'])
+                pred_g_fake = netD(state[self.opt['fake']], state['lq_fullsize_ref'])
             else:
                 pred_g_fake = netD(state[self.opt['fake']])
             return self.criterion(pred_g_fake, True)
@@ -101,9 +101,9 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         self.metrics = []
 
         if self.opt['gan_type'] == 'crossgan':
-            d_real = net(state[self.opt['real']], state['lq'])
-            d_fake = net(state[self.opt['fake']].detach(), state['lq'])
-            mismatched_lq = torch.roll(state['lq'], shifts=1, dims=0)
+            d_real = net(state[self.opt['real']], state['lq_fullsize_ref'])
+            d_fake = net(state[self.opt['fake']].detach(), state['lq_fullsize_ref'])
+            mismatched_lq = torch.roll(state['lq_fullsize_ref'], shifts=1, dims=0)
             d_mismatch_real = net(state[self.opt['real']], mismatched_lq)
             d_mismatch_fake = net(state[self.opt['fake']].detach(), mismatched_lq)
         else:

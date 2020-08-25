@@ -161,7 +161,7 @@ def main():
         current_step = resume_state['iter']
         model.resume_training(resume_state)  # handle optimizers and schedulers
     else:
-        current_step = 0 if 'start_step' not in opt.keys() else opt['start_step']
+        current_step = -1 if 'start_step' not in opt.keys() else opt['start_step']
         start_epoch = 0
 
     #### training

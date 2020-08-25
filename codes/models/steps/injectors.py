@@ -41,7 +41,11 @@ class ImageGeneratorInjector(Injector):
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
-        results = gen(state[self.input])
+        if isinstance(self.input, list):
+            params = [state[i] for i in self.input]
+            results = gen(*params)
+        else:
+            results = gen(state[self.input])
         new_state = {}
         if isinstance(self.output, list):
             for i, k in enumerate(self.output):

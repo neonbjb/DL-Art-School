@@ -58,7 +58,7 @@ class FullImageDataset(data.Dataset):
         h, w, _ = image.shape
         if h == w:
             return image
-        offset = min(np.random.normal(scale=.3), 1.0)
+        offset = max(min(np.random.normal(scale=.3), 1.0), -1.0)
         if h > w:
             diff = h - w
             center = diff // 2
@@ -75,6 +75,14 @@ class FullImageDataset(data.Dataset):
         margin_center = margin_sz // 2
         return min(max(int(min(np.random.normal(scale=dev), 1.0) * margin_sz + margin_center), 0), margin_sz)
 
+    def resize_point(self, point, orig_dim, new_dim):
+        oh, ow = orig_dim
+        nh, nw = new_dim
+        dh, dw = float(nh) / float(oh), float(nw) / float(ow)
+        point[0] = int(dh * float(point[0]))
+        point[1] = int(dw * float(point[1]))
+        return point
+
     # - Randomly extracts a square from image and resizes it to opt['target_size'].
     # - Fills a mask with zeros, then places 1's where the square was extracted from. Resizes this mask and the source
     #   image to the target_size and returns that too.
@@ -83,11 +91,10 @@ class FullImageDataset(data.Dataset):
     #   half-normal distribution, biasing towards the target_size.
     # - A biased normal distribution is also used to bias the tile selection towards the center of the source image.
     def pull_tile(self, image):
-        target_sz = self.opt['target_size']
+        target_sz = self.opt['min_tile_size']
         h, w, _ = image.shape
         possible_sizes_above_target = h - target_sz
         square_size = int(target_sz + possible_sizes_above_target * min(np.abs(np.random.normal(scale=.1)), 1.0))
-        print("Square size: %i" % (square_size,))
         # Pick the left,top coords to draw the patch from
         left = self.pick_along_range(w, square_size, .3)
         top = self.pick_along_range(w, square_size, .3)
@@ -95,12 +102,14 @@ class FullImageDataset(data.Dataset):
         mask = np.zeros((h, w, 1), dtype=np.float)
         mask[top:top+square_size, left:left+square_size] = 1
         patch = image[top:top+square_size, left:left+square_size, :]
+        center = torch.tensor([top + square_size // 2, left + square_size // 2], dtype=torch.long)
 
         patch = cv2.resize(patch, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR)
         image = cv2.resize(image, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR)
         mask = cv2.resize(mask, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR)
+        center = self.resize_point(center, (h, w), image.shape[:2])
 
-        return patch, image, mask
+        return patch, image, mask, center
 
     def augment_tile(self, img_GT, img_LQ, strength=1):
         scale = self.opt['scale']
@@ -145,16 +154,22 @@ class FullImageDataset(data.Dataset):
         return img_LQ
 
     def __getitem__(self, index):
-        GT_path, LQ_path = None, None
         scale = self.opt['scale']
-        GT_size = self.opt['target_size']
 
         # get full size image
         full_path = self.paths_GT[index % len(self.paths_GT)]
+        LQ_path = full_path
         img_full = util.read_img(None, full_path, None)
-        img_full = util.augment([img_full], self.opt['use_flip'], self.opt['use_rot'])[0]
-        img_full = self.get_square_image(img_full)
-        img_GT, gt_fullsize_ref, gt_mask = self.pull_tile(img_full)
+        img_full = util.channel_convert(img_full.shape[2], 'RGB', [img_full])[0]
+        if self.opt['phase'] == 'train':
+            img_full = util.augment([img_full], self.opt['use_flip'], self.opt['use_rot'])[0]
+            img_full = self.get_square_image(img_full)
+            img_GT, gt_fullsize_ref, gt_mask, gt_center = self.pull_tile(img_full)
+        else:
+            img_GT, gt_fullsize_ref = img_full, img_full
+            gt_mask = np.ones(img_full.shape[:2])
+            gt_center = torch.tensor([img_full.shape[0] // 2, img_full.shape[1] // 2], dtype=torch.long)
+        orig_gt_dim = gt_fullsize_ref.shape[:2]
 
         # get LQ image
         if self.paths_LQ:
@@ -162,11 +177,16 @@ class FullImageDataset(data.Dataset):
             img_lq_full = util.read_img(None, LQ_path, None)
             img_lq_full = util.augment([img_lq_full], self.opt['use_flip'], self.opt['use_rot'])[0]
             img_lq_full = self.get_square_image(img_lq_full)
-            img_LQ, lq_fullsize_ref, lq_mask = self.pull_tile(img_lq_full)
+            img_LQ, lq_fullsize_ref, lq_mask, lq_center = self.pull_tile(img_lq_full)
         else:  # down-sampling on-the-fly
             # randomly scale during training
             if self.opt['phase'] == 'train':
+                GT_size = self.opt['target_size']
                 random_scale = random.choice(self.random_scale_list)
+                if len(img_GT.shape) == 2:
+                    print("ERRAR:")
+                    print(img_GT.shape)
+                    print(full_path)
                 H_s, W_s, _ = img_GT.shape
 
                 def _mod(n, random_scale, scale, thres):
@@ -184,23 +204,34 @@ class FullImageDataset(data.Dataset):
 
             # using matlab imresize
             img_LQ = util.imresize_np(img_GT, 1 / scale, True)
+            lq_fullsize_ref = util.imresize_np(gt_fullsize_ref, 1 / scale, True)
             if img_LQ.ndim == 2:
                 img_LQ = np.expand_dims(img_LQ, axis=2)
-            lq_fullsize_ref, lq_mask = gt_fullsize_ref, gt_mask
+            lq_mask, lq_center = gt_mask, self.resize_point(gt_center.clone(), orig_gt_dim, lq_fullsize_ref.shape[:2])
+        orig_lq_dim = lq_fullsize_ref.shape[:2]
 
-        # Enforce force_resize constraints.
+        # Enforce force_resize constraints via clipping.
         h, w, _ = img_LQ.shape
         if h % self.force_multiple != 0 or w % self.force_multiple != 0:
-            h, w = (w - w % self.force_multiple), (h - h % self.force_multiple)
-            img_LQ = cv2.resize(img_LQ, (h, w))
+            h, w = (h - h % self.force_multiple), (w - w % self.force_multiple)
+            img_LQ = img_LQ[:h, :w, :]
+            lq_fullsize_ref = lq_fullsize_ref[:h, :w, :]
             h *= scale
             w *= scale
-            img_GT = cv2.resize(img_GT, (h, w))
+            img_GT = img_GT[:h, :w]
+            gt_fullsize_ref = gt_fullsize_ref[:h, :w, :]
 
         if self.opt['phase'] == 'train':
             img_GT, img_LQ = self.augment_tile(img_GT, img_LQ)
             gt_fullsize_ref, lq_fullsize_ref = self.augment_tile(gt_fullsize_ref, lq_fullsize_ref, strength=.2)
-            lq_mask = cv2.resize(lq_mask, img_LQ.shape[0:2], interpolation=cv2.INTER_LINEAR)
+
+        # Scale masks.
+        lq_mask = cv2.resize(lq_mask, (lq_fullsize_ref.shape[1], lq_fullsize_ref.shape[0]), interpolation=cv2.INTER_LINEAR)
+        gt_mask = cv2.resize(gt_mask, (gt_fullsize_ref.shape[1], gt_fullsize_ref.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+        # Scale center coords
+        lq_center = self.resize_point(lq_center, orig_lq_dim, lq_fullsize_ref.shape[:2])
+        gt_center = self.resize_point(gt_center, orig_gt_dim, gt_fullsize_ref.shape[:2])
 
         # BGR to RGB, HWC to CHW, numpy to tensor
         if img_GT.shape[2] == 3:
@@ -210,8 +241,9 @@ class FullImageDataset(data.Dataset):
             gt_fullsize_ref = cv2.cvtColor(gt_fullsize_ref, cv2.COLOR_BGR2RGB)
 
         # LQ needs to go to a PIL image to perform the compression-artifact transformation.
-        img_LQ = self.pil_augment(img_LQ)
-        lq_fullsize_ref = self.pil_augment(lq_fullsize_ref, strength=.2)
+        if self.opt['phase'] == 'train':
+            img_LQ = self.pil_augment(img_LQ)
+            lq_fullsize_ref = self.pil_augment(lq_fullsize_ref, strength=.2)
 
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         gt_fullsize_ref = torch.from_numpy(np.ascontiguousarray(np.transpose(gt_fullsize_ref, (2, 0, 1)))).float()
@@ -226,19 +258,19 @@ class FullImageDataset(data.Dataset):
             lq_fullsize_ref += lq_noise
 
         # Apply the masks to the full images.
-        lq_fullsize_ref = torch.cat([lq_fullsize_ref, lq_mask], dim=0)
         gt_fullsize_ref = torch.cat([gt_fullsize_ref, gt_mask], dim=0)
+        lq_fullsize_ref = torch.cat([lq_fullsize_ref, lq_mask], dim=0)
 
-        if LQ_path is None:
-            LQ_path = GT_path
         d = {'LQ': img_LQ, 'GT': img_GT, 'gt_fullsize_ref': gt_fullsize_ref, 'lq_fullsize_ref': lq_fullsize_ref,
-             'LQ_path': LQ_path, 'GT_path': GT_path}
+             'lq_center': lq_center, 'gt_center': gt_center,
+             'LQ_path': LQ_path, 'GT_path': full_path}
         return d
 
     def __len__(self):
         return len(self.paths_GT)
 
 if __name__ == '__main__':
+    '''
     opt = {
         'name': 'amalgam',
         'dataroot_GT': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\images'],
@@ -249,19 +281,32 @@ if __name__ == '__main__':
         'use_rot': True,
         'lq_noise': 5,
         'target_size': 128,
+        'min_tile_size': 256,
         'scale': 2,
         'phase': 'train'
     }
+    '''
+    opt = {
+        'name': 'amalgam',
+        'dataroot_GT': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\images'],
+        'dataroot_GT_weights': [1],
+        'force_multiple': 32,
+        'scale': 2,
+        'phase': 'test'
+    }
+
     ds = FullImageDataset(opt)
     import os
     os.makedirs("debug", exist_ok=True)
-    for i in range(1000):
+    for i in range(300, len(ds)):
+        print(i)
         o = ds[i]
         for k, v in o.items():
             if 'path' not in k:
-                if 'full' in k:
-                    masked = v[:3, :, :] * v[3]
-                    torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_%s_masked.png" % (i, k))
-                    v = v[:3, :, :]
-                import torchvision
-                torchvision.utils.save_image(v.unsqueeze(0), "debug/%i_%s.png" % (i, k))
+                #if 'full' in k:
+                    #masked = v[:3, :, :] * v[3]
+                    #torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_%s_masked.png" % (i, k))
+                    #v = v[:3, :, :]
+                #import torchvision
+                #torchvision.utils.save_image(v.unsqueeze(0), "debug/%i_%s.png" % (i, k))
+                pass

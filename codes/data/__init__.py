@@ -36,13 +36,8 @@ def create_dataset(dataset_opt):
     # datasets for image corruption
     elif mode == 'downsample':
         from data.Downsample_dataset import DownsampleDataset as D
-    # datasets for video restoration
-    elif mode == 'REDS':
-        from data.REDS_dataset import REDSDataset as D
-    elif mode == 'Vimeo90K':
-        from data.Vimeo90K_dataset import Vimeo90KDataset as D
-    elif mode == 'video_test':
-        from data.video_test_dataset import VideoTestDataset as D
+    elif mode == 'fullimage':
+        from data.full_image_dataset import FullImageDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)
