@@ -291,9 +291,6 @@ class SRGANModel(BaseModel):
                         self.netD_grad = DistributedDataParallel(self.netD_grad,
                                                         device_ids=[torch.cuda.current_device()],
                                                         find_unused_parameters=True)
-                        self.get_grad_nopadding = DistributedDataParallel(self.get_grad_nopadding,
-                                                        device_ids=[torch.cuda.current_device()],
-                                                        find_unused_parameters=True)
                 else:
                     self.netD = DataParallel(self.netD)
                     if self.spsr_enabled:
