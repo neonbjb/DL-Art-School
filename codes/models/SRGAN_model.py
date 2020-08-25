@@ -773,7 +773,7 @@ class SRGANModel(BaseModel):
 
 
         # Log sample images from first microbatch.
-        if step % self.img_debug_steps == 0:
+        if step % self.img_debug_steps == 0 and self.rank <= 0:
             sample_save_path = os.path.join(self.opt['path']['models'], "..", "temp")
             os.makedirs(os.path.join(sample_save_path, "hr"), exist_ok=True)
             os.makedirs(os.path.join(sample_save_path, "lr"), exist_ok=True)
