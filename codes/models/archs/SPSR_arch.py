@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from models.archs import SPSR_util as B
 from .RRDBNet_arch import RRDB
 from models.archs.arch_util import ConvGnLelu, UpconvBlock, ConjoinBlock
-from models.archs.SwitchedResidualGenerator_arch import MultiConvBlock, ConvBasisMultiplexer, ConfigurableSwitchComputer, ReferencingConvMultiplexer, ReferenceImageBranch
+from models.archs.SwitchedResidualGenerator_arch import MultiConvBlock, ConvBasisMultiplexer, ConfigurableSwitchComputer, ReferencingConvMultiplexer, ReferenceImageBranch, AdaInConvBlock
 from switched_conv_util import save_attention_to_image_rgb
 from switched_conv import compute_attention_specificity
 import functools
@@ -364,7 +364,7 @@ class SwitchedSpsrWithRef(nn.Module):
         self.transformation_counts = xforms
         self.reference_processor = ReferenceImageBranch(transformation_filters)
         multiplx_fn = functools.partial(ReferencingConvMultiplexer, transformation_filters, switch_filters, self.transformation_counts)
-        pretransform_fn = functools.partial(ConvGnLelu, transformation_filters, transformation_filters, norm=False, bias=False, weight_init_factor=.1)
+        pretransform_fn = functools.partial(AdaInConvBlock, 512, transformation_filters, transformation_filters)
         transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.5),
                                          transformation_filters, kernel_size=3, depth=3,
                                          weight_init_factor=.1)
@@ -400,11 +400,10 @@ class SwitchedSpsrWithRef(nn.Module):
         self.grad_branch_output_conv = ConvGnLelu(nf, out_nc, kernel_size=1, norm=False, activation=False, bias=False)
 
         # Conjoin branch.
-        # Note: "_branch_pretrain" is a special tag used to denote parameters that get pretrained before the rest.
         transform_fn_cat = functools.partial(MultiConvBlock, transformation_filters * 2, int(transformation_filters * 1.5),
                                          transformation_filters, kernel_size=3, depth=4,
                                          weight_init_factor=.1)
-        pretransform_fn_cat = functools.partial(ConvGnLelu, transformation_filters * 2, transformation_filters * 2, norm=False, bias=False, weight_init_factor=.1)
+        pretransform_fn_cat = functools.partial(AdaInConvBlock, 512, transformation_filters * 2, transformation_filters * 2)
         self._branch_pretrain_sw = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                    pre_transform_block=pretransform_fn_cat, transform_block=transform_fn_cat,
                                                    attention_norm=True,
@@ -425,20 +424,20 @@ class SwitchedSpsrWithRef(nn.Module):
         ref = self.reference_processor(ref, center_coord)
         x = self.model_fea_conv(x)
 
-        x1, a1 = self.sw1(x, True, att_in=(x, ref))
-        x2, a2 = self.sw2(x1, True, att_in=(x, ref))
+        x1, a1 = self.sw1((x, ref), True)
+        x2, a2 = self.sw2((x1, ref), True)
         x_fea = self.feature_lr_conv(x2)
         x_fea = self.feature_hr_conv2(x_fea)
 
         x_b_fea = self.b_fea_conv(x_grad)
-        x_grad, a3 = self.sw_grad(x_b_fea, att_in=(torch.cat([x1, x_b_fea], dim=1), ref), output_attention_weights=True)
+        x_grad, a3 = self.sw_grad((x_b_fea, ref), att_in=(torch.cat([x1, x_b_fea], dim=1), ref), output_attention_weights=True)
         x_grad = self.grad_lr_conv(x_grad)
         x_grad = self.grad_hr_conv(x_grad)
         x_out_branch = self.upsample_grad(x_grad)
         x_out_branch = self.grad_branch_output_conv(x_out_branch)
 
         x__branch_pretrain_cat = torch.cat([x_grad, x_fea], dim=1)
-        x__branch_pretrain_cat, a4 = self._branch_pretrain_sw(x__branch_pretrain_cat, att_in=(x_fea, ref), identity=x_fea, output_attention_weights=True)
+        x__branch_pretrain_cat, a4 = self._branch_pretrain_sw((x__branch_pretrain_cat, ref), att_in=(x_fea, ref), identity=x_fea, output_attention_weights=True)
         x_out = self.final_lr_conv(x__branch_pretrain_cat)
         x_out = self.upsample(x_out)
         x_out = self.final_hr_conv1(x_out)
