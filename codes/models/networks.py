@@ -143,6 +143,7 @@ def define_G(opt, net_key='network_G', scale=None):
 class GradDiscWrapper(torch.nn.Module):
     def __init__(self, m):
         super(GradDiscWrapper, self).__init__()
+        print("Wrapping a discriminator..")
         self.m = m
 
     def forward(self, x, lr):
