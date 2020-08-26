@@ -137,8 +137,8 @@ class ExtensibleTrainer(BaseModel):
 
         # Some models need to make parametric adjustments per-step. Do that here.
         for net in self.networks.values():
-            if hasattr(net, "update_for_step"):
-                net.update_for_step(step, os.path.join(self.opt['path']['models'], ".."))
+            if hasattr(net.module, "update_for_step"):
+                net.module.update_for_step(step, os.path.join(self.opt['path']['models'], ".."))
 
         # Iterate through the steps, performing them one at a time.
         state = self.dstate

@@ -101,7 +101,10 @@ def gather_2d(input, index):
     ind_nd = ind_nd.repeat((1, c))
     ind_nd = ind_nd.unsqueeze(2)
     result = torch.gather(nodim, dim=2, index=ind_nd)
-    return result.squeeze()
+    result = result.squeeze()
+    if b == 1:
+        result = result.unsqueeze(0)
+    return result
 
 
 # Computes a linear latent by performing processing on the reference image and returning the filters of a single point,
