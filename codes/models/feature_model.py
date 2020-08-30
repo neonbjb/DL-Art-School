@@ -74,7 +74,7 @@ class FeatureModel(BaseModel):
         self.optimizer_G.zero_grad()
 
         # grey out the LR image but keep 3 channels.
-        lr = torch.mean(self.var_H, dim=1, keepdim=True)
+        lr = torch.mean(self.real_H, dim=1, keepdim=True)
         lr = lr.repeat(1, 3, 1, 1)
 
         self.fake_H = self.fea_train(lr, interpolate_factor=1)
