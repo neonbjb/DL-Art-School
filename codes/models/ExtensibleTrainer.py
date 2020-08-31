@@ -30,6 +30,11 @@ class ExtensibleTrainer(BaseModel):
                'opt': opt,
                'step': 0}
 
+        self.mega_batch_factor = 1
+        if self.is_train:
+            self.mega_batch_factor = train_opt['mega_batch_factor']
+            self.env['mega_batch_factor'] = self.mega_batch_factor
+
         self.netsG = {}
         self.netsD = {}
         self.netF = networks.define_F().to(self.device)  # Used to compute feature loss.
@@ -49,71 +54,68 @@ class ExtensibleTrainer(BaseModel):
             step = ConfigurableStep(step, self.env)
             self.steps.append(step)
 
+        # The steps rely on the networks being placed in the env, so put them there. Even though they arent wrapped
+        # yet.
+        self.env['generators'] = self.netsG
+        self.env['discriminators'] = self.netsD
+
+        # Define the optimizers from the steps
+        for s in self.steps:
+            s.define_optimizers()
+            self.optimizers.extend(s.get_optimizers())
+
         if self.is_train:
-            self.mega_batch_factor = train_opt['mega_batch_factor']
-            if self.mega_batch_factor is None:
-                self.mega_batch_factor = 1
-            self.env['mega_batch_factor'] = self.mega_batch_factor
-
-            # The steps rely on the networks being placed in the env, so put them there. Even though they arent wrapped
-            # yet.
-            self.env['generators'] = self.netsG
-            self.env['discriminators'] = self.netsD
-
-            # Define the optimizers from the steps
-            for s in self.steps:
-                s.define_optimizers()
-                self.optimizers.extend(s.get_optimizers())
-
             # Find the optimizers that are using the default scheduler, then build them.
             def_opt = []
             for s in self.steps:
                 def_opt.extend(s.get_optimizers_with_default_scheduler())
             self.schedulers = lr_scheduler.get_scheduler_for_name(train_opt['default_lr_scheme'], def_opt, train_opt)
+        else:
+            self.schedulers = []
 
-            # Initialize amp.
-            total_nets = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
-            amp_nets, amp_opts = amp.initialize(total_nets + [self.netF] + self.steps,
-                                                self.optimizers, opt_level=opt['amp_opt_level'], num_losses=len(opt['steps']))
+        # Initialize amp.
+        total_nets = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
+        amp_nets, amp_opts = amp.initialize(total_nets + [self.netF] + self.steps,
+                                            self.optimizers, opt_level=opt['amp_opt_level'], num_losses=len(opt['steps']))
 
-            # Unwrap steps & netF
-            self.netF = amp_nets[len(total_nets)]
-            assert(len(self.steps) == len(amp_nets[len(total_nets)+1:]))
-            self.steps = amp_nets[len(total_nets)+1:]
-            amp_nets = amp_nets[:len(total_nets)]
+        # Unwrap steps & netF
+        self.netF = amp_nets[len(total_nets)]
+        assert(len(self.steps) == len(amp_nets[len(total_nets)+1:]))
+        self.steps = amp_nets[len(total_nets)+1:]
+        amp_nets = amp_nets[:len(total_nets)]
 
-            # DataParallel
-            dnets = []
-            for anet in amp_nets:
-                if opt['dist']:
-                    dnet = DistributedDataParallel(anet,
-                                                   device_ids=[torch.cuda.current_device()],
-                                                   find_unused_parameters=True)
-                else:
-                    dnet = DataParallel(anet)
-                if self.is_train:
-                    dnet.train()
-                else:
-                    dnet.eval()
-                dnets.append(dnet)
-            if not opt['dist']:
-                self.netF = DataParallel(self.netF)
+        # DataParallel
+        dnets = []
+        for anet in amp_nets:
+            if opt['dist']:
+                dnet = DistributedDataParallel(anet,
+                                               device_ids=[torch.cuda.current_device()],
+                                               find_unused_parameters=True)
+            else:
+                dnet = DataParallel(anet)
+            if self.is_train:
+                dnet.train()
+            else:
+                dnet.eval()
+            dnets.append(dnet)
+        if not opt['dist']:
+            self.netF = DataParallel(self.netF)
 
-            # Backpush the wrapped networks into the network dicts..
-            self.networks = {}
-            found = 0
-            for dnet in dnets:
-                for net_dict in [self.netsD, self.netsG]:
-                    for k, v in net_dict.items():
-                        if v == dnet.module:
-                            net_dict[k] = dnet
-                            self.networks[k] = dnet
-                            found += 1
-            assert found == len(self.netsG) + len(self.netsD)
+        # Backpush the wrapped networks into the network dicts..
+        self.networks = {}
+        found = 0
+        for dnet in dnets:
+            for net_dict in [self.netsD, self.netsG]:
+                for k, v in net_dict.items():
+                    if v == dnet.module:
+                        net_dict[k] = dnet
+                        self.networks[k] = dnet
+                        found += 1
+        assert found == len(self.netsG) + len(self.netsD)
 
-            # Replace the env networks with the wrapped networks
-            self.env['generators'] = self.netsG
-            self.env['discriminators'] = self.netsD
+        # Replace the env networks with the wrapped networks
+        self.env['generators'] = self.netsG
+        self.env['discriminators'] = self.netsD
 
         self.print_network()  # print network
         self.load()  # load G and D if needed
@@ -121,7 +123,12 @@ class ExtensibleTrainer(BaseModel):
         # Setting this to false triggers SRGAN to call the models update_model() function on the first iteration.
         self.updated = True
 
-    def feed_data(self, data):
+    def feed_data(self, data, need_GT=False):
+        self.eval_state = {}
+        for o in self.optimizers:
+            o.zero_grad()
+        torch.cuda.empty_cache()
+
         self.lq = torch.chunk(data['LQ'].to(self.device), chunks=self.mega_batch_factor, dim=0)
         self.hq = [t.to(self.device) for t in torch.chunk(data['GT'], chunks=self.mega_batch_factor, dim=0)]
         input_ref = data['ref'] if 'ref' in data else data['GT']
@@ -206,7 +213,9 @@ class ExtensibleTrainer(BaseModel):
                 for k, v in ns.items():
                     state[k] = [v]
 
-            self.eval_state = state
+            self.eval_state = {}
+            for k, v in state.items():
+                self.eval_state[k] = [s.detach().cpu() if isinstance(s, torch.Tensor) else s for s in v]
 
         for net in self.netsG.values():
             net.train()

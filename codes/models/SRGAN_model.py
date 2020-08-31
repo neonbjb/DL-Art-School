@@ -352,6 +352,9 @@ class SRGANModel(BaseModel):
             self.gan_lq_img_use_prob = train_opt['gan_lowres_use_probability'] if train_opt['gan_lowres_use_probability'] else 0
 
             self.img_debug_steps = opt['logger']['img_debug_steps'] if 'img_debug_steps' in opt['logger'].keys() else 50
+        else:
+            self.netF = networks.define_F(use_bn=False).to(self.device)
+            self.cri_fea = nn.L1Loss().to(self.device)
 
         #self.print_network()  # print network
         self.load()  # load G and D if needed

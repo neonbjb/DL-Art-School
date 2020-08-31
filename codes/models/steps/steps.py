@@ -30,9 +30,10 @@ class ConfigurableStep(Module):
 
         losses = []
         self.weights = {}
-        for loss_name, loss in self.step_opt['losses'].items():
-            losses.append((loss_name, create_generator_loss(loss, env)))
-            self.weights[loss_name] = loss['weight']
+        if 'losses' in self.step_opt.keys():
+            for loss_name, loss in self.step_opt['losses'].items():
+                losses.append((loss_name, create_generator_loss(loss, env)))
+                self.weights[loss_name] = loss['weight']
         self.losses = OrderedDict(losses)
 
     # Subclasses should override this to define individual optimizers. They should all go into self.optimizers.

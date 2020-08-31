@@ -61,10 +61,8 @@ def forward_pass(model, output_dir, alteration_suffix=''):
     model.feed_data(data, need_GT=need_GT)
     model.test()
 
-    if isinstance(model.fake_GenOut[0], tuple):
-        visuals = model.fake_GenOut[0][0].detach().float().cpu()
-    else:
-        visuals = model.fake_GenOut[0].detach().float().cpu()
+    visuals = model.get_current_visuals()['rlt'].cpu()
+    fea_loss = 0
     for i in range(visuals.shape[0]):
         img_path = data['GT_path'][i] if need_GT else data['LQ_path'][i]
         img_name = osp.splitext(osp.basename(img_path))[0]
@@ -78,7 +76,10 @@ def forward_pass(model, output_dir, alteration_suffix=''):
         else:
             save_img_path = osp.join(output_dir, img_name + '.png')
 
+        fea_loss += model.compute_fea_loss(visuals[i], data['GT'][i])
+
         util.save_img(sr_img, save_img_path)
+    return fea_loss
 
 
 if __name__ == "__main__":
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     want_just_images = True
     srg_analyze = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YMAL file.', default='../options/analyze_srg.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/srgan_compute_feature.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
 
@@ -108,6 +109,7 @@ if __name__ == "__main__":
         test_loaders.append(test_loader)
 
     model = create_model(opt)
+    fea_loss = 0
     for test_loader in test_loaders:
         test_set_name = test_loader.dataset.opt['name']
         logger.info('\nTesting [{:s}]...'.format(test_set_name))
@@ -143,4 +145,7 @@ if __name__ == "__main__":
                 model_copy.load_state_dict(orig_model.state_dict())
                 model.netG = model_copy
             else:
-                forward_pass(model, dataset_dir, opt['name'])
+                fea_loss += forward_pass(model, dataset_dir, opt['name'])
+
+        # log
+        logger.info('# Validation # Fea: {:.4e}'.format(fea_loss / len(test_loader)))
