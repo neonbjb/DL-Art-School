@@ -108,7 +108,7 @@ class Discriminator_VGG_128_GN(nn.Module):
         self.bn4_1 = nn.GroupNorm(8, nf * 8, affine=True)
         final_nf = nf * 8
 
-        self.linear1 = nn.Linear(final_nf * 4 * input_img_factor * 4 * input_img_factor, 100)
+        self.linear1 = nn.Linear(int(final_nf * 4 * input_img_factor * 4 * input_img_factor), 100)
         self.linear2 = nn.Linear(100, 1)
 
         # activation function

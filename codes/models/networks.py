@@ -160,9 +160,9 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
     which_model = opt_net['which_model_D']
 
     if which_model == 'discriminator_vgg_128':
-        netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz // 128, extra_conv=opt_net['extra_conv'])
+        netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128, extra_conv=opt_net['extra_conv'])
     elif which_model == 'discriminator_vgg_128_gn':
-        netD = SRGAN_arch.Discriminator_VGG_128_GN(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz // 128)
+        netD = SRGAN_arch.Discriminator_VGG_128_GN(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
         if wrap:
             netD = GradDiscWrapper(netD)
     elif which_model == 'discriminator_resnet':
