@@ -118,6 +118,7 @@ class DiscriminatorGanLoss(ConfigurableLoss):
             d_real = net(state[self.opt['real']])
             d_fake = net(state[self.opt['fake']].detach())
         self.metrics.append(("d_fake", torch.mean(d_fake)))
+        self.metrics.append(("d_real", torch.mean(d_real)))
 
         if self.opt['gan_type'] in ['gan', 'pixgan', 'crossgan', 'crossgan_lrref']:
             l_real = self.criterion(d_real, True)
@@ -129,10 +130,11 @@ class DiscriminatorGanLoss(ConfigurableLoss):
                 l_total += l_mreal + l_mfake
                 self.metrics.append(("l_mismatch", l_mfake + l_mreal))
             self.metrics.append(("l_fake", l_fake))
+            self.metrics.append(("l_real", l_real))
             return l_total
         elif self.opt['gan_type'] == 'ragan':
-            return (self.cri_gan(d_real - torch.mean(d_fake), True) +
-                    self.cri_gan(d_fake - torch.mean(d_real), False))
+            return (self.criterion(d_real - torch.mean(d_fake), True) +
+                    self.criterion(d_fake - torch.mean(d_real), False))
         else:
             raise NotImplementedError
 

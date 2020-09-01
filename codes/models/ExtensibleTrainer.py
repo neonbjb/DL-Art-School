@@ -54,8 +54,8 @@ class ExtensibleTrainer(BaseModel):
             step = ConfigurableStep(step, self.env)
             self.steps.append(step)
 
-        # The steps rely on the networks being placed in the env, so put them there. Even though they arent wrapped
-        # yet.
+        # step.define_optimizers() relies on the networks being placed in the env, so put them there. Even though
+        # they aren't wrapped yet.
         self.env['generators'] = self.netsG
         self.env['discriminators'] = self.netsD
 
