@@ -86,8 +86,7 @@ class InterpretedFeatureLoss(ConfigurableLoss):
             self.netF_gen = torch.nn.parallel.DataParallel(self.netF_gen)
 
     def forward(self, net, state):
-        with torch.no_grad():
-            logits_real = self.netF_real(state[self.opt['real']])
+        logits_real = self.netF_real(state[self.opt['real']])
         logits_fake = self.netF_gen(state[self.opt['fake']])
         return self.criterion(logits_fake, logits_real)
 
