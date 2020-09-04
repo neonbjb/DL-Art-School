@@ -77,7 +77,6 @@ def main():
     else:
         raise ValueError('Wrong mode.')
 
-
 def extract_single(opt, split_img=False):
     input_folder = opt['input_folder']
     save_folder = opt['save_folder']
