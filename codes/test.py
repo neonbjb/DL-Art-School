@@ -61,7 +61,7 @@ def forward_pass(model, output_dir, alteration_suffix=''):
     model.feed_data(data, need_GT=need_GT)
     model.test()
 
-    visuals = model.get_current_visuals()['rlt'].cpu()
+    visuals = model.get_current_visuals(need_GT)['rlt'].cpu()
     fea_loss = 0
     for i in range(visuals.shape[0]):
         img_path = data['GT_path'][i] if need_GT else data['LQ_path'][i]
@@ -76,7 +76,8 @@ def forward_pass(model, output_dir, alteration_suffix=''):
         else:
             save_img_path = osp.join(output_dir, img_name + '.png')
 
-        fea_loss += model.compute_fea_loss(visuals[i], data['GT'][i])
+        if need_GT:
+            fea_loss += model.compute_fea_loss(visuals[i], data['GT'][i])
 
         util.save_img(sr_img, save_img_path)
     return fea_loss
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     want_just_images = True
     srg_analyze = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/srgan_compute_feature.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/analyze_srg.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
 

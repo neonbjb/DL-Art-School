@@ -254,7 +254,7 @@ class ConfigurableSwitchComputer(nn.Module):
                 x = x1 + rand_feature
 
         if self.pre_transform:
-            x = self.pre_transform(*x)
+            x = self.pre_transform(x)
         if not isinstance(x, tuple):
             x = (x,)
         xformed = [torch.utils.checkpoint.checkpoint(t, *x) for t in self.transforms]

@@ -131,7 +131,7 @@ class ExtensibleTrainer(BaseModel):
 
         self.lq = torch.chunk(data['LQ'].to(self.device), chunks=self.mega_batch_factor, dim=0)
         self.hq = [t.to(self.device) for t in torch.chunk(data['GT'], chunks=self.mega_batch_factor, dim=0)]
-        input_ref = data['ref'] if 'ref' in data else data['GT']
+        input_ref = data['ref'] if 'ref' in data.keys() else data['GT']
         self.ref = [t.to(self.device) for t in torch.chunk(input_ref, chunks=self.mega_batch_factor, dim=0)]
 
         self.dstate = {'lq': self.lq, 'hq': self.hq, 'ref': self.ref}
@@ -150,6 +150,10 @@ class ExtensibleTrainer(BaseModel):
         # Iterate through the steps, performing them one at a time.
         state = self.dstate
         for step_num, s in enumerate(self.steps):
+            # Skip steps if mod_step doesn't line up.
+            if 'mod_step' in s.opt.keys() and step % s.opt['mod_step'] != 0:
+                continue
+
             # Only set requires_grad=True for the network being trained.
             nets_to_train = s.get_networks_trained()
             enabled = 0

@@ -152,8 +152,6 @@ class DiscriminatorGanLoss(ConfigurableLoss):
                 l_mfake = self.criterion(d_mismatch_fake, False)
                 l_total += l_mreal + l_mfake
                 self.metrics.append(("l_mismatch", l_mfake + l_mreal))
-            self.metrics.append(("l_fake", l_fake))
-            self.metrics.append(("l_real", l_real))
             return l_total
         elif self.opt['gan_type'] == 'ragan':
             return (self.criterion(d_real - torch.mean(d_fake), True) +

@@ -83,15 +83,16 @@ class ImageGradientNoPadding(nn.Module):
 
 class SPSRNet(nn.Module):
     def __init__(self, in_nc, out_nc, nf, nb, gc=32, upscale=4, norm_type=None, \
-            act_type='leakyrelu', mode='CNA', upsample_mode='upconv'):
+            act_type='leakyrelu', mode='CNA', upsample_mode='upconv', bl_inc=5):
         super(SPSRNet, self).__init__()
 
+        self.bl_inc = bl_inc
         n_upscale = int(math.log(upscale, 2))
 
         if upscale == 3:
             n_upscale = 1
 
-        fea_conv = B.conv_block(in_nc, nf, kernel_size=3, norm_type=None, act_type=None)
+        fea_conv = B.conv_block(in_nc + 1, nf, kernel_size=3, norm_type=None, act_type=None)
         rb_blocks = [RRDB(nf, gc=32) for _ in range(nb)]
         
         LR_conv = B.conv_block(nf, nf, kernel_size=3, norm_type=norm_type, act_type=None, mode=mode)
@@ -161,31 +162,33 @@ class SPSRNet(nn.Module):
         self._branch_pretrain_HR_conv1 = B.conv_block(nf, out_nc, kernel_size=3, norm_type=None, act_type=None)
         
 
-    def forward(self, x):    
-
+    def forward(self, x: torch.Tensor):
         x_grad = self.get_g_nopadding(x)
+
+        b, f, w, h = x.shape
+        x = torch.cat([x, torch.randn(b, 1, w, h, device=x.get_device())], dim=1)
         x = self.model[0](x)  
 
         x, block_list = self.model[1](x)
 
         x_ori = x
-        for i in range(5):
+        for i in range(self.bl_inc):
             x = block_list[i](x)
         x_fea1 = x 
 
-        for i in range(5):
-            x = block_list[i+5](x)
+        for i in range(self.bl_inc):
+            x = block_list[i+self.bl_inc](x)
         x_fea2 = x
 
-        for i in range(5):
-            x = block_list[i+10](x)
+        for i in range(self.bl_inc):
+            x = block_list[i+self.bl_inc*2](x)
         x_fea3 = x
         
-        for i in range(5):
-            x = block_list[i+15](x)
+        for i in range(self.bl_inc):
+            x = block_list[i+self.bl_inc*3](x)
         x_fea4 = x
         
-        x = block_list[20:](x)
+        x = block_list[self.bl_inc*4:](x)
         #short cut
         x = x_ori+x
         x= self.model[2:](x)
@@ -228,7 +231,7 @@ class SPSRNet(nn.Module):
         x_out = self._branch_pretrain_HR_conv1(x_out)
         
         #########
-        return x_out_branch, x_out, x_gradn
+        return x_out_branch, x_out, x_grad
 
 
 class SwitchedSpsr(nn.Module):

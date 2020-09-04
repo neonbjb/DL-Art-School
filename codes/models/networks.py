@@ -41,51 +41,12 @@ def define_G(opt, net_key='network_G', scale=None):
         gen_scale = scale * initial_stride
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], scale=gen_scale, initial_stride=initial_stride)
-    elif which_model == 'AssistedRRDBNet':
-        netG = RRDBNet_arch.AssistedRRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=scale)
-    elif which_model == 'LowDimRRDBNet':
-        gen_scale = scale * opt_net['initial_stride']
-        rrdb = functools.partial(RRDBNet_arch.LowDimRRDB, nf=opt_net['nf'], gc=opt_net['gc'], dimensional_adjustment=opt_net['dim'])
-        netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=gen_scale, rrdb_block_f=rrdb, initial_stride=opt_net['initial_stride'])
-    elif which_model == 'PixRRDBNet':
-        block_f = None
-        if opt_net['attention']:
-            block_f = functools.partial(RRDBNet_arch.SwitchedRRDB, nf=opt_net['nf'], gc=opt_net['gc'],
-                                        init_temperature=opt_net['temperature'],
-                                        final_temperature_step=opt_net['temperature_final_step'])
-        if opt_net['mhattention']:
-            block_f = functools.partial(RRDBNet_arch.SwitchedMultiHeadRRDB, num_convs=8, num_heads=2, nf=opt_net['nf'], gc=opt_net['gc'],
-                                        init_temperature=opt_net['temperature'],
-                                        final_temperature_step=opt_net['temperature_final_step'])
-        netG = RRDBNet_arch.PixShuffleRRDB(nf=opt_net['nf'], nb=opt_net['nb'], gc=opt_net['gc'], scale=scale, rrdb_block_f=block_f)
-    elif which_model == "ConfigurableSwitchedResidualGenerator":
-        netG = srg1.ConfigurableSwitchedResidualGenerator(switch_filters=opt_net['switch_filters'], switch_growths=opt_net['switch_growths'],
-                                                                      switch_reductions=opt_net['switch_reductions'],
-                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
-                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
-                                                                      trans_filters_mid=opt_net['trans_filters_mid'],
-                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
-                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
                                                                       switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
                                                                       trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
                                                                       transformation_filters=opt_net['transformation_filters'], attention_norm=opt_net['attention_norm'],
-                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
-                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
-    elif which_model == "ConfigurableSwitchedResidualGenerator3":
-        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator3(base_filters=opt_net['base_filters'], trans_count=opt_net['trans_count'])
-    elif which_model == "NestedSwitchGenerator":
-        netG = ng.NestedSwitchedGenerator(switch_filters=opt_net['switch_filters'],
-                                                                      switch_reductions=opt_net['switch_reductions'],
-                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
-                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
-                                                                      transformation_filters=opt_net['transformation_filters'],
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
@@ -98,25 +59,14 @@ def define_G(opt, net_key='network_G', scale=None):
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
-    elif which_model == "ProgressiveSRG2":
-        netG = psrg.GrowingSRGBase(progressive_step_schedule=opt_net['schedule'], switch_reductions=opt_net['reductions'],
-                                   growth_fade_in_steps=opt_net['fade_in_steps'], switch_filters=opt_net['switch_filters'],
-                                   switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
-                                   trans_layers=opt_net['trans_layers'], transformation_filters=opt_net['transformation_filters'],
-                                   initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
-                                   upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'],
-                                   start_step=opt_net['start_step'])
     elif which_model == 'spsr_net':
         netG = spsr.SPSRNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
                             nb=opt_net['nb'], gc=opt_net['gc'], upscale=opt_net['scale'], norm_type=opt_net['norm_type'],
-                            act_type='leakyrelu', mode=opt_net['mode'], upsample_mode='upconv')
+                            act_type='leakyrelu', mode=opt_net['mode'], upsample_mode='upconv', bl_inc=opt_net['bl_inc'])
         if opt['is_train']:
             arch_util.initialize_weights(netG, scale=.1)
     elif which_model == 'spsr_net_improved':
         netG = spsr.SPSRNetSimplified(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
-                            nb=opt_net['nb'], upscale=opt_net['scale'])
-    elif which_model == 'spsr_net_improved_noskip':
-        netG = spsr.SPSRNetSimplifiedNoSkip(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
                             nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == "spsr_switched":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
