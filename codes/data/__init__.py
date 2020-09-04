@@ -19,11 +19,11 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
             shuffle = True
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
                                            num_workers=num_workers, sampler=sampler, drop_last=True,
-                                           pin_memory=False)
+                                           pin_memory=True)
     else:
         batch_size = dataset_opt['batch_size'] or 1
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=max(int(batch_size/2), 1),
-                                           pin_memory=False)
+                                           pin_memory=True)
 
 
 def create_dataset(dataset_opt):
