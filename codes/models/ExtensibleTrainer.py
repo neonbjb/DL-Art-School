@@ -41,6 +41,10 @@ class ExtensibleTrainer(BaseModel):
         for name, net in opt['networks'].items():
             if net['type'] == 'generator':
                 new_net = networks.define_G(net, None, opt['scale']).to(self.device)
+                if 'trainable' not in net.keys():
+                    net['trainable'] = True
+                if not net['trainable']:
+                    new_net.eval()
                 self.netsG[name] = new_net
             elif net['type'] == 'discriminator':
                 new_net = networks.define_D_net(net, opt['datasets']['train']['target_size']).to(self.device)
@@ -213,7 +217,7 @@ class ExtensibleTrainer(BaseModel):
             # Iterate through the steps, performing them one at a time.
             state = self.dstate
             for step_num, s in enumerate(self.steps):
-                ns = s.do_forward_backward(state, 0, step_num, backward=False)
+                ns = s.do_forward_backward(state, 0, step_num, train=False)
                 for k, v in ns.items():
                     state[k] = [v]
 
@@ -260,7 +264,9 @@ class ExtensibleTrainer(BaseModel):
 
     def save(self, iter_step):
         for name, net in self.networks.items():
-            self.save_network(net, name, iter_step)
+            # Don't save non-trainable networks.
+            if self.opt['networks'][name]['trainable']:
+                self.save_network(net, name, iter_step)
 
     def force_restore_swapout(self):
         # Legacy method. Do nothing.

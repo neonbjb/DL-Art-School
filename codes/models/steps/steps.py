@@ -72,7 +72,7 @@ class ConfigurableStep(Module):
     # Performs all forward and backward passes for this step given an input state. All input states are lists of
     # chunked tensors. Use grad_accum_step to dereference these steps. Should return a dict of tensors that later
     # steps might use. These tensors are automatically detached and accumulated into chunks.
-    def do_forward_backward(self, state, grad_accum_step, amp_loss_id, backward=True):
+    def do_forward_backward(self, state, grad_accum_step, amp_loss_id, train=True):
         new_state = {}
 
         # Prepare a de-chunked state dict which will be used for the injectors & losses.
@@ -83,11 +83,14 @@ class ConfigurableStep(Module):
 
         # Inject in any extra dependencies.
         for inj in self.injectors:
+            # Don't do injections tagged with eval unless we are not in train mode.
+            if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
+                continue
             injected = inj(local_state)
             local_state.update(injected)
             new_state.update(injected)
 
-        if backward:
+        if train:
             # Finally, compute the losses.
             total_loss = 0
             for loss_name, loss in self.losses.items():
