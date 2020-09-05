@@ -253,6 +253,8 @@ class ConfigurableSwitchComputer(nn.Module):
             else:
                 x = x1 + rand_feature
 
+        if not isinstance(x, tuple):
+            x = (x,)
         if self.pre_transform:
             x = self.pre_transform(*x)
         if not isinstance(x, tuple):
