@@ -6,7 +6,7 @@ import torch
 from apex import amp
 from collections import OrderedDict
 from .injectors import create_injector
-from apex.optimizers import FusedNovoGrad
+from models.novograd import NovoGrad
 
 logger = logging.getLogger('base')
 
@@ -56,7 +56,7 @@ class ConfigurableStep(Module):
                                    weight_decay=self.step_opt['weight_decay'],
                                    betas=(self.step_opt['beta1'], self.step_opt['beta2']))
         elif self.step_opt['optimizer'] == 'novograd':
-            opt = FusedNovoGrad(optim_params, lr=self.step_opt['lr'], weight_decay=self.step_opt['weight_decay'],
+            opt = NovoGrad(optim_params, lr=self.step_opt['lr'], weight_decay=self.step_opt['weight_decay'],
                                    betas=(self.step_opt['beta1'], self.step_opt['beta2']))
         self.optimizers = [opt]
 

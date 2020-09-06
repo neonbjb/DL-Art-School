@@ -565,4 +565,3 @@ class ConfigurableSwitchedResidualGenerator3(nn.Module):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
-
