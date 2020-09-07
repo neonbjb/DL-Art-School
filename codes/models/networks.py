@@ -50,21 +50,6 @@ def define_G(opt, net_key='network_G', scale=None):
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
-    elif which_model == "ConfigurableSwitchedResidualGenerator4":
-        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator4(switch_filters=opt_net['switch_filters'],
-                                                                      switch_reductions=opt_net['switch_reductions'],
-                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
-                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
-                                                                      transformation_filters=opt_net['transformation_filters'], attention_norm=opt_net['attention_norm'],
-                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
-                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
-    elif which_model == 'spsr_net':
-        netG = spsr.SPSRNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
-                            nb=opt_net['nb'], gc=opt_net['gc'], upscale=opt_net['scale'], norm_type=opt_net['norm_type'],
-                            act_type='leakyrelu', mode=opt_net['mode'], upsample_mode='upconv', bl_inc=opt_net['bl_inc'])
-        if opt['is_train']:
-            arch_util.initialize_weights(netG, scale=.1)
     elif which_model == 'spsr_net_improved':
         netG = spsr.SPSRNetSimplified(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
                             nb=opt_net['nb'], upscale=opt_net['scale'])
@@ -78,19 +63,8 @@ def define_G(opt, net_key='network_G', scale=None):
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "spsr_switched_with_ref4x":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.SwitchedSpsrWithRef4x(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+        netG = spsr.SwitchedSpsrWithRef4x(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-
-    # image corruption
-    elif which_model == 'HighToLowResNet':
-        netG = HighToLowResNet.HighToLowResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                nf=opt_net['nf'], nb=opt_net['nb'], downscale=opt_net['scale'])
-    elif which_model == 'FlatProcessorNet':
-        '''netG = FlatProcessorNet_arch.FlatProcessorNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                nf=opt_net['nf'], downscale=opt_net['scale'], reduce_anneal_blocks=opt_net['ra_blocks'],
-                                assembler_blocks=opt_net['assembler_blocks'])'''
-        netG = FlatProcessorNetNew_arch.fixup_resnet34(num_filters=opt_net['nf'])\
-
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
 
