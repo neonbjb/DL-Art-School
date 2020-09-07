@@ -138,6 +138,19 @@ class AdaInConvBlock(nn.Module):
         return self.post_fuse_conv(x)
 
 
+class ProcessingBranchWithStochasticity(nn.Module):
+    def __init__(self, nf_in, nf_out, noise_filters, depth):
+        super(ProcessingBranchWithStochasticity, self).__init__()
+        nf_gap = nf_out - nf_in
+        self.noise_filters = noise_filters
+        self.processor = MultiConvBlock(nf_in + noise_filters, nf_in + nf_gap // 2, nf_out, kernel_size=3, depth=depth, weight_init_factor = .1)
+
+    def forward(self, x):
+        b, c, h, w = x.shape
+        noise = torch.randn((b, self.noise_filters, h, w), device=x.device)
+        return self.processor(torch.cat([x, noise], dim=1))
+
+
 # This is similar to ConvBasisMultiplexer, except that it takes a linear reference tensor as a second input to
 # provide better results. It also has fixed parameterization in several places
 class ReferencingConvMultiplexer(nn.Module):

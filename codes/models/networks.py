@@ -1,20 +1,14 @@
 import torch
 import logging
+from munch import munchify
 import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.DiscriminatorResnet_arch_passthrough as DiscriminatorResnet_arch_passthrough
-import models.archs.FlatProcessorNetNew_arch as FlatProcessorNetNew_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
-import models.archs.HighToLowResNet as HighToLowResNet
-import models.archs.NestedSwitchGenerator as ng
 import models.archs.feature_arch as feature_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
-import models.archs.SRG1_arch as srg1
-import models.archs.ProgressiveSrg_arch as psrg
 import models.archs.SPSR_arch as spsr
-import models.archs.arch_util as arch_util
-import functools
 from collections import OrderedDict
 
 logger = logging.getLogger('base')
@@ -61,10 +55,13 @@ def define_G(opt, net_key='network_G', scale=None):
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = spsr.SwitchedSpsrWithRef(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == "spsr_switched_with_ref4x":
+    elif which_model == "spsr_switched_with_ref2":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.SwitchedSpsrWithRef4x(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms,
+        netG = spsr.SwitchedSpsrWithRef2(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
+    elif which_model == "csnln":
+        import model.csnln as csnln
+        netG = csnln.CSNLN(munchify(opt_net))
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
 
