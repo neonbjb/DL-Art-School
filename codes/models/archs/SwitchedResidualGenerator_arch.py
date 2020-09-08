@@ -9,26 +9,6 @@ from switched_conv_util import save_attention_to_image_rgb
 import os
 
 
-class MultiConvBlock(nn.Module):
-    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth, scale_init=1, norm=False, weight_init_factor=1):
-        assert depth >= 2
-        super(MultiConvBlock, self).__init__()
-        self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, norm=norm, bias=False, weight_init_factor=weight_init_factor)] +
-                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, norm=norm, bias=False, weight_init_factor=weight_init_factor) for i in range(depth - 2)] +
-                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, activation=False, norm=False, bias=False, weight_init_factor=weight_init_factor)])
-        self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init, dtype=torch.float))
-        self.bias = nn.Parameter(torch.zeros(1))
-
-    def forward(self, x, noise=None):
-        if noise is not None:
-            noise = noise * self.noise_scale
-            x = x + noise
-        for m in self.bnconvs:
-            x = m.forward(x)
-        return x * self.scale + self.bias
-
-
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
 class HalvingProcessingBlock(nn.Module):

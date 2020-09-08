@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from switched_conv_util import save_attention_to_image
 from switched_conv import compute_attention_specificity
-from models.archs.arch_util import ConvGnLelu, ExpansionBlock
+from models.archs.arch_util import ConvGnLelu, ExpansionBlock, MultiConvBlock
 import functools
 import torch.nn.functional as F
 

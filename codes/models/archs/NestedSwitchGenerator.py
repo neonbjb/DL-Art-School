@@ -1,7 +1,6 @@
 import torch
 from torch import nn
-from models.archs.arch_util import ConvBnLelu, ConvBnRelu
-from models.archs.SwitchedResidualGenerator_arch import MultiConvBlock
+from models.archs.arch_util import ConvBnLelu, ConvBnRelu, MultiConvBlock
 from switched_conv import BareConvSwitch, compute_attention_specificity
 from switched_conv_util import save_attention_to_image
 from functools import partial
