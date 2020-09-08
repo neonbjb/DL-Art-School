@@ -552,7 +552,6 @@ class SwitchedSpsrWithRef2(nn.Module):
         self.final_temperature_step = 10000
 
     def forward(self, x, ref, center_coord):
-        x_grad = self.get_g_nopadding(x)
         ref = self.reference_processor(ref, center_coord)
         x = self.model_fea_conv(x)
 
@@ -561,6 +560,7 @@ class SwitchedSpsrWithRef2(nn.Module):
         x_fea = self.feature_lr_conv(x2)
         x_fea = self.feature_lr_conv2(x_fea)
 
+        x_grad = self.get_g_nopadding(x)
         x_grad = self.grad_conv(x_grad)
         x_grad, a3 = self.sw_grad((torch.cat([x_grad, x1], dim=1), ref),
                                   identity=x_grad, output_attention_weights=True)

@@ -67,7 +67,10 @@ class FfmpegBackedVideoDataset(data.Dataset):
             img_LQ = F.crop(img_LQ, 0, left, h, w_per_split)
         img_LQ = F.to_tensor(img_LQ)
 
-        return {'LQ': img_LQ}
+        mask = torch.ones(1, img_LQ.shape[1], img_LQ.shape[2])
+        ref = torch.cat([img_LQ, mask], dim=0)
+        return {'LQ': img_LQ, 'lq_fullsize_ref': ref,
+                'lq_center': torch.tensor([img_LQ.shape[1] // 2, img_LQ.shape[2] // 2], dtype=torch.long) }
 
     def __len__(self):
         return self.frame_count * self.vertical_splits

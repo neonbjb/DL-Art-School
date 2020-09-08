@@ -130,16 +130,20 @@ class ExtensibleTrainer(BaseModel):
         # Setting this to false triggers SRGAN to call the models update_model() function on the first iteration.
         self.updated = True
 
-    def feed_data(self, data, need_GT=False):
+    def feed_data(self, data, need_GT=True):
         self.eval_state = {}
         for o in self.optimizers:
             o.zero_grad()
         torch.cuda.empty_cache()
 
         self.lq = torch.chunk(data['LQ'].to(self.device), chunks=self.mega_batch_factor, dim=0)
-        self.hq = [t.to(self.device) for t in torch.chunk(data['GT'], chunks=self.mega_batch_factor, dim=0)]
-        input_ref = data['ref'] if 'ref' in data.keys() else data['GT']
-        self.ref = [t.to(self.device) for t in torch.chunk(input_ref, chunks=self.mega_batch_factor, dim=0)]
+        if need_GT:
+            self.hq = [t.to(self.device) for t in torch.chunk(data['GT'], chunks=self.mega_batch_factor, dim=0)]
+            input_ref = data['ref'] if 'ref' in data.keys() else data['GT']
+            self.ref = [t.to(self.device) for t in torch.chunk(input_ref, chunks=self.mega_batch_factor, dim=0)]
+        else:
+            self.hq = self.lq
+            self.ref = self.lq
 
         self.dstate = {'lq': self.lq, 'hq': self.hq, 'ref': self.ref}
         for k, v in data.items():
@@ -227,6 +231,9 @@ class ExtensibleTrainer(BaseModel):
             self.eval_state = {}
             for k, v in state.items():
                 self.eval_state[k] = [s.detach().cpu() if isinstance(s, torch.Tensor) else s for s in v]
+
+            # For backwards compatibility..
+            self.fake_H = self.eval_state[self.opt['eval']['output_state']][0].float().cpu()
 
         for net in self.netsG.values():
             net.train()
