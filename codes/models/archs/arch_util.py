@@ -456,7 +456,7 @@ class ConjoinBlock(nn.Module):
 
 # Designed explicitly to join a mainline trunk with reference data. Implemented as a residual branch.
 class ReferenceJoinBlock(nn.Module):
-    def __init__(self, nf, residual_weight_init_factor=1, norm=False, block=ConvGnLelu, final_norm=True):
+    def __init__(self, nf, residual_weight_init_factor=1, norm=False, block=ConvGnLelu, final_norm=False):
         super(ReferenceJoinBlock, self).__init__()
         self.branch = MultiConvBlock(nf * 2, nf + nf // 2, nf, kernel_size=3, depth=3,
                                      scale_init=residual_weight_init_factor, norm=norm,

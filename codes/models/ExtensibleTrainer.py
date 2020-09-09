@@ -213,6 +213,8 @@ class ExtensibleTrainer(BaseModel):
             for v in self.opt['logger']['visuals']:
                 if step % self.opt['logger']['visual_debug_rate'] == 0:
                     for i, dbgv in enumerate(state[v]):
+                        if dbgv.shape[1] > 3:
+                            dbgv = dbgv[:,:3,:,:]
                         os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
                         utils.save_image(dbgv, os.path.join(sample_save_path, v, "%05i_%02i.png" % (step, i)))
 
