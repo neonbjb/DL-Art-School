@@ -95,10 +95,15 @@ class ConfigurableStep(Module):
             local_state.update(injected)
             new_state.update(injected)
 
-        if train:
+        if train and len(self.losses) > 0:
             # Finally, compute the losses.
             total_loss = 0
             for loss_name, loss in self.losses.items():
+                # Some losses only activate after a set number of steps. For example, proto-discriminator losses can
+                # be very disruptive to a generator.
+                if 'after' in loss.opt.keys() and loss.opt['after'] > self.env['step']:
+                    continue
+
                 l = loss(self.training_net, local_state)
                 total_loss += l * self.weights[loss_name]
                 # Record metrics.

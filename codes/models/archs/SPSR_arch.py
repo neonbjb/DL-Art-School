@@ -543,9 +543,9 @@ class SwitchedSpsrWithRef2(nn.Module):
                                                    attention_norm=True,
                                                    transform_count=self.transformation_counts, init_temp=init_temperature,
                                                    add_scalable_noise_to_transforms=False)
-        self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False)
-        self.upsample = nn.Sequential(*[UpconvBlock(nf, nf, block=ConvGnLelu, norm=False, activation=True, bias=False) for _ in range(n_upscale)])
-        self.final_hr_conv1 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=False)
+        self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=True, activation=False)
+        self.upsample = nn.Sequential(*[UpconvBlock(nf, nf, block=ConvGnLelu, norm=True, activation=True, bias=False) for _ in range(n_upscale)])
+        self.final_hr_conv1 = ConvGnLelu(nf, nf, kernel_size=3, norm=True, activation=True, bias=False)
         self.final_hr_conv2 = ConvGnLelu(nf, out_nc, kernel_size=3, norm=False, activation=False, bias=True)
         self.switches = [self.sw1, self.sw2, self.sw_grad, self.conjoin_sw]
         self.attentions = None
