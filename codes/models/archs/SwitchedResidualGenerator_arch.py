@@ -4,7 +4,7 @@ from switched_conv import BareConvSwitch, compute_attention_specificity, Attenti
 import torch.nn.functional as F
 import functools
 from collections import OrderedDict
-from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu
+from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock
 from switched_conv_util import save_attention_to_image_rgb
 import os
 from torch.utils.checkpoint import checkpoint

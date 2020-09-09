@@ -32,7 +32,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/pretrain_spsr_switched2_psnr.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_spsr3_gan.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -119,6 +119,7 @@ def main():
 
     torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
+    # torch.autograd.set_detect_anomaly(True)
 
     #### create train and val dataloader
     dataset_ratio = 1  # enlarge the size of each epoch
@@ -173,7 +174,7 @@ def main():
 
         _t = time()
         _profile = False
-        for _, train_data in enumerate(tq_ldr):
+        for train_data in tq_ldr:
             if _profile:
                 print("Data fetch: %f" % (time() - _t))
                 _t = time()
