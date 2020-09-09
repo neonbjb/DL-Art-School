@@ -9,3 +9,6 @@ tqdm
 matplotlib
 scipy
 munch
+tqdm
+scp
+tensorboard
