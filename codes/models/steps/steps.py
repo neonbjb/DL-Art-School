@@ -115,8 +115,11 @@ class ConfigurableStep(Module):
             total_loss = total_loss / self.env['mega_batch_factor']
 
             # Get dem grads!
-            with amp.scale_loss(total_loss, self.optimizers, amp_loss_id) as scaled_loss:
-                scaled_loss.backward()
+            if self.env['amp']:
+                with amp.scale_loss(total_loss, self.optimizers, amp_loss_id) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                total_loss.backward()
 
         # Detach all state variables. Within the step, gradients can flow. Once these variables leave the step
         # we must release the gradients.

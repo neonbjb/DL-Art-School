@@ -82,8 +82,14 @@ class ExtensibleTrainer(BaseModel):
 
         # Initialize amp.
         total_nets = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
-        amp_nets, amp_opts = amp.initialize(total_nets + [self.netF] + self.steps,
-                                            self.optimizers, opt_level=opt['amp_opt_level'], num_losses=len(opt['steps']))
+        if 'amp_opt_level' in opt.keys():
+            self.env['amp'] = True
+            amp_nets, amp_opts = amp.initialize(total_nets + [self.netF] + self.steps,
+                                                self.optimizers, opt_level=opt['amp_opt_level'], num_losses=len(opt['steps']))
+        else:
+            amp_nets = total_nets + [self.netF] + self.steps
+            amp_opts = self.optimizers
+            self.env['amp'] = False
 
         # Unwrap steps & netF
         self.netF = amp_nets[len(total_nets)]

@@ -102,7 +102,7 @@ class FullImageDataset(data.Dataset):
         left = self.pick_along_range(w, square_size, .3)
         top = self.pick_along_range(w, square_size, .3)
 
-        mask = np.zeros((h, w, 1), dtype=np.float)
+        mask = np.zeros((h, w, 1), dtype=image.dtype)
         mask[top:top+square_size, left:left+square_size] = 1
         patch = image[top:top+square_size, left:left+square_size, :]
         center = torch.tensor([top + square_size // 2, left + square_size // 2], dtype=torch.long)
