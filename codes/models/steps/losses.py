@@ -20,6 +20,15 @@ def create_generator_loss(opt_loss, env):
         raise NotImplementedError
 
 
+# Converts params to a list of tensors extracted from state. Works with list/tuple params as well as scalars.
+def extract_params_from_state(params, state):
+    if isinstance(params, list) or isinstance(params, tuple):
+        p = [state[r] for r in params]
+    else:
+        p = [state[params]]
+    return p
+
+
 class ConfigurableLoss(nn.Module):
     def __init__(self, opt, env):
         super(ConfigurableLoss, self).__init__()
@@ -99,17 +108,15 @@ class GeneratorGanLoss(ConfigurableLoss):
 
     def forward(self, net, state):
         netD = self.env['discriminators'][self.opt['discriminator']]
-        if self.opt['gan_type'] in ['gan', 'pixgan', 'pixgan_fea', 'crossgan', 'crossgan_lrref']:
-            if self.opt['gan_type'] == 'crossgan':
-                pred_g_fake = netD(state[self.opt['fake']], state['lq_fullsize_ref'])
-            elif self.opt['gan_type'] == 'crossgan_lrref':
-                pred_g_fake = netD(state[self.opt['fake']], state['lq'])
-            else:
-                pred_g_fake = netD(state[self.opt['fake']])
+        fake = extract_params_from_state(self.opt['fake'], state)
+        if self.opt['gan_type'] in ['gan', 'pixgan', 'pixgan_fea']:
+            pred_g_fake = netD(*fake)
             return self.criterion(pred_g_fake, True)
         elif self.opt['gan_type'] == 'ragan':
-            pred_d_real = netD(state[self.opt['real']]).detach()
-            pred_g_fake = netD(state[self.opt['fake']])
+            real = extract_params_from_state(self.opt['real'], state)
+            real = [r.detach() for r in real]
+            pred_d_real = netD(*real).detach()
+            pred_g_fake = netD(*fake)
             return (self.cri_gan(pred_d_real - torch.mean(pred_g_fake), False) +
                     self.cri_gan(pred_g_fake - torch.mean(pred_d_real), True)) / 2
         else:
@@ -124,34 +131,19 @@ class DiscriminatorGanLoss(ConfigurableLoss):
 
     def forward(self, net, state):
         self.metrics = []
+        real = extract_params_from_state(self.opt['real'], state)
+        fake = extract_params_from_state(self.opt['fake'], state)
+        fake = [f.detach() for f in fake]
+        d_real = net(*real)
+        d_fake = net(*fake)
 
-        if self.opt['gan_type'] == 'crossgan':
-            d_real = net(state[self.opt['real']], state['lq_fullsize_ref'])
-            d_fake = net(state[self.opt['fake']].detach(), state['lq_fullsize_ref'])
-            mismatched_lq = torch.roll(state['lq_fullsize_ref'], shifts=1, dims=0)
-            d_mismatch_real = net(state[self.opt['real']], mismatched_lq)
-            d_mismatch_fake = net(state[self.opt['fake']].detach(), mismatched_lq)
-        elif self.opt['gan_type'] == 'crossgan_lrref':
-            d_real = net(state[self.opt['real']], state['lq'])
-            d_fake = net(state[self.opt['fake']].detach(), state['lq'])
-            mismatched_lq = torch.roll(state['lq'], shifts=1, dims=0)
-            d_mismatch_real = net(state[self.opt['real']], mismatched_lq)
-            d_mismatch_fake = net(state[self.opt['fake']].detach(), mismatched_lq)
-        else:
-            d_real = net(state[self.opt['real']])
-            d_fake = net(state[self.opt['fake']].detach())
         self.metrics.append(("d_fake", torch.mean(d_fake)))
         self.metrics.append(("d_real", torch.mean(d_real)))
 
-        if self.opt['gan_type'] in ['gan', 'pixgan', 'crossgan', 'crossgan_lrref']:
+        if self.opt['gan_type'] in ['gan', 'pixgan']:
             l_real = self.criterion(d_real, True)
             l_fake = self.criterion(d_fake, False)
             l_total = l_real + l_fake
-            if 'crossgan' in self.opt['gan_type']:
-                l_mreal = self.criterion(d_mismatch_real, False)
-                l_mfake = self.criterion(d_mismatch_fake, False)
-                l_total += l_mreal + l_mfake
-                self.metrics.append(("l_mismatch", l_mfake + l_mreal))
             return l_total
         elif self.opt['gan_type'] == 'ragan':
             return (self.criterion(d_real - torch.mean(d_fake), True) +

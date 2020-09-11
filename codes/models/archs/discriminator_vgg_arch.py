@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-import torchvision
 from models.archs.arch_util import ConvBnLelu, ConvGnLelu, ExpansionBlock, ConvGnSilu
 import torch.nn.functional as F
+from models.archs.SwitchedResidualGenerator_arch import gather_2d
 
 
 class Discriminator_VGG_128(nn.Module):
@@ -412,3 +412,96 @@ class Discriminator_UNet_FeaOut(nn.Module):
 
     def pixgan_parameters(self):
         return 1, 4
+
+
+class Vgg128GnHead(nn.Module):
+    def __init__(self, in_nc, nf, depth=5):
+        super(Vgg128GnHead, self).__init__()
+        assert depth == 4 or depth == 5  # Nothing stopping others from being implemented, just not done yet.
+        self.depth = depth
+
+        # [64, 128, 128]
+        self.conv0_0 = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
+        self.conv0_1 = nn.Conv2d(nf, nf, 4, 2, 1, bias=False)
+        self.bn0_1 = nn.GroupNorm(8, nf, affine=True)
+        # [64, 64, 64]
+        self.conv1_0 = nn.Conv2d(nf, nf * 2, 3, 1, 1, bias=False)
+        self.bn1_0 = nn.GroupNorm(8, nf * 2, affine=True)
+        self.conv1_1 = nn.Conv2d(nf * 2, nf * 2, 4, 2, 1, bias=False)
+        self.bn1_1 = nn.GroupNorm(8, nf * 2, affine=True)
+        # [128, 32, 32]
+        self.conv2_0 = nn.Conv2d(nf * 2, nf * 4, 3, 1, 1, bias=False)
+        self.bn2_0 = nn.GroupNorm(8, nf * 4, affine=True)
+        self.conv2_1 = nn.Conv2d(nf * 4, nf * 4, 4, 2, 1, bias=False)
+        self.bn2_1 = nn.GroupNorm(8, nf * 4, affine=True)
+        # [256, 16, 16]
+        self.conv3_0 = nn.Conv2d(nf * 4, nf * 8, 3, 1, 1, bias=False)
+        self.bn3_0 = nn.GroupNorm(8, nf * 8, affine=True)
+        self.conv3_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
+        self.bn3_1 = nn.GroupNorm(8, nf * 8, affine=True)
+        if depth > 4:
+            # [512, 8, 8]
+            self.conv4_0 = nn.Conv2d(nf * 8, nf * 8, 3, 1, 1, bias=False)
+            self.bn4_0 = nn.GroupNorm(8, nf * 8, affine=True)
+            self.conv4_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
+            self.bn4_1 = nn.GroupNorm(8, nf * 8, affine=True)
+
+        # activation function
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+    def forward(self, x):
+        fea = self.lrelu(self.conv0_0(x))
+        fea = self.lrelu(self.bn0_1(self.conv0_1(fea)))
+
+        fea = self.lrelu(self.bn1_0(self.conv1_0(fea)))
+        fea = self.lrelu(self.bn1_1(self.conv1_1(fea)))
+
+        fea = self.lrelu(self.bn2_0(self.conv2_0(fea)))
+        fea = self.lrelu(self.bn2_1(self.conv2_1(fea)))
+
+        fea = self.lrelu(self.bn3_0(self.conv3_0(fea)))
+        fea = self.lrelu(self.bn3_1(self.conv3_1(fea)))
+
+        if self.depth > 4:
+            fea = self.lrelu(self.bn4_0(self.conv4_0(fea)))
+            fea = self.lrelu(self.bn4_1(self.conv4_1(fea)))
+        return fea
+
+
+class RefDiscriminatorVgg128(nn.Module):
+    # input_img_factor = multiplier to support images over 128x128. Only certain factors are supported.
+    def __init__(self, in_nc, nf, input_img_factor=1):
+        super(RefDiscriminatorVgg128, self).__init__()
+
+        # activation function
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+        self.feature_head = Vgg128GnHead(in_nc, nf)
+        self.ref_head = Vgg128GnHead(in_nc+1, nf, depth=4)
+        final_nf = nf * 8
+
+        self.linear1 = nn.Linear(int(final_nf * 4 * input_img_factor * 4 * input_img_factor), 512)
+        self.ref_linear = nn.Linear(nf * 8, 128)
+
+        self.output_linears = nn.Sequential(
+            nn.Linear(128+512, 512),
+            self.lrelu,
+            nn.Linear(512, 256),
+            self.lrelu,
+            nn.Linear(256, 128),
+            self.lrelu,
+            nn.Linear(128, 1)
+        )
+
+    def forward(self, x, ref, ref_center_point):
+        ref = self.ref_head(ref)
+        ref_center_point = ref_center_point // 16
+        ref_vector = gather_2d(ref, ref_center_point)
+        ref_vector = self.ref_linear(ref_vector)
+
+        fea = self.feature_head(x)
+        fea = fea.contiguous().view(fea.size(0), -1)
+        fea = self.lrelu(self.linear1(fea))
+
+        out = self.output_linears(torch.cat([fea, ref_vector], dim=1))
+        return out
