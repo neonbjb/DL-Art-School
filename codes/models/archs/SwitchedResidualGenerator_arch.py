@@ -11,7 +11,7 @@ from torch.utils.checkpoint import checkpoint
 
 
 # Set to true to relieve memory pressure by using torch.utils.checkpoint in several memory-critical locations.
-memory_checkpointing_enabled = False
+memory_checkpointing_enabled = True
 
 
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
