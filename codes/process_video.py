@@ -39,7 +39,7 @@ class FfmpegBackedVideoDataset(data.Dataset):
         secs = it / self.frame_rate + self.start_at
         mins = int(secs / 60)
         hours = int(mins / 60)
-        secs = secs - (mins * 60)
+        secs = secs - (mins * 60) - (hours * 3600)
         mins = mins % 60
         return '%02d:%02d:%06.3f' % (hours, mins, secs)
 
