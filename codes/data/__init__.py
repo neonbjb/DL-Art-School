@@ -14,7 +14,7 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
             batch_size = dataset_opt['batch_size'] // world_size
             shuffle = False
         else:
-            num_workers = max(dataset_opt['n_workers'] * len(opt['gpu_ids']), 10)
+            num_workers = dataset_opt['n_workers'] * len(opt['gpu_ids'])
             batch_size = dataset_opt['batch_size']
             shuffle = True
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
@@ -38,6 +38,8 @@ def create_dataset(dataset_opt):
         from data.Downsample_dataset import DownsampleDataset as D
     elif mode == 'fullimage':
         from data.full_image_dataset import FullImageDataset as D
+    elif mode == 'combined':
+        from data.combined_dataset import CombinedDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)

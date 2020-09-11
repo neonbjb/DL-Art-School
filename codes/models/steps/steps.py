@@ -91,6 +91,9 @@ class ConfigurableStep(Module):
             # Don't do injections tagged with eval unless we are not in train mode.
             if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
                 continue
+            # Likewise, don't do injections tagged with train unless we are not in eval.
+            if not train and 'train' in inj.opt.keys() and inj.opt['train']:
+                continue
             injected = inj(local_state)
             local_state.update(injected)
             new_state.update(injected)
