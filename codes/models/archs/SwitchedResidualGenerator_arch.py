@@ -8,6 +8,7 @@ from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, Expan
 from switched_conv_util import save_attention_to_image_rgb
 import os
 from torch.utils.checkpoint import checkpoint
+from models.archs.spinenet_arch import SpineNet
 
 
 # Set to true to relieve memory pressure by using torch.utils.checkpoint in several memory-critical locations.
@@ -335,3 +336,106 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
 
+
+# This class encapsulates an encoder based on an object detection network backbone whose purpose is to generated a
+# structured embedding encoding what is in an image patch. This embedding can then be used to perform structured
+# alterations to the underlying image.
+#
+# Caveat: Since this uses a pre-defined (and potentially pre-trained) SpineNet backbone, it has a minimum-supported
+# image size, which is 128x128. In order to use 64x64 patches, you must set interpolate_first=True. though this will
+# degrade quality.
+class BackboneEncoder(nn.Module):
+    def __init__(self, interpolate_first=True, pretrained_backbone=None):
+        super(BackboneEncoder, self).__init__()
+        self.interpolate_first = interpolate_first
+
+        # Uses dual spinenets, one for the input patch and the other for the reference image.
+        self.patch_spine = SpineNet('49', in_channels=3, use_input_norm=True)
+        self.ref_spine = SpineNet('49', in_channels=3, use_input_norm=True)
+
+        self.merge_process1 = ConvGnSilu(512, 512, kernel_size=1, activation=True, norm=False, bias=True)
+        self.merge_process2 = ConvGnSilu(512, 384, kernel_size=1, activation=True, norm=True, bias=False)
+        self.merge_process3 = ConvGnSilu(384, 256, kernel_size=1, activation=False, norm=False, bias=True)
+
+        if pretrained_backbone is not None:
+            loaded_params = torch.load(pretrained_backbone)
+            self.ref_spine.load_state_dict(loaded_params['state_dict'], strict=True)
+            self.patch_spine.load_state_dict(loaded_params['state_dict'], strict=True)
+
+    # Returned embedding will have been reduced in size by a factor of 8 (4 if interpolate_first=True).
+    # Output channels are always 256.
+    # ex, 64x64 input with interpolate_first=True will result in tensor of shape [bx256x16x16]
+    def forward(self, x, ref, ref_center_point):
+        if self.interpolate_first:
+            x = F.interpolate(x, scale_factor=2, mode="bicubic")
+            # Don't interpolate ref - assume it is fed in at the proper resolution.
+            # ref = F.interpolate(ref, scale_factor=2, mode="bicubic")
+
+        # [ref] will have a 'mask' channel which we cannot use with pretrained spinenet.
+        ref = ref[:, :3, :, :]
+        ref_emb = checkpoint(self.ref_spine, ref)[0]
+        ref_code = gather_2d(ref_emb, ref_center_point // 8)  # Divide by 8 to bring the center point to the correct location.
+
+        patch = checkpoint(self.ref_spine, x)[0]
+        ref_code_expanded = ref_code.view(-1, 256, 1, 1).repeat(1, 1, patch.shape[2], patch.shape[3])
+        combined = self.merge_process1(torch.cat([patch, ref_code_expanded], dim=1))
+        combined = self.merge_process2(combined)
+        combined = self.merge_process3(combined)
+
+        return combined
+
+
+# Mutiplexer that combines a structured embedding with a contextual switch input to guide alterations to that input.
+#
+# Implemented as basically a u-net which reduces the input into the same structural space as the embedding, combines the
+# two, then expands back into the original feature space.
+class EmbeddingMultiplexer(nn.Module):
+    # Note: reductions=2 if the encoder is using interpolated input, otherwise reductions=3.
+    def __init__(self, nf, multiplexer_channels, reductions=2):
+        super(EmbeddingMultiplexer, self).__init__()
+        self.embedding_process = MultiConvBlock(256, 256, 256, kernel_size=3, depth=3, norm=True)
+
+        self.filter_conv = ConvGnSilu(nf, nf, activation=True, norm=False, bias=True)
+        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(nf * 2 ** i) for i in range(reductions)])
+        reduction_filters = nf * 2 ** reductions
+        self.processing_blocks = nn.Sequential(
+            ConvGnSilu(reduction_filters + 256, reduction_filters + 256, kernel_size=1, activation=True, norm=False, bias=True),
+            ConvGnSilu(reduction_filters + 256, reduction_filters + 128, kernel_size=1, activation=True, norm=True, bias=False),
+            ConvGnSilu(reduction_filters + 128, reduction_filters, kernel_size=3, activation=True, norm=True, bias=False),
+            ConvGnSilu(reduction_filters, reduction_filters, kernel_size=3, activation=True, norm=True, bias=False))
+        self.expansion_blocks = nn.ModuleList([ExpansionBlock2(reduction_filters // (2 ** i)) for i in range(reductions)])
+
+        gap = nf - multiplexer_channels
+        cbl1_out = ((nf - (gap // 2)) // 4) * 4   # Must be multiples of 4 to use with group norm.
+        self.cbl1 = ConvGnSilu(nf, cbl1_out, norm=True, bias=False, num_groups=4)
+        cbl2_out = ((nf - (3 * gap // 4)) // 4) * 4
+        self.cbl2 = ConvGnSilu(cbl1_out, cbl2_out, norm=True, bias=False, num_groups=4)
+        self.cbl3 = ConvGnSilu(cbl2_out, multiplexer_channels, bias=True, norm=False)
+
+    def forward(self, x, embedding):
+        x = self.filter_conv(x)
+        embedding = self.embedding_process(embedding)
+
+        reduction_identities = []
+        for b in self.reduction_blocks:
+            reduction_identities.append(x)
+            x = b(x)
+        x = self.processing_blocks(torch.cat([x, embedding], dim=1))
+        for i, b in enumerate(self.expansion_blocks):
+            x = b(x, reduction_identities[-i - 1])
+
+        x = self.cbl1(x)
+        x = self.cbl2(x)
+        x = self.cbl3(x)
+        return x
+
+if __name__ == '__main__':
+    bb = BackboneEncoder(64)
+    emb = EmbeddingMultiplexer(64, 10)
+    x = torch.randn(4,3,64,64)
+    r = torch.randn(4,4,64,64)
+    xu = torch.randn(4,64,64,64)
+    cp = torch.zeros((4,2), dtype=torch.long)
+
+    b = bb(x, r, cp)
+    emb(xu, b)

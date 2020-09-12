@@ -365,4 +365,4 @@ class SpineNet(nn.Module):
             if spec.is_output:
                 output_feat[spec.level] = target_feat
 
-        return [self.endpoint_convs[str(level)](output_feat[level]) for level in self.output_level]
+        return tuple([self.endpoint_convs[str(level)](output_feat[level]) for level in self.output_level])
