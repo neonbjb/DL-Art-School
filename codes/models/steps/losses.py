@@ -36,6 +36,7 @@ class ConfigurableLoss(nn.Module):
         self.env = env
         self.metrics = []
 
+    # net is either a scalar network being trained or a list of networks being trained, depending on the configuration.
     def forward(self, net, state):
         raise NotImplementedError
 
@@ -58,7 +59,7 @@ class PixLoss(ConfigurableLoss):
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
 
-    def forward(self, net, state):
+    def forward(self, _, state):
         return self.criterion(state[self.opt['fake']], state[self.opt['real']])
 
 
@@ -72,7 +73,7 @@ class FeatureLoss(ConfigurableLoss):
         if not env['opt']['dist']:
             self.netF = torch.nn.parallel.DataParallel(self.netF)
 
-    def forward(self, net, state):
+    def forward(self, _, state):
         with torch.no_grad():
             logits_real = self.netF(state[self.opt['real']])
         logits_fake = self.netF(state[self.opt['fake']])
@@ -94,7 +95,7 @@ class InterpretedFeatureLoss(ConfigurableLoss):
             self.netF_real = torch.nn.parallel.DataParallel(self.netF_real)
             self.netF_gen = torch.nn.parallel.DataParallel(self.netF_gen)
 
-    def forward(self, net, state):
+    def forward(self, _, state):
         logits_real = self.netF_real(state[self.opt['real']])
         logits_fake = self.netF_gen(state[self.opt['fake']])
         return self.criterion(logits_fake, logits_real)
@@ -106,7 +107,7 @@ class GeneratorGanLoss(ConfigurableLoss):
         self.opt = opt
         self.criterion = GANLoss(opt['gan_type'], 1.0, 0.0).to(env['device'])
 
-    def forward(self, net, state):
+    def forward(self, _, state):
         netD = self.env['discriminators'][self.opt['discriminator']]
         fake = extract_params_from_state(self.opt['fake'], state)
         if self.opt['gan_type'] in ['gan', 'pixgan', 'pixgan_fea']:

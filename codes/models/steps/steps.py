@@ -37,28 +37,45 @@ class ConfigurableStep(Module):
                 self.weights[loss_name] = loss['weight']
         self.losses = OrderedDict(losses)
 
+    def get_network_for_name(self, name):
+        return self.env['generators'][name] if name in self.env['generators'].keys() \
+                else self.env['discriminators'][name]
+
     # Subclasses should override this to define individual optimizers. They should all go into self.optimizers.
     #  This default implementation defines a single optimizer for all Generator parameters.
     #  Must be called after networks are initialized and wrapped.
     def define_optimizers(self):
-        self.training_net = self.env['generators'][self.step_opt['training']] \
-            if self.step_opt['training'] in self.env['generators'].keys() \
-            else self.env['discriminators'][self.step_opt['training']]
-        optim_params = []
-        for k, v in self.training_net.named_parameters():  # can optimize for a part of the model
-            if v.requires_grad:
-                optim_params.append(v)
+        training = self.step_opt['training']
+        if isinstance(training, list):
+            self.training_net = [self.get_network_for_name(t) for t in training]
+            opt_configs = [self.step_opt['optimizer_params'][t] for t in training]
+            nets = self.training_net
+        else:
+            self.training_net = self.get_network_for_name(training)
+            # When only training one network, optimizer params can just embedded in the step params.
+            if 'optimizer_params' not in self.step_opt.keys():
+                opt_configs = [self.step_opt]
             else:
-                if self.env['rank'] <= 0:
-                    logger.warning('Params [{:s}] will not optimize.'.format(k))
-        if 'optimizer' not in self.step_opt.keys() or self.step_opt['optimizer'] == 'adam':
-            opt = torch.optim.Adam(optim_params, lr=self.step_opt['lr'],
-                                   weight_decay=self.step_opt['weight_decay'],
-                                   betas=(self.step_opt['beta1'], self.step_opt['beta2']))
-        elif self.step_opt['optimizer'] == 'novograd':
-            opt = NovoGrad(optim_params, lr=self.step_opt['lr'], weight_decay=self.step_opt['weight_decay'],
-                                   betas=(self.step_opt['beta1'], self.step_opt['beta2']))
-        self.optimizers = [opt]
+                opt_configs = [self.step_opt['optimizer_params']]
+            nets = [self.training_net]
+        self.optimizers = []
+        for net, opt_config in zip(nets, opt_configs):
+            optim_params = []
+            for k, v in net.named_parameters():  # can optimize for a part of the model
+                if v.requires_grad:
+                    optim_params.append(v)
+                else:
+                    if self.env['rank'] <= 0:
+                        logger.warning('Params [{:s}] will not optimize.'.format(k))
+
+            if 'optimizer' not in self.step_opt.keys() or self.step_opt['optimizer'] == 'adam':
+                opt = torch.optim.Adam(optim_params, lr=opt_config['lr'],
+                                       weight_decay=opt_config['weight_decay'],
+                                       betas=(opt_config['beta1'], opt_config['beta2']))
+            elif self.step_opt['optimizer'] == 'novograd':
+                opt = NovoGrad(optim_params, lr=opt_config['lr'], weight_decay=opt_config['weight_decay'],
+                                       betas=(opt_config['beta1'], opt_config['beta2']))
+            self.optimizers.append(opt)
 
     # Returns all optimizers used in this step.
     def get_optimizers(self):
@@ -72,7 +89,10 @@ class ConfigurableStep(Module):
 
     # Returns the names of the networks this step will train. Other networks will be frozen.
     def get_networks_trained(self):
-        return [self.step_opt['training']]
+        if isinstance(self.step_opt['training'], list):
+            return self.step_opt['training']
+        else:
+            return [self.step_opt['training']]
 
     # Performs all forward and backward passes for this step given an input state. All input states are lists of
     # chunked tensors. Use grad_accum_step to dereference these steps. Should return a dict of tensors that later

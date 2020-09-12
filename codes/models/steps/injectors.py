@@ -50,6 +50,8 @@ class ImageGeneratorInjector(Injector):
             results = gen(state[self.input])
         new_state = {}
         if isinstance(self.output, list):
+            # Only dereference tuples or lists, not tensors.
+            assert isinstance(results, list) or isinstance(results, tuple)
             for i, k in enumerate(self.output):
                 new_state[k] = results[i]
         else:
