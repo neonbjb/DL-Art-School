@@ -175,7 +175,7 @@ class ReferencingConvMultiplexer(nn.Module):
 
 class ConfigurableSwitchComputer(nn.Module):
     def __init__(self, base_filters, multiplexer_net, pre_transform_block, transform_block, transform_count, attention_norm,
-                 init_temp=20, add_scalable_noise_to_transforms=False):
+                 init_temp=20, add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=False):
         super(ConfigurableSwitchComputer, self).__init__()
 
         tc = transform_count
@@ -187,6 +187,7 @@ class ConfigurableSwitchComputer(nn.Module):
             self.pre_transform = None
         self.transforms = nn.ModuleList([transform_block() for _ in range(transform_count)])
         self.add_noise = add_scalable_noise_to_transforms
+        self.feed_transforms_into_multiplexer = feed_transforms_into_multiplexer
         self.noise_scale = nn.Parameter(torch.full((1,), float(1e-3)))
 
         # And the switch itself, including learned scalars
@@ -232,6 +233,8 @@ class ConfigurableSwitchComputer(nn.Module):
 
         if not isinstance(att_in, tuple):
             att_in = (att_in,)
+        if self.feed_transforms_into_multiplexer:
+            att_in = att_in + (torch.stack(xformed, dim=1),)
         if memory_checkpointing_enabled:
             m = checkpoint(self.multiplexer, *att_in)
         else:
@@ -384,6 +387,9 @@ class BackboneEncoder(nn.Module):
 
         return combined
 
+# Note to future self:
+# Can I do a real transformer here? Such as by having the multiplexer be able to toggle off of transformations by
+# their output? The embedding will be used as the "Query" to the "QueryxKey=Value" relationship.
 
 # Mutiplexer that combines a structured embedding with a contextual switch input to guide alterations to that input.
 #
@@ -429,13 +435,65 @@ class EmbeddingMultiplexer(nn.Module):
         x = self.cbl3(x)
         return x
 
+
+class QueryKeyMultiplexer(nn.Module):
+    def __init__(self, nf, multiplexer_channels, reductions=2):
+        super(QueryKeyMultiplexer, self).__init__()
+
+        # Blocks used to create the query
+        self.input_process = ConvGnSilu(nf, nf, activation=True, norm=False, bias=True)
+        self.embedding_process = ConvGnSilu(256, 256, activation=True, norm=False, bias=True)
+        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(nf * 2 ** i) for i in range(reductions)])
+        reduction_filters = nf * 2 ** reductions
+        self.processing_blocks = nn.Sequential(
+            ConvGnSilu(reduction_filters + 256, reduction_filters + 256, kernel_size=1, activation=True, norm=False, bias=True),
+            ConvGnSilu(reduction_filters + 256, reduction_filters + 128, kernel_size=1, activation=True, norm=True, bias=False),
+            ConvGnSilu(reduction_filters + 128, reduction_filters, kernel_size=3, activation=True, norm=True, bias=False),
+            ConvGnSilu(reduction_filters, reduction_filters, kernel_size=3, activation=True, norm=True, bias=False))
+        self.expansion_blocks = nn.ModuleList([ExpansionBlock2(reduction_filters // (2 ** i)) for i in range(reductions)])
+
+        # Blocks used to create the key
+        self.key_process = ConvGnSilu(nf, nf, kernel_size=1, activation=True, norm=False, bias=True)
+
+        # Postprocessing blocks.
+        self.cbl1 = ConvGnSilu(nf, nf // 2, kernel_size=1, norm=True, bias=False, num_groups=4)
+        self.cbl2 = ConvGnSilu(nf // 2, 1, kernel_size=1, norm=False, bias=False)
+
+    def forward(self, x, embedding, transformations):
+        q = self.input_process(x)
+        embedding = self.embedding_process(embedding)
+        reduction_identities = []
+        for b in self.reduction_blocks:
+            reduction_identities.append(q)
+            q = b(q)
+        q = self.processing_blocks(torch.cat([q, embedding], dim=1))
+        for i, b in enumerate(self.expansion_blocks):
+            q = b(q, reduction_identities[-i - 1])
+
+        b, t, f, h, w = transformations.shape
+        k = transformations.view(b * t, f, h, w)
+        k = self.key_process(k)
+
+        k = k.view(b, t, f, h, w)  # Not sure if this is necessary..
+        q = q.view(b, 1, f, h, w).repeat(1, t, 1, 1, 1)
+        v = q * k
+        v = v.view(b * t, f, h, w)
+
+        v = self.cbl1(v)
+        v = self.cbl2(v)
+
+        return v.view(b, t, h, w)
+
+
 if __name__ == '__main__':
     bb = BackboneEncoder(64)
-    emb = EmbeddingMultiplexer(64, 10)
+    emb = QueryKeyMultiplexer(64, 10)
     x = torch.randn(4,3,64,64)
-    r = torch.randn(4,4,64,64)
+    r = torch.randn(4,3,128,128)
     xu = torch.randn(4,64,64,64)
     cp = torch.zeros((4,2), dtype=torch.long)
 
+    trans = [torch.randn(4,64,64,64) for t in range(10)]
+
     b = bb(x, r, cp)
-    emb(xu, b)
+    emb(xu, b, trans)
