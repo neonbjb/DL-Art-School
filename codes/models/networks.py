@@ -61,6 +61,8 @@ def define_G(opt, net_key='network_G', scale=None):
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "backbone_encoder":
         netG = SwitchedGen_arch.BackboneEncoder(pretrained_backbone=opt_net['pretrained_spinenet'])
+    elif which_model == "backbone_encoder_no_ref":
+        netG = SwitchedGen_arch.BackboneEncoderNoRef(pretrained_backbone=opt_net['pretrained_spinenet'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
 
