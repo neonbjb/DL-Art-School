@@ -97,7 +97,7 @@ class FullImageDataset(data.Dataset):
             target_sz = self.opt['min_tile_size']
         h, w, _ = image.shape
         possible_sizes_above_target = h - target_sz
-        square_size = int(target_sz + possible_sizes_above_target * min(np.abs(np.random.normal(scale=.1)), 1.0))
+        square_size = int(target_sz + possible_sizes_above_target * min(np.abs(np.random.normal(scale=.2)), 1.0))
         # Pick the left,top coords to draw the patch from
         left = self.pick_along_range(w, square_size, .3)
         top = self.pick_along_range(w, square_size, .3)
