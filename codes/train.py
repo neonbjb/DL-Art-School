@@ -160,7 +160,7 @@ def main():
 
         start_epoch = resume_state['epoch']
         current_step = resume_state['iter']
-        model.resume_training(resume_state)  # handle optimizers and schedulers
+        model.resume_training(resume_state, 'amp_opt_level' in opt.keys())  # handle optimizers and schedulers
     else:
         current_step = -1 if 'start_step' not in opt.keys() else opt['start_step']
         start_epoch = 0
