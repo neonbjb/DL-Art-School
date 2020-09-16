@@ -9,6 +9,7 @@ import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.feature_arch as feature_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.SPSR_arch as spsr
+import models.archs.StructuredSwitchedGenerator as ssg
 from collections import OrderedDict
 
 logger = logging.getLogger('base')
@@ -58,6 +59,10 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == "spsr5":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = spsr.Spsr5(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
+    elif which_model == "ssgr1":
+        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
+        netG = ssg.SSGr1(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "backbone_encoder":
         netG = SwitchedGen_arch.BackboneEncoder(pretrained_backbone=opt_net['pretrained_spinenet'])
