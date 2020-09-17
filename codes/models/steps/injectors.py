@@ -7,6 +7,8 @@ def create_injector(opt_inject, env):
     type = opt_inject['type']
     if type == 'generator':
         return ImageGeneratorInjector(opt_inject, env)
+    elif type == 'discriminator':
+        return DiscriminatorInjector(opt_inject, env)
     elif type == 'scheduled_scalar':
         return ScheduledScalarInjector(opt_inject, env)
     elif type == 'img_grad':
@@ -48,6 +50,30 @@ class ImageGeneratorInjector(Injector):
             results = gen(*params)
         else:
             results = gen(state[self.input])
+        new_state = {}
+        if isinstance(self.output, list):
+            # Only dereference tuples or lists, not tensors.
+            assert isinstance(results, list) or isinstance(results, tuple)
+            for i, k in enumerate(self.output):
+                new_state[k] = results[i]
+        else:
+            new_state[self.output] = results
+
+        return new_state
+
+
+# Injects a result from a discriminator network into the state.
+class DiscriminatorInjector(Injector):
+    def __init__(self, opt, env):
+        super(DiscriminatorInjector, self).__init__(opt, env)
+
+    def forward(self, state):
+        d = self.env['discriminators'][self.opt['discriminator']]
+        if isinstance(self.input, list):
+            params = [state[i] for i in self.input]
+            results = d(*params)
+        else:
+            results = d(state[self.input])
         new_state = {}
         if isinstance(self.output, list):
             # Only dereference tuples or lists, not tensors.
