@@ -210,7 +210,7 @@ class SSGr1(nn.Module):
                 torchvision.utils.save_image(self.lr, os.path.join(experiments_path, "attention_maps", "amap_%i_base_image.png" % (step,)))
 
 
-    def get_debug_values(self, step):
+    def get_debug_values(self, step, net_name):
         temp = self.switches[0].switch.temperature
         mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
         means = [i[0] for i in mean_hists]

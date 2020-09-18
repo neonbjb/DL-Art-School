@@ -105,6 +105,7 @@ class ConfigurableStep(Module):
         for k, v in state.items():
             local_state[k] = v[grad_accum_step]
         local_state.update(new_state)
+        local_state['train_nets'] = str(self.get_networks_trained())
 
         # Inject in any extra dependencies.
         for inj in self.injectors:

@@ -395,7 +395,7 @@ class SwitchedSpsrWithRef2(nn.Module):
                 prefix = "attention_map_%i_%%i.png" % (step,)
                 [save_attention_to_image_rgb(output_path % (i,), self.attentions[i], self.transformation_counts, prefix, step) for i in range(len(self.attentions))]
 
-    def get_debug_values(self, step):
+    def get_debug_values(self, step, net_name):
         temp = self.switches[0].switch.temperature
         mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
         means = [i[0] for i in mean_hists]
@@ -527,7 +527,7 @@ class Spsr4(nn.Module):
                 prefix = "attention_map_%i_%%i.png" % (step,)
                 [save_attention_to_image_rgb(output_path % (i,), self.attentions[i], self.transformation_counts, prefix, step) for i in range(len(self.attentions))]
 
-    def get_debug_values(self, step):
+    def get_debug_values(self, step, net_name):
         temp = self.switches[0].switch.temperature
         mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
         means = [i[0] for i in mean_hists]
@@ -658,7 +658,7 @@ class Spsr5(nn.Module):
                 prefix = "attention_map_%i_%%i.png" % (step,)
                 [save_attention_to_image_rgb(output_path % (i,), self.attentions[i], self.transformation_counts, prefix, step) for i in range(len(self.attentions))]
 
-    def get_debug_values(self, step):
+    def get_debug_values(self, step, net_name):
         temp = self.switches[0].switch.temperature
         mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
         means = [i[0] for i in mean_hists]

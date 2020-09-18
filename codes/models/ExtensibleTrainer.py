@@ -253,9 +253,9 @@ class ExtensibleTrainer(BaseModel):
             log.update(s.get_metrics())
 
         # Some generators can do their own metric logging.
-        for net in self.networks.values():
+        for net_name, net in self.networks.items():
             if hasattr(net.module, "get_debug_values"):
-                log.update(net.module.get_debug_values(step))
+                log.update(net.module.get_debug_values(step, net_name))
         return log
 
     def get_current_visuals(self, need_GT=True):
