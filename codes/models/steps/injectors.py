@@ -19,6 +19,8 @@ def create_injector(opt_inject, env):
         return GreyInjector(opt_inject, env)
     elif type == 'interpolate':
         return InterpolateInjector(opt_inject, env)
+    elif type == 'imageflow':
+        return ImageFlowInjector(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -143,3 +145,14 @@ class InterpolateInjector(Injector):
         scaled = torch.nn.functional.interpolate(state[self.opt['in']], scale_factor=self.opt['scale_factor'],
                                                  mode=self.opt['mode'])
         return {self.opt['out']: scaled}
+
+
+class ImageFlowInjector(Injector):
+    def __init__(self, opt, env):
+        # Requires building this custom cuda kernel. Only require it if explicitly needed.
+        from models.networks.layers.resample2d_package.resample2d import Resample2d
+        super(ImageFlowInjector, self).__init__(opt, env)
+        self.resample = Resample2d()
+
+    def forward(self, state):
+        return self.resample(state[self.opt['in']], state[self.opt['flow']])
