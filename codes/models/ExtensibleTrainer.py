@@ -10,6 +10,7 @@ import models.lr_scheduler as lr_scheduler
 import models.networks as networks
 from models.base_model import BaseModel
 from models.steps.steps import ConfigurableStep
+from models.experiments.experiments import get_experiment_for_name
 import torchvision.utils as utils
 
 logger = logging.getLogger('base')
@@ -37,6 +38,7 @@ class ExtensibleTrainer(BaseModel):
 
         self.netsG = {}
         self.netsD = {}
+        # Note that this is on the chopping block. It should be integrated into an injection point.
         self.netF = networks.define_F().to(self.device)  # Used to compute feature loss.
         for name, net in opt['networks'].items():
             # Trainable is a required parameter, but the default is simply true. Set it here.
@@ -56,9 +58,11 @@ class ExtensibleTrainer(BaseModel):
                 new_net.eval()
 
         # Initialize the train/eval steps
+        self.step_names = []
         self.steps = []
         for step_name, step in opt['steps'].items():
             step = ConfigurableStep(step, self.env)
+            self.step_names.append(step_name)  # This could be an OrderedDict, but it's a PITA to integrate with AMP below.
             self.steps.append(step)
 
         # step.define_optimizers() relies on the networks being placed in the env, so put them there. Even though
@@ -91,11 +95,12 @@ class ExtensibleTrainer(BaseModel):
             amp_opts = self.optimizers
             self.env['amp'] = False
 
-        # Unwrap steps & netF
+        # Unwrap steps & netF & optimizers
         self.netF = amp_nets[len(total_nets)]
         assert(len(self.steps) == len(amp_nets[len(total_nets)+1:]))
         self.steps = amp_nets[len(total_nets)+1:]
         amp_nets = amp_nets[:len(total_nets)]
+        self.optimizers = amp_opts
 
         # DataParallel
         dnets = []
@@ -132,6 +137,11 @@ class ExtensibleTrainer(BaseModel):
 
         self.print_network()  # print network
         self.load()  # load G and D if needed
+
+        # Load experiments
+        self.experiments = []
+        if 'experiments' in opt.keys():
+            self.experiments = [get_experiment_for_name(e) for e in op['experiments']]
 
         # Setting this to false triggers SRGAN to call the models update_model() function on the first iteration.
         self.updated = True
@@ -185,6 +195,9 @@ class ExtensibleTrainer(BaseModel):
                         p.requires_grad = False
             assert enabled == len(nets_to_train)
 
+            # Update experiments
+            [e.before_step(self.opt, self.step_names[step_num], self.env, nets_to_train, state) for e in self.experiments]
+
             for o in s.get_optimizers():
                 o.zero_grad()
 
@@ -205,7 +218,9 @@ class ExtensibleTrainer(BaseModel):
                 state[k] = v
 
             # And finally perform optimization.
+            [e.before_optimize(state) for e in self.experiments]
             s.do_step()
+            [e.after_optimize(state) for e in self.experiments]
 
         # Record visual outputs for usage in debugging and testing.
         if 'visuals' in self.opt['logger'].keys():
@@ -251,6 +266,9 @@ class ExtensibleTrainer(BaseModel):
         log = {}
         for s in self.steps:
             log.update(s.get_metrics())
+
+        for e in self.experiments:
+            log.update(e.get_log_data())
 
         # Some generators can do their own metric logging.
         for net_name, net in self.networks.items():
