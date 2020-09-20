@@ -16,6 +16,8 @@ def create_generator_loss(opt_loss, env):
         return GeneratorGanLoss(opt_loss, env)
     elif type == 'discriminator_gan':
         return DiscriminatorGanLoss(opt_loss, env)
+    elif type == 'geometric':
+        return GeometricSimilarityGeneratorLoss(opt_loss, env)
     else:
         raise NotImplementedError
 
@@ -123,6 +125,7 @@ class GeneratorGanLoss(ConfigurableLoss):
         else:
             raise NotImplementedError
 
+import torchvision
 
 class DiscriminatorGanLoss(ConfigurableLoss):
     def __init__(self, opt, env):
@@ -165,3 +168,53 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         else:
             raise NotImplementedError
 
+import random
+import functools
+
+# Computes a loss created by comparing the output of a generator to the output from the same generator when fed an
+# input that has been altered randomly by rotation or flip.
+# The "real" parameter to this loss is the actual output of the generator (from an injection point)
+# The "fake" parameter is the LR input that produced the "real" parameter when fed through the generator.
+class GeometricSimilarityGeneratorLoss(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super(GeometricSimilarityGeneratorLoss, self).__init__(opt, env)
+        self.opt = opt
+        self.generator = opt['generator']
+        self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
+        self.gen_input_for_alteration = opt['input_alteration_index'] if 'input_alteration_index' in opt.keys() else 0
+        self.gen_output_to_use = opt['generator_output_index'] if 'generator_output_index' in opt.keys() else None
+        self.detach_fake = opt['detach_fake'] if 'detach_fake' in opt.keys() else False
+
+    # Returns a random alteration and its counterpart (that undoes the alteration)
+    def random_alteration(self):
+        return random.choice([(functools.partial(torch.flip, dims=(2,)), functools.partial(torch.flip, dims=(2,))),
+                              (functools.partial(torch.flip, dims=(3,)), functools.partial(torch.flip, dims=(3,))),
+                              (functools.partial(torch.rot90, k=1, dims=[2,3]), functools.partial(torch.rot90, k=3, dims=[2,3])),
+                              (functools.partial(torch.rot90, k=2, dims=[2,3]), functools.partial(torch.rot90, k=2, dims=[2,3])),
+                              (functools.partial(torch.rot90, k=3, dims=[2,3]), functools.partial(torch.rot90, k=1, dims=[2,3]))])
+
+    def forward(self, net, state):
+        self.metrics = []
+        net = self.env['generators'][self.generator]  # Get the network from an explicit parameter.
+                                                    # The <net> parameter is not reliable for generator losses since often they are combined with many networks.
+        fake = extract_params_from_state(self.opt['fake'], state)
+        alteration, undo_fn = self.random_alteration()
+        altered = []
+        for i, t in enumerate(fake):
+            if i == self.gen_input_for_alteration:
+                altered.append(alteration(t))
+            else:
+                altered.append(t)
+        if self.detach_fake:
+            with torch.no_grad():
+                upsampled_altered = net(*altered)
+        else:
+            upsampled_altered = net(*altered)
+
+        if self.gen_output_to_use:
+            upsampled_altered = upsampled_altered[self.gen_output_to_use]
+
+        # Undo alteration on HR image
+        upsampled_altered = undo_fn(upsampled_altered)
+
+        return self.criterion(state[self.opt['real']], upsampled_altered)

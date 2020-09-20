@@ -1,6 +1,8 @@
 import torch.nn
 from models.archs.SPSR_arch import ImageGradientNoPadding
 from data.weight_scheduler import get_scheduler_for_opt
+from torch.utils.checkpoint import checkpoint
+#from models.steps.recursive_gen_injectors import ImageFlowInjector
 
 # Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
 def create_injector(opt_inject, env):
@@ -136,7 +138,7 @@ class GreyInjector(Injector):
         mean = mean.repeat(1, 3, 1, 1)
         return {self.opt['out']: mean}
 
-
+import torchvision.utils as utils
 class InterpolateInjector(Injector):
     def __init__(self, opt, env):
         super(InterpolateInjector, self).__init__(opt, env)
@@ -145,14 +147,3 @@ class InterpolateInjector(Injector):
         scaled = torch.nn.functional.interpolate(state[self.opt['in']], scale_factor=self.opt['scale_factor'],
                                                  mode=self.opt['mode'])
         return {self.opt['out']: scaled}
-
-
-class ImageFlowInjector(Injector):
-    def __init__(self, opt, env):
-        # Requires building this custom cuda kernel. Only require it if explicitly needed.
-        from models.networks.layers.resample2d_package.resample2d import Resample2d
-        super(ImageFlowInjector, self).__init__(opt, env)
-        self.resample = Resample2d()
-
-    def forward(self, state):
-        return self.resample(state[self.opt['in']], state[self.opt['flow']])
