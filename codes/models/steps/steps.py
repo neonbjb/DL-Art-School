@@ -7,6 +7,7 @@ from apex import amp
 from collections import OrderedDict
 from .injectors import create_injector
 from models.novograd import NovoGrad
+from utils.util import recursively_detach
 
 logger = logging.getLogger('base')
 
@@ -147,9 +148,7 @@ class ConfigurableStep(Module):
 
         # Detach all state variables. Within the step, gradients can flow. Once these variables leave the step
         # we must release the gradients.
-        for k, v in new_state.items():
-            if isinstance(v, torch.Tensor):
-                new_state[k] = v.detach()
+        new_state = recursively_detach(new_state)
         return new_state
 
     # Performs the optimizer step after all gradient accumulation is completed. Default implementation simply steps()

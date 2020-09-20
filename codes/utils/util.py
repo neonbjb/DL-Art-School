@@ -342,3 +342,21 @@ class ProgressBar(object):
             sys.stdout.write('completed: {}, elapsed: {}s, {:.1f} tasks/s'.format(
                 self.completed, int(elapsed + 0.5), fps))
         sys.stdout.flush()
+
+
+# Recursively detaches all tensors in a tree of lists, dicts and tuples and returns the same structure.
+def recursively_detach(v):
+    if isinstance(v, torch.Tensor):
+        return v.detach()
+    elif isinstance(v, list) or isinstance(v, tuple):
+        out = [recursively_detach(i) for i in v]
+        if isinstance(v, tuple):
+            return tuple(out)
+        return out
+    elif isinstance(v, dict):
+        out = {}
+        for k, t in v.items():
+            out[k] = recursively_detach(t)
+        return out
+    else:
+        raise ValueError("Unsupported type")
