@@ -35,7 +35,8 @@ def define_G(opt, net_key='network_G', scale=None):
         # Need to adjust the scale the generator sees by the stride since the stride causes a down-sample.
         gen_scale = scale * initial_stride
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=gen_scale, initial_stride=initial_stride)
+                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'] if 'scale' in opt_net.keys() else gen_scale,
+                                    initial_stride=initial_stride)
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
@@ -64,6 +65,14 @@ def define_G(opt, net_key='network_G', scale=None):
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = ssg.SSGr1(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
+    elif which_model == 'ssg_no_embedding':
+        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
+        netG = ssg.SSGNoEmbedding(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
+    elif which_model == 'ssg_lite':
+        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
+        netG = ssg.SSGLite(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "backbone_encoder":
         netG = SwitchedGen_arch.BackboneEncoder(pretrained_backbone=opt_net['pretrained_spinenet'])
     elif which_model == "backbone_encoder_no_ref":
@@ -85,6 +94,9 @@ class GradDiscWrapper(torch.nn.Module):
 
 def define_D_net(opt_net, img_sz=None, wrap=False):
     which_model = opt_net['which_model_D']
+
+    if 'image_size' in opt_net.keys():
+        img_sz = opt_net['image_size']
 
     if which_model == 'discriminator_vgg_128':
         netD = SRGAN_arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128, extra_conv=opt_net['extra_conv'])
