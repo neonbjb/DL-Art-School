@@ -16,15 +16,17 @@ def main():
     split_img = False
     opt = {}
     opt['n_thread'] = 20
-    opt['compression_level'] = 3  # 3 is the default value in cv2
+    opt['compression_level'] = 90
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\images'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\square_context'
-        opt['crop_sz'] = 4096  # the size of each sub-image
-        opt['step'] = 4096  # step of the sliding crop window
-        opt['thres_sz'] = 256  # size threshold
+        full_multiplier = .25
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\images\\goodeats\\hq\\new_season\\lr_hr_enc\\lr\\images'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\goodeats\\hq\\new_season\\lr_hr_enc\\lr\\images_tiled'
+        opt['crop_sz'] = int(256 * full_multiplier) # the size of each sub-image
+        opt['step'] = int(128 * full_multiplier)  # step of the sliding crop window
+        opt['thres_sz'] = int(64 * full_multiplier)  # size threshold
+        opt['image_minimum_size_threshold'] = int(1024 * full_multiplier)  # Minimum size of input image in height dim. Images under this size will not be processed.
         opt['resize_final_img'] = .5
         opt['only_resize'] = False
         extract_single(opt, split_img)
@@ -90,15 +92,19 @@ def extract_single(opt, split_img=False):
 
     pbar = ProgressBar(len(img_list))
 
-    pool = Pool(opt['n_thread'])
+    pool = Pool(opt['n_thread']) if opt['n_thread'] >= 1 else None
     for path in img_list:
         # If this fails, change it and the imwrite below to the write extension.
         assert ".jpg" in path
-        if split_img:
-            pool.apply_async(worker, args=(path, opt, True, False), callback=update)
-            pool.apply_async(worker, args=(path, opt, True, True), callback=update)
+        if pool:
+            if split_img:
+                pool.apply_async(worker, args=(path, opt, True, False), callback=update)
+                pool.apply_async(worker, args=(path, opt, True, True), callback=update)
+            else:
+                pool.apply_async(worker, args=(path, opt), callback=update)
         else:
-            pool.apply_async(worker, args=(path, opt), callback=update)
+            assert not split_img
+            worker(path, opt)
     pool.close()
     pool.join()
     print('All subprocesses done.')
@@ -121,7 +127,7 @@ def worker(path, opt, split_mode=False, left_img=True):
         raise ValueError('Wrong image shape - {}'.format(n_channels))
        
     # Uncomment to filter any image that doesnt meet a threshold size.
-    if min(h,w) < 1024:
+    if min(h,w) < opt['image_minimum_size_threshold']:
         return
     left = 0
     right = w
@@ -171,8 +177,8 @@ def worker(path, opt, split_mode=False, left_img=True):
                 crop_img = cv2.resize(crop_img, dsize, interpolation = cv2.INTER_AREA)
             cv2.imwrite(
                 osp.join(opt['save_folder'],
-                         img_name.replace('.jpg', '_l{:05d}_s{:03d}.png'.format(left, index))), crop_img,
-                [cv2.IMWRITE_PNG_COMPRESSION, opt['compression_level']])
+                         img_name.replace('.jpg', '_l{:05d}_s{:03d}.jpg'.format(left, index))), crop_img,
+                [cv2.IMWRITE_JPEG_QUALITY, opt['compression_level']])
     return 'Processing {:s} ...'.format(img_name)
 
 
