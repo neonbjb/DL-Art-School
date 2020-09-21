@@ -358,5 +358,3 @@ def recursively_detach(v):
         for k, t in v.items():
             out[k] = recursively_detach(t)
         return out
-    else:
-        raise ValueError("Unsupported type")
