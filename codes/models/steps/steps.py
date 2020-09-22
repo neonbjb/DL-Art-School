@@ -76,6 +76,7 @@ class ConfigurableStep(Module):
             elif self.step_opt['optimizer'] == 'novograd':
                 opt = NovoGrad(optim_params, lr=opt_config['lr'], weight_decay=opt_config['weight_decay'],
                                        betas=(opt_config['beta1'], opt_config['beta2']))
+            opt._config = opt_config  # This is a bit seedy, but we will need these configs later.
             self.optimizers.append(opt)
 
     # Returns all optimizers used in this step.
@@ -116,6 +117,10 @@ class ConfigurableStep(Module):
             # Likewise, don't do injections tagged with train unless we are not in eval.
             if not train and 'train' in inj.opt.keys() and inj.opt['train']:
                 continue
+            # Don't do injections tagged with 'after' or 'before' when we are out of spec.
+            if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
+                'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
+                continue
             injected = inj(local_state)
             local_state.update(injected)
             new_state.update(injected)
@@ -155,6 +160,13 @@ class ConfigurableStep(Module):
     # all self.optimizers.
     def do_step(self):
         for opt in self.optimizers:
+            # Optimizers can be opted out in the early stages of training.
+            after = opt._config['after'] if 'after' in opt._config.keys() else 0
+            if self.env['step'] < after:
+                continue
+            before = opt._config['before'] if 'before' in opt._config.keys() else -1
+            if before != -1 and self.env['step'] > before:
+                continue
             opt.step()
 
     def get_metrics(self):

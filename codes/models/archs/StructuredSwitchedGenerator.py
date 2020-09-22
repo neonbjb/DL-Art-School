@@ -344,8 +344,7 @@ class SSGNoEmbedding(nn.Module):
             x_grad = self.get_g_nopadding(x)
 
             x = self.model_fea_conv(x)
-            x1 = x
-            x1, a1 = self.sw1(x1, True, identity=x)
+            x1, a1 = self.sw1(x, True)
 
             x_grad = self.grad_conv(x_grad)
             x_grad_identity = x_grad

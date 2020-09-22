@@ -180,6 +180,9 @@ class ExtensibleTrainer(BaseModel):
             # Skip steps if mod_step doesn't line up.
             if 'mod_step' in s.opt.keys() and step % s.opt['mod_step'] != 0:
                 continue
+            # Steps can opt out of early (or late) training, make sure that happens here.
+            if 'after' in s.opt.keys() and step < s.opt['after'] or 'before' in s.opt.keys() and step > s.opt['before']:
+                continue
 
             # Only set requires_grad=True for the network being trained.
             nets_to_train = s.get_networks_trained()
@@ -226,6 +229,8 @@ class ExtensibleTrainer(BaseModel):
         if 'visuals' in self.opt['logger'].keys():
             sample_save_path = os.path.join(self.opt['path']['models'], "..", "visual_dbg")
             for v in self.opt['logger']['visuals']:
+                if v not in state.keys():
+                    continue   # This can happen for several reasons (ex: 'after' defs), just ignore it.
                 if step % self.opt['logger']['visual_debug_rate'] == 0:
                     for i, dbgv in enumerate(state[v]):
                         if dbgv.shape[1] > 3:
