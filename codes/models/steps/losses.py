@@ -82,7 +82,7 @@ class FeatureLoss(ConfigurableLoss):
             logits_real = self.netF(state[self.opt['real']])
         logits_fake = self.netF(state[self.opt['fake']])
         if self.opt['criterion'] == 'cosine':
-            return self.criterion(logits_fake, logits_real, torch.ones_like(logits_fake))
+            return self.criterion(logits_fake, logits_real, torch.ones_like(1, device=logits_fake.device))
         else:
             return self.criterion(logits_fake, logits_real)
 
