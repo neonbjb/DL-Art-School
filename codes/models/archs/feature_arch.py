@@ -6,7 +6,7 @@ import torch.nn.functional as F
 # Utilizes pretrained torchvision modules for feature extraction
 
 class VGGFeatureExtractor(nn.Module):
-    def __init__(self, feature_layer=34, use_bn=False, use_input_norm=True,
+    def __init__(self, feature_layers=[34], use_bn=False, use_input_norm=True,
                  device=torch.device('cpu')):
         super(VGGFeatureExtractor, self).__init__()
         self.use_input_norm = use_input_norm
@@ -21,7 +21,8 @@ class VGGFeatureExtractor(nn.Module):
             # [0.229 * 2, 0.224 * 2, 0.225 * 2] if input in range [-1, 1]
             self.register_buffer('mean', mean)
             self.register_buffer('std', std)
-        self.features = nn.Sequential(*list(model.features.children())[:(feature_layer + 1)])
+        self.feature_layers = feature_layers
+        self.features = nn.Sequential(*list(model.features.children())[:(max(feature_layers) + 1)])
         # No need to BP to variable
         for k, v in self.features.named_parameters():
             v.requires_grad = False

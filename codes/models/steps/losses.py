@@ -113,20 +113,35 @@ class GeneratorGanLoss(ConfigurableLoss):
         super(GeneratorGanLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = GANLoss(opt['gan_type'], 1.0, 0.0).to(env['device'])
+        self.noise = None if 'noise' not in opt.keys() else opt['noise']
+        self.detach_real = opt['detach_real'] if 'detach_real' in opt.keys() else True
 
     def forward(self, _, state):
         netD = self.env['discriminators'][self.opt['discriminator']]
+        real = extract_params_from_state(self.opt['real'], state)
         fake = extract_params_from_state(self.opt['fake'], state)
+        if self.noise:
+            nreal = []
+            nfake = []
+            for i, t in enumerate(real):
+                if isinstance(t, torch.Tensor):
+                    nreal.append(t + torch.randn_like(t) * self.noise)
+                    nfake.append(fake[i] + torch.randn_like(t) * self.noise)
+                else:
+                    nreal.append(t)
+                    nfake.append(fake[i])
+            real = nreal
+            fake = nfake
         if self.opt['gan_type'] in ['gan', 'pixgan', 'pixgan_fea']:
             pred_g_fake = netD(*fake)
             return self.criterion(pred_g_fake, True)
         elif self.opt['gan_type'] == 'ragan':
-            real = extract_params_from_state(self.opt['real'], state)
-            real = [r.detach() for r in real]
-            pred_d_real = netD(*real).detach()
+            pred_d_real = netD(*real)
+            if self.detach_real:
+                pred_d_real = pred_d_real.detach()
             pred_g_fake = netD(*fake)
-            return (self.cri_gan(pred_d_real - torch.mean(pred_g_fake), False) +
-                    self.cri_gan(pred_g_fake - torch.mean(pred_d_real), True)) / 2
+            return (self.criterion(pred_d_real - torch.mean(pred_g_fake), False) +
+                    self.criterion(pred_g_fake - torch.mean(pred_d_real), True)) / 2
         else:
             raise NotImplementedError
 
@@ -142,6 +157,7 @@ class DiscriminatorGanLoss(ConfigurableLoss):
     def forward(self, net, state):
         self.metrics = []
         real = extract_params_from_state(self.opt['real'], state)
+        real = [r.detach() for r in real]
         fake = extract_params_from_state(self.opt['fake'], state)
         fake = [f.detach() for f in fake]
         if self.noise:
@@ -159,17 +175,18 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         d_real = net(*real)
         d_fake = net(*fake)
 
-        self.metrics.append(("d_fake", torch.mean(d_fake)))
-        self.metrics.append(("d_real", torch.mean(d_real)))
-
         if self.opt['gan_type'] in ['gan', 'pixgan']:
+            self.metrics.append(("d_fake", torch.mean(d_fake)))
+            self.metrics.append(("d_real", torch.mean(d_real)))
             l_real = self.criterion(d_real, True)
             l_fake = self.criterion(d_fake, False)
             l_total = l_real + l_fake
             return l_total
         elif self.opt['gan_type'] == 'ragan':
+            d_fake_diff = d_fake - torch.mean(d_real)
+            self.metrics.append(("d_fake_diff", torch.mean(d_fake_diff)))
             return (self.criterion(d_real - torch.mean(d_fake), True) +
-                    self.criterion(d_fake - torch.mean(d_real), False))
+                    self.criterion(d_fake_diff, False))
         else:
             raise NotImplementedError
 

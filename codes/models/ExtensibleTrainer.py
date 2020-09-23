@@ -178,10 +178,10 @@ class ExtensibleTrainer(BaseModel):
         state = self.dstate
         for step_num, s in enumerate(self.steps):
             # Skip steps if mod_step doesn't line up.
-            if 'mod_step' in s.opt.keys() and step % s.opt['mod_step'] != 0:
+            if 'mod_step' in s.step_opt.keys() and step % s.step_opt['mod_step'] != 0:
                 continue
             # Steps can opt out of early (or late) training, make sure that happens here.
-            if 'after' in s.opt.keys() and step < s.opt['after'] or 'before' in s.opt.keys() and step > s.opt['before']:
+            if 'after' in s.step_opt.keys() and step < s.step_opt['after'] or 'before' in s.step_opt.keys() and step > s.step_opt['before']:
                 continue
 
             # Only set requires_grad=True for the network being trained.
