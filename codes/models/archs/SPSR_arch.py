@@ -10,6 +10,7 @@ from switched_conv_util import save_attention_to_image_rgb
 from switched_conv import compute_attention_specificity
 import functools
 import os
+import torchvision
 
 
 class ImageGradient(nn.Module):
@@ -674,3 +675,5 @@ class Spsr5(nn.Module):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
+
+
