@@ -433,7 +433,7 @@ class ResBlock(nn.Module):
             self.downsample = ConvGnSilu(nf, nf_out, kernel_size=1, stride=stride, bias=False, activation=False, norm=True)
         else:
             self.downsample = None
-        self.act = SiLU(inplace=True)
+        self.act = SiLU()
 
     def forward(self, x):
         identity = x
