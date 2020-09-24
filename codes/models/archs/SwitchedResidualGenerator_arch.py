@@ -4,7 +4,7 @@ from switched_conv import BareConvSwitch, compute_attention_specificity, Attenti
 import torch.nn.functional as F
 import functools
 from collections import OrderedDict
-from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock
+from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock, SiLU
 from switched_conv_util import save_attention_to_image_rgb
 import os
 from torch.utils.checkpoint import checkpoint
@@ -433,7 +433,7 @@ class ResBlock(nn.Module):
             self.downsample = ConvGnSilu(nf, nf_out, kernel_size=1, stride=stride, bias=False, activation=False, norm=True)
         else:
             self.downsample = None
-        self.act = nn.SiLU(inplace=True)
+        self.act = SiLU(inplace=True)
 
     def forward(self, x):
         identity = x
