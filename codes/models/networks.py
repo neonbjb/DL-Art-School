@@ -49,6 +49,10 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == 'spsr_net_improved':
         netG = spsr.SPSRNetSimplified(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
                             nb=opt_net['nb'], upscale=opt_net['scale'])
+    elif which_model == "spsr_switched":
+        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
+        netG = spsr.SwitchedSpsr(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "spsr_switched_with_ref2" or which_model == "spsr3":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = spsr.SwitchedSpsrWithRef2(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],

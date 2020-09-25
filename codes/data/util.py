@@ -87,13 +87,18 @@ def _read_img_lmdb(env, key, size):
     return img
 
 
-def read_img(env, path, size=None):
-    """read image by cv2 or from lmdb
+def read_img(env, path, size=None, rgb=False):
+    """read image by cv2 or from lmdb or from a buffer (in which case path=buffer)
     return: Numpy float32, HWC, BGR, [0,1]"""
     if env is None:  # img
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-    else:
+    elif env is 'lmdb':
         img = _read_img_lmdb(env, path, size)
+    elif env is 'buffer':
+        img = cv2.imdecode(path, cv2.IMREAD_UNCHANGED)
+    else:
+        raise NotImplementedError("Unsupported env: %s" % (env,))
+
     if img is None:
         print("Image error: %s" % (path,))
     img = img.astype(np.float32) / 255.
@@ -102,6 +107,9 @@ def read_img(env, path, size=None):
     # some images have 4 channels
     if img.shape[2] > 3:
         img = img[:, :, :3]
+
+    if rgb:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
 
 

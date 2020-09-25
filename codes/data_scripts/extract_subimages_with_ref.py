@@ -16,17 +16,17 @@ def main():
     mode = 'single'  # single (one input folder) | pair (extract corresponding GT and LR pairs)
     split_img = False
     opt = {}
-    opt['n_thread'] = 12
+    opt['n_thread'] = 0
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     if mode == 'single':
         opt['dest'] = 'file'
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\full_video_segments'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\full_video_with_refs'
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\images-half'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\new_tiles'
         opt['crop_sz'] = [256, 512, 1024]  # the size of each sub-image
-        opt['step'] = 256  # step of the sliding crop window
+        opt['step'] = [256, 512, 1024]  # step of the sliding crop window
         opt['thres_sz'] = 128  # size threshold
         opt['resize_final_img'] = [1, .5, .25]
         opt['only_resize'] = False
@@ -158,7 +158,7 @@ class FileWriter:
 
     # Writes the given reference image to the db and returns its ID.
     def write_reference_image(self, ref_img, path):
-        ref_img, _ = ref_img  # Encoded with a center point, which is irrelevant for the reference image.
+        ref_img, _, _ = ref_img  # Encoded with a center point, which is irrelevant for the reference image.
         img_name = osp.basename(path).replace(".jpg", "").replace(".png", "")
         self.ref_center_points[img_name] = {}
         self.save_image(img_name, "ref.jpg", ref_img)
@@ -170,14 +170,18 @@ class FileWriter:
     def write_tile_image(self, ref_id, tile_image):
         id = self.get_next_unique_id()
         ref_name = self.ref_ids_to_names[ref_id]
-        img, center = tile_image
-        self.ref_center_points[ref_name][id] = center
+        img, center, tile_sz = tile_image
+        self.ref_center_points[ref_name][id] = center, tile_sz
         self.save_image(ref_name, "%08i.jpg" % (id,), img)
         return id
 
-    def close(self):
+    def flush(self):
         for ref_name, cps in self.ref_center_points.items():
             torch.save(cps, osp.join(self.folder, ref_name, "centers.pt"))
+        self.ref_center_points = {}
+
+    def close(self):
+        self.flush()
 
 class TiledDataset(data.Dataset):
     def __init__(self, opt, split_mode=False):
@@ -192,8 +196,9 @@ class TiledDataset(data.Dataset):
         else:
             return self.get(index, False, False)
 
-    def get_for_scale(self, img, split_mode, left_img, crop_sz, resize_factor):
-        step = self.opt['step']
+    def get_for_scale(self, img, split_mode, left_image, crop_sz, step, resize_factor, ref_resize_factor):
+        assert not left_image  # Split image not yet supported, False is the default value.
+
         thres_sz = self.opt['thres_sz']
 
         h, w, c = img.shape
@@ -215,15 +220,14 @@ class TiledDataset(data.Dataset):
             for y in w_space:
                 index += 1
                 crop_img = img[x:x + crop_sz, y:y + crop_sz, :]
-                center_point = (x + crop_sz // 2, y + crop_sz // 2)
+                # Center point needs to be resized by ref_resize_factor - since it is relative to the reference image.
+                center_point = (int((x + crop_sz // 2) // ref_resize_factor), int((y + crop_sz // 2) // ref_resize_factor))
                 crop_img = np.ascontiguousarray(crop_img)
                 if 'resize_final_img' in self.opt.keys():
-                    # Resize too.
-                    center_point = (int(center_point[0] * resize_factor), int(center_point[1] * resize_factor))
                     crop_img = cv2.resize(crop_img, dsize, interpolation=cv2.INTER_AREA)
                 success, buffer = cv2.imencode(".jpg", crop_img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
                 assert success
-                results.append((buffer, center_point))
+                results.append((buffer, center_point, int(crop_sz // ref_resize_factor)))
         return results
 
     def get(self, index, split_mode, left_img):
@@ -255,15 +259,16 @@ class TiledDataset(data.Dataset):
 
         tile_dim = int(self.opt['crop_sz'][0] * self.opt['resize_final_img'][0])
         dsize = (tile_dim, tile_dim)
+        ref_resize_factor = h / tile_dim
 
         # Reference image should always be first entry in results.
         ref_img = cv2.resize(img, dsize, interpolation=cv2.INTER_AREA)
         success, ref_buffer = cv2.imencode(".jpg", ref_img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
         assert success
-        results = [(ref_buffer, (-1,-1))]
+        results = [(ref_buffer, (-1,-1), (-1,-1))]
 
-        for crop_sz, resize_factor in zip(self.opt['crop_sz'], self.opt['resize_final_img']):
-            results.extend(self.get_for_scale(img, split_mode, left_img, crop_sz, resize_factor))
+        for crop_sz, resize_factor, step in zip(self.opt['crop_sz'], self.opt['resize_final_img'], self.opt['step']):
+            results.extend(self.get_for_scale(img, split_mode, left_img, crop_sz, step, resize_factor, ref_resize_factor))
         return results, path
 
     def __len__(self):
@@ -286,6 +291,7 @@ def extract_single(opt, writer, split_img=False):
         ref_id = writer.write_reference_image(imgs[0], path)
         for tile in imgs[1:]:
             writer.write_tile_image(ref_id, tile)
+        writer.flush()
     writer.close()
 
 
