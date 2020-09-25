@@ -109,6 +109,10 @@ class ConfigurableStep(Module):
         local_state.update(new_state)
         local_state['train_nets'] = str(self.get_networks_trained())
 
+        # Some losses compute backward() internally. Accomodate this by stashing the amp_loss_id in env.
+        self.env['amp_loss_id'] = amp_loss_id
+        self.env['current_step_optimizers'] = self.optimizers
+
         # Inject in any extra dependencies.
         for inj in self.injectors:
             # Don't do injections tagged with eval unless we are not in train mode.

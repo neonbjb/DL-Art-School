@@ -1,24 +1,31 @@
 import models.steps.injectors as injectors
+import torch
 
 
 # Uses a generator to synthesize a sequence of images from [in] and injects the results into a list [out]
-# All results are checkpointed for memory savings. Recurrent inputs are also detached before being fed back into
-# the generator.
+# Images are fed in sequentially forward and back, resulting in len([out])=2*len([in])-1 (last element is not repeated).
+# All computation is done with torch.no_grad().
 class RecurrentImageGeneratorSequenceInjector(injectors.Injector):
     def __init__(self, opt, env):
         super(RecurrentImageGeneratorSequenceInjector, self).__init__(opt, env)
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
-        new_state = {}
         results = []
-        recurrent_input = torch.zeros_like(state[self.input][0])
-        for input in state[self.input]:
-            result = checkpoint(gen, input, recurrent_input)
-            results.append(result)
-            recurrent_input = result.detach()
+        with torch.no_grad():
+            recurrent_input = torch.zeros_like(state[self.input][0])
+            # Go forward in the sequence first.
+            for input in state[self.input]:
+                recurrent_input = gen(input, recurrent_input)
+                results.append(recurrent_input)
 
-        new_state = {self.output: results}
+            # Now go backwards, skipping the last element (it's already stored in recurrent_input)
+            it = reversed(range(len(results) - 1))
+            for i in it:
+                recurrent_input = gen(results[i], recurrent_input)
+                results.append(recurrent_input)
+
+            new_state = {self.output: results}
         return new_state
 
 
