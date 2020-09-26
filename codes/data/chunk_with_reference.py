@@ -8,7 +8,7 @@ class ChunkWithReference:
     def __init__(self, opt, path):
         self.reload(opt)
         self.path = path.path
-        self.tiles, _ = util.get_image_paths('img', path)
+        self.tiles, _ = util.get_image_paths('img', self.path)
         self.centers = None
 
     def reload(self, opt):

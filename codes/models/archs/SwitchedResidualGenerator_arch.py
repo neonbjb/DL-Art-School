@@ -413,7 +413,7 @@ class BackboneEncoderNoRef(nn.Module):
 class BackboneSpinenetNoHead(nn.Module):
     def __init__(self):
         super(BackboneSpinenetNoHead, self).__init__()
-        self.patch_spine = SpineNet('49', in_channels=3, use_input_norm=True)
+        self.patch_spine = SpineNet('49', in_channels=3, use_input_norm=True, double_reduce_early=False)
 
     def forward(self, x):
         patch = checkpoint(self.patch_spine, x)[0]

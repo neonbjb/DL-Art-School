@@ -39,6 +39,13 @@ class SingleImageDataset(data.Dataset):
                     c.reload(opt)
             else:
                 chunks = [ChunkWithReference(opt, d) for d in os.scandir(path) if d.is_dir()]
+                # Prune out chunks that have no images
+                res = []
+                for c in chunks:
+                    if len(c) != 0:
+                        res.append(c)
+                chunks = res
+                # Save to a cache.
                 torch.save(chunks, cache_path)
             for w in range(weight):
                 self.chunks.extend(chunks)

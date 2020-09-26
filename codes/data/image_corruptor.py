@@ -27,10 +27,10 @@ class ImageCorruptor:
 
         corrupted_imgs = []
         for img in imgs:
-            for aug in self.fixed_corruptions:
-                img = self.apply_corruption(img, aug, rand_int_f)
             for aug in augmentations:
                 img = self.apply_corruption(img, aug, rand_int_a)
+            for aug in self.fixed_corruptions:
+                img = self.apply_corruption(img, aug, rand_int_f)
             corrupted_imgs.append(img)
 
         return corrupted_imgs
@@ -81,7 +81,7 @@ class ImageCorruptor:
             img += np.random.randn() * noise_intensity
         elif 'jpeg' in aug:
             # JPEG compression
-            qf = (rand_int % 20 + 10)  # Between 10-30
+            qf = (rand_int % 20 + 5)  # Between 5-25
             # cv2's jpeg compression is "odd". It introduces artifacts. Use PIL instead.
             img = (img * 255).astype(np.uint8)
             img = Image.fromarray(img)

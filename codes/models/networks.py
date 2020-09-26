@@ -64,6 +64,7 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == "spsr5":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = spsr.Spsr5(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+                                 multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 2,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "ssgr1":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
@@ -81,6 +82,8 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = SwitchedGen_arch.BackboneEncoder(pretrained_backbone=opt_net['pretrained_spinenet'])
     elif which_model == "backbone_encoder_no_ref":
         netG = SwitchedGen_arch.BackboneEncoderNoRef(pretrained_backbone=opt_net['pretrained_spinenet'])
+    elif which_model == "backbone_encoder_no_head":
+        netG = SwitchedGen_arch.BackboneSpinenetNoHead()
     elif which_model == "backbone_resnet":
         netG = SwitchedGen_arch.BackboneResnet()
     else:

@@ -677,14 +677,14 @@ class Spsr4(nn.Module):
 
 
 class Spsr5(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, multiplexer_reductions=2, init_temperature=10):
         super(Spsr5, self).__init__()
         n_upscale = int(math.log(upscale, 2))
 
         # switch options
         transformation_filters = nf
         self.transformation_counts = xforms
-        multiplx_fn = functools.partial(QueryKeyMultiplexer, transformation_filters)
+        multiplx_fn = functools.partial(QueryKeyMultiplexer, transformation_filters, reductions=multiplexer_reductions)
         pretransform_fn = functools.partial(ConvGnLelu, transformation_filters, transformation_filters, norm=False, bias=False, weight_init_factor=.1)
         transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.5),
                                          transformation_filters, kernel_size=3, depth=3,
