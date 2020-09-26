@@ -32,9 +32,8 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_ssgr1.yml')
-    parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
-                        help='job launcher')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_blur_discriminator.yml')
+    parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
@@ -83,7 +82,7 @@ def main():
         if resume_state is None:
             util.mkdir_and_rename(
                 opt['path']['experiments_root'])  # rename experiment folder if exists
-            util.mkdirs((path for key, path in opt['path'].items() if not key == 'experiments_root'
+            util.mkdirs((path for key, path in opt['path'].items() if not key == 'experiments_root' and path is not None
                          and 'pretrain_model' not in key and 'resume' not in key))
 
         # config loggers. Before it, the log will not work

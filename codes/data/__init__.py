@@ -38,6 +38,8 @@ def create_dataset(dataset_opt):
         from data.Downsample_dataset import DownsampleDataset as D
     elif mode == 'fullimage':
         from data.full_image_dataset import FullImageDataset as D
+    elif mode == 'single_image_extensible':
+        from data.single_image_dataset import SingleImageDataset as D
     elif mode == 'combined':
         from data.combined_dataset import CombinedDataset as D
     else:

@@ -43,9 +43,12 @@ def parse(opt_path, is_train=True):
                 dataset['mode'] = dataset['mode'].replace('_mc', '')
 
     # path
-    for key, path in opt['path'].items():
-        if path and key in opt['path'] and key != 'strict_load':
-            opt['path'][key] = osp.expanduser(path)
+    if 'path' in opt.keys():
+        for key, path in opt['path'].items():
+            if path and key in opt['path'] and key != 'strict_load':
+                opt['path'][key] = osp.expanduser(path)
+    else:
+        opt['path'] = {}
     opt['path']['root'] = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
     if is_train:
         experiments_root = osp.join(opt['path']['root'], 'experiments', opt['name'])

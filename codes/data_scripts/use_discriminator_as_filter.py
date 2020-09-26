@@ -60,16 +60,20 @@ if __name__ == "__main__":
         util.mkdir(dataset_dir)
 
         tq = tqdm(test_loader)
+        removed = 0
         for data in tq:
             model.feed_data(data, need_GT=True)
             model.test()
             results = model.eval_state['discriminator_out'][0]
+            print(torch.mean(results), torch.max(results), torch.min(results))
             for i in range(results.shape[0]):
-                imname = osp.basename(data['GT_path'][i])
-                if results[i] < 1:
-                    torchvision.utils.save_image(data['GT'][i], osp.join(bin_path, imname))
-                else:
-                    torchvision.utils.save_image(data['GT'][i], osp.join(good_path, imname))
+                if results[i] < .8:
+                    os.remove(data['GT_path'][i])
+                    removed += 1
+                #imname = osp.basename(data['GT_path'][i])
+                #if results[i] > .8:
+                #    torchvision.utils.save_image(data['GT'][i], osp.join(good_path, imname))
+                #else:
+                #    torchvision.utils.save_image(data['GT'][i], osp.join(bin_path, imname))
 
-        # log
-        logger.info('# Validation # Fea: {:.4e}'.format(fea_loss / len(test_loader)))
+        print("Removed %i/%i images" % (removed, len(test_set)))

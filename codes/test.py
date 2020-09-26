@@ -86,7 +86,6 @@ def forward_pass(model, output_dir, alteration_suffix=''):
 if __name__ == "__main__":
     #### options
     torch.backends.cudnn.benchmark = True
-    want_just_images = True
     srg_analyze = False
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/srgan_compute_feature.yml')

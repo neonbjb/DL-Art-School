@@ -14,6 +14,7 @@ import torchvision.transforms.functional as F
 class SingleImageDataset(data.Dataset):
 
     def __init__(self, opt):
+        self.opt = opt
         self.corruptor = ImageCorruptor(opt)
         self.target_hq_size = opt['target_size'] if 'target_size' in opt.keys() else None
         self.multiple = opt['force_multiple'] if 'force_multiple' in opt.keys() else 1
@@ -33,6 +34,9 @@ class SingleImageDataset(data.Dataset):
             cache_path = os.path.join(path, 'cache.pth')
             if os.path.exists(cache_path):
                 chunks = torch.load(cache_path)
+                # Update the options.
+                for c in chunks:
+                    c.reload(opt)
             else:
                 chunks = [ChunkWithReference(opt, d) for d in os.scandir(path) if d.is_dir()]
                 torch.save(chunks, cache_path)
@@ -101,7 +105,7 @@ class SingleImageDataset(data.Dataset):
         lq_ref = torch.cat([lq_ref, lq_mask], dim=0)
 
         return {'LQ': lq, 'GT': hq, 'gt_fullsize_ref': hq_ref, 'lq_fullsize_ref': lq_ref,
-             'lq_center': lq_center, 'gt_center': hq_center,
+             'lq_center': torch.tensor(lq_center, dtype=torch.long), 'gt_center': torch.tensor(hq_center, dtype=torch.long),
              'LQ_path': path, 'GT_path': path}
 
     def __len__(self):

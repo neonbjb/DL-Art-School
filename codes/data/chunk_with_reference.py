@@ -6,12 +6,15 @@ import numpy as np
 # Iterable that reads all the images in a directory that contains a reference image, tile images and center coordinates.
 class ChunkWithReference:
     def __init__(self, opt, path):
-        self.opt = opt
+        self.reload(opt)
         self.path = path.path
-        self.ref = None  # This is loaded on the fly.
-        self.cache_ref = opt['cache_ref'] if 'cache_ref' in opt.keys() else True
         self.tiles, _ = util.get_image_paths('img', path)
         self.centers = None
+
+    def reload(self, opt):
+        self.opt = opt
+        self.ref = None  # This is loaded on the fly.
+        self.cache_ref = opt['cache_ref'] if 'cache_ref' in opt.keys() else False
 
     def __getitem__(self, item):
         # Load centers on the fly and always cache.
@@ -20,10 +23,9 @@ class ChunkWithReference:
         if self.cache_ref:
             if self.ref is None:
                 self.ref = util.read_img(None, osp.join(self.path, "ref.jpg"), rgb=True)
-                self.centers = torch.load(osp.join(self.path, "centers.pt"))
             ref = self.ref
         else:
-            self.ref = util.read_img(None, osp.join(self.path, "ref.jpg"), rgb=True)
+            ref = util.read_img(None, osp.join(self.path, "ref.jpg"), rgb=True)
         tile = util.read_img(None, self.tiles[item], rgb=True)
         tile_id = int(osp.splitext(osp.basename(self.tiles[item]))[0])
         center, tile_width = self.centers[tile_id]

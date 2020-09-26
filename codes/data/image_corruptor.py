@@ -10,10 +10,16 @@ from io import BytesIO
 class ImageCorruptor:
     def __init__(self, opt):
         self.num_corrupts = opt['num_corrupts_per_image'] if 'num_corrupts_per_image' in opt.keys() else 2
+        if self.num_corrupts == 0:
+            return
         self.fixed_corruptions = opt['fixed_corruptions']
         self.random_corruptions = opt['random_corruptions']
+        self.blur_scale = opt['corruption_blur_scale'] if 'corruption_blur_scale' in opt.keys() else 1
 
     def corrupt_images(self, imgs):
+        if self.num_corrupts == 0:
+            return imgs
+
         augmentations = random.choices(self.random_corruptions, k=self.num_corrupts)
         # Source of entropy, which should be used across all images.
         rand_int_f = random.randint(1, 999999)
@@ -38,11 +44,11 @@ class ImageCorruptor:
             img = img / 255
         elif 'gaussian_blur' in aug:
             # Gaussian Blur
-            kernel = 2 * (rand_int % 3) + 1
+            kernel = 2 * self.blur_scale * (rand_int % 3) + 1
             img = cv2.GaussianBlur(img, (kernel, kernel), 3)
         elif 'motion_blur' in aug:
             # Motion blur
-            intensity = 2 * (rand_int % 3) + 1
+            intensity = 2 * self.blur_scale * (rand_int % 3) + 1
             angle = (rand_int // 3) % 360
             k = np.zeros((intensity, intensity), dtype=np.float32)
             k[(intensity - 1) // 2, :] = np.ones(intensity, dtype=np.float32)
@@ -52,7 +58,7 @@ class ImageCorruptor:
             img = cv2.filter2D(img, -1, k)
         elif 'smooth_blur' in aug:
             # Smooth blur
-            kernel = 2 * (rand_int % 3) + 1
+            kernel = 2 * self.blur_scale * (rand_int % 3) + 1
             img = cv2.blur(img, ksize=(kernel, kernel))
         elif 'block_noise' in aug:
             # Large distortion blocks in part of an img, such as is used to mask out a face.
