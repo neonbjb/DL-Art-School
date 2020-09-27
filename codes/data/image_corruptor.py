@@ -78,7 +78,7 @@ class ImageCorruptor:
         elif 'noise' in aug:
             # Block noise
             noise_intensity = (rand_int % 4 + 2) / 255.0  # Between 1-4
-            img += np.random.randn() * noise_intensity
+            img += np.random.randn(*img.shape) * noise_intensity
         elif 'jpeg' in aug:
             # JPEG compression
             qf = (rand_int % 20 + 5)  # Between 5-25
