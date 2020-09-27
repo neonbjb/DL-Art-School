@@ -10,6 +10,7 @@ import models.archs.feature_arch as feature_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.SPSR_arch as spsr
 import models.archs.StructuredSwitchedGenerator as ssg
+import models.archs.rcan as rcan
 from collections import OrderedDict
 
 logger = logging.getLogger('base')
@@ -37,6 +38,12 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                     nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'] if 'scale' in opt_net.keys() else gen_scale,
                                     initial_stride=initial_stride)
+    elif which_model == 'rcan':
+        #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
+        opt_net['rgb_range'] = 255
+        opt_net['n_colors'] = 3
+        args_obj = munchify(opt_net)
+        netG = rcan.RCAN(args_obj)
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],

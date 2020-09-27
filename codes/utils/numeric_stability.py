@@ -1,8 +1,6 @@
 import torch
 from torch import nn
-import models.archs.SRG1_arch as srg1
 import models.archs.SwitchedResidualGenerator_arch as srg
-import models.archs.NestedSwitchGenerator as nsg
 import models.archs.discriminator_vgg_arch as disc
 import functools
 
