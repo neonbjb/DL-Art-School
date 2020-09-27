@@ -23,8 +23,8 @@ def main():
 
     if mode == 'single':
         opt['dest'] = 'file'
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\images-half'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\new_tiles'
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\full_video_segments'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\full_video_256_tiled_with_ref'
         opt['crop_sz'] = [256, 512, 1024]  # the size of each sub-image
         opt['step'] = [256, 512, 1024]  # step of the sliding crop window
         opt['thres_sz'] = 128  # size threshold
