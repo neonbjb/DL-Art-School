@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from models.networks import define_F
 from models.loss import GANLoss
+import random
+import functools
 
 
 def create_generator_loss(opt_loss, env):
@@ -18,6 +20,8 @@ def create_generator_loss(opt_loss, env):
         return DiscriminatorGanLoss(opt_loss, env)
     elif type == 'geometric':
         return GeometricSimilarityGeneratorLoss(opt_loss, env)
+    elif type == 'translational':
+        return TranslationInvarianceLoss(opt_loss, env)
     else:
         raise NotImplementedError
 
@@ -190,8 +194,6 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         else:
             raise NotImplementedError
 
-import random
-import functools
 
 # Computes a loss created by comparing the output of a generator to the output from the same generator when fed an
 # input that has been altered randomly by rotation or flip.
@@ -240,3 +242,44 @@ class GeometricSimilarityGeneratorLoss(ConfigurableLoss):
         upsampled_altered = undo_fn(upsampled_altered)
 
         return self.criterion(state[self.opt['real']], upsampled_altered)
+
+
+# Computes a loss created by comparing the output of a generator to the output from the same generator when fed an
+# input that has been translated in a random direction.
+# The "real" parameter to this loss is the actual output of the generator on the top left image patch.
+# The "fake" parameter is the output base fed into a ImagePatchInjector.
+class TranslationInvarianceLoss(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super(TranslationInvarianceLoss, self).__init__(opt, env)
+        self.opt = opt
+        self.generator = opt['generator']
+        self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
+        self.gen_input_for_alteration = opt['input_alteration_index'] if 'input_alteration_index' in opt.keys() else 0
+        self.gen_output_to_use = opt['generator_output_index'] if 'generator_output_index' in opt.keys() else None
+        self.patch_size = opt['patch_size']
+        self.overlap = opt['overlap']  # For maximum overlap, can be calculated as 2*patch_size-image_size
+        assert(self.patch_size > self.overlap)
+
+    def forward(self, net, state):
+        self.metrics = []
+        net = self.env['generators'][self.generator]  # Get the network from an explicit parameter.
+        # The <net> parameter is not reliable for generator losses since often they are combined with many networks.
+
+        border_sz = self.patch_size - self.overlap
+        translation = random.choice([("top_right", border_sz, border_sz+self.overlap, 0, self.overlap),
+                                 ("bottom_left", 0, self.overlap, border_sz, border_sz+self.overlap),
+                                 ("bottom_right", 0, self.overlap, 0, self.overlap)])
+        trans_name, hl, hh, wl, wh = translation
+        # Change the "fake" input name that we are translating to one that specifies the random translation.
+        self.opt['fake'][self.gen_input_for_alteration] = "%s_%s" % (self.opt['fake'], trans_name)
+        input = extract_params_from_state(self.opt['fake'], state)
+        with torch.no_grad():
+            trans_output = net(*input)
+        fake_shared_output = trans_output[:, hl:hh, wl:wh][self.gen_output_to_use]
+
+        # The "real" input is assumed to always come from the top left tile.
+        gen_output = state[self.opt['real']]
+        real_shared_output = gen_output[:, border_sz:border_sz+self.overlap, border_sz:border_sz+self.overlap][self.gen_output_to_use]
+
+        return self.criterion(fake_shared_output, real_shared_output)
+

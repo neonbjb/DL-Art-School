@@ -112,6 +112,7 @@ class ConfigurableStep(Module):
         # Some losses compute backward() internally. Accomodate this by stashing the amp_loss_id in env.
         self.env['amp_loss_id'] = amp_loss_id
         self.env['current_step_optimizers'] = self.optimizers
+        self.env['training'] = train
 
         # Inject in any extra dependencies.
         for inj in self.injectors:

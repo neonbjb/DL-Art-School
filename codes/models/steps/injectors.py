@@ -2,6 +2,7 @@ import torch.nn
 from models.archs.SPSR_arch import ImageGradientNoPadding
 from data.weight_scheduler import get_scheduler_for_opt
 from torch.utils.checkpoint import checkpoint
+import torchvision.utils as utils
 #from models.steps.recursive_gen_injectors import ImageFlowInjector
 
 # Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
@@ -23,6 +24,8 @@ def create_injector(opt_inject, env):
         return InterpolateInjector(opt_inject, env)
     elif type == 'imageflow':
         return ImageFlowInjector(opt_inject, env)
+    elif type == 'image_patch':
+        return ImagePatchInjector(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -138,7 +141,7 @@ class GreyInjector(Injector):
         mean = mean.repeat(1, 3, 1, 1)
         return {self.opt['out']: mean}
 
-import torchvision.utils as utils
+
 class InterpolateInjector(Injector):
     def __init__(self, opt, env):
         super(InterpolateInjector, self).__init__(opt, env)
@@ -147,3 +150,35 @@ class InterpolateInjector(Injector):
         scaled = torch.nn.functional.interpolate(state[self.opt['in']], scale_factor=self.opt['scale_factor'],
                                                  mode=self.opt['mode'])
         return {self.opt['out']: scaled}
+
+
+# Extracts four patches from the input image, each a square of 'patch_size'. The input images are taken from each
+# of the four corners of the image. The intent of this loss is that each patch shares some part of the input, which
+# can then be used in the translation invariance loss.
+#
+# This injector is unique in that it does not only produce the specified output label into state. Instead it produces five
+# outputs for the specified label, one for each corner of the input as well as the specified output, which is the top left
+# corner. See the code below to find out how this works.
+#
+# Another note: this injector operates differently in eval mode (e.g. when env['training']=False) - in this case, it
+# simply sets all the output state variables to the input. This is so that you can feed the output of this injector
+# directly into your generator in training without affecting test performance.
+class ImagePatchInjector(Injector):
+    def __init__(self, opt, env):
+        super(ImagePatchInjector, self).__init__(opt, env)
+        self.patch_size = opt['patch_size']
+
+    def forward(self, state):
+        im = state[self.opt['in']]
+        if self.env['training']:
+            return { self.opt['out']: im[:, :self.patch_size, :self.patch_size],
+                     '%s_top_left' % (self.opt['out'],): im[:, :self.patch_size, :self.patch_size],
+                     '%s_top_right' % (self.opt['out'],): im[:, :self.patch_size, -self.patch_size:],
+                     '%s_bottom_left' % (self.opt['out'],): im[:, -self.patch_size:, :self.patch_size],
+                     '%s_bottom_right' % (self.opt['out'],): im[:, -self.patch_size:, -self.patch_size:] }
+        else:
+            return { self.opt['out']: im,
+                     '%s_top_left' % (self.opt['out'],): im,
+                     '%s_top_right' % (self.opt['out'],): im,
+                     '%s_bottom_left' % (self.opt['out'],): im,
+                     '%s_bottom_right' % (self.opt['out'],): im }
