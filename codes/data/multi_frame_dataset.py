@@ -68,9 +68,9 @@ if __name__ == '__main__':
         'force_multiple': 32,
         'scale': 2,
         'eval': False,
-        'fixed_corruptions': [],
-        'random_corruptions': ['color_quantization', 'gaussian_blur', 'motion_blur', 'smooth_blur', 'noise', 'saturation'],
-        'num_corrupts_per_image': 1,
+        'fixed_corruptions': ['jpeg-medium'],
+        'random_corruptions': [],
+        'num_corrupts_per_image': 0,
         'num_frames': 10
     }
 
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     for i in range(100000, len(ds)):
         import random
         o = ds[random.randint(0, 1000000)]
-        k = 'gt_fullsize_ref'
+        k = 'GT'
         v = o[k]
         if 'path' not in k and 'center' not in k:
             fr, f, h, w = v.shape
