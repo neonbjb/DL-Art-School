@@ -4,9 +4,10 @@ from models.networks import define_F
 from models.loss import GANLoss
 import random
 import functools
+import torchvision
 
 
-def create_generator_loss(opt_loss, env):
+def create_loss(opt_loss, env):
     type = opt_loss['type']
     if type == 'pix':
         return PixLoss(opt_loss, env)
@@ -149,7 +150,6 @@ class GeneratorGanLoss(ConfigurableLoss):
         else:
             raise NotImplementedError
 
-import torchvision
 
 class DiscriminatorGanLoss(ConfigurableLoss):
     def __init__(self, opt, env):
