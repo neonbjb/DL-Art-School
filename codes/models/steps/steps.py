@@ -27,13 +27,17 @@ class ConfigurableStep(Module):
 
         self.injectors = []
         if 'injectors' in self.step_opt.keys():
+            injector_names = []
             for inj_name, injector in self.step_opt['injectors'].items():
+                assert inj_name not in injector_names  # Repeated names are always an error case.
+                injector_names.append(inj_name)
                 self.injectors.append(create_injector(injector, env))
 
         losses = []
         self.weights = {}
         if 'losses' in self.step_opt.keys():
             for loss_name, loss in self.step_opt['losses'].items():
+                assert loss_name not in self.weights.keys()  # Repeated names are always an error case.
                 losses.append((loss_name, create_loss(loss, env)))
                 self.weights[loss_name] = loss['weight']
         self.losses = OrderedDict(losses)
