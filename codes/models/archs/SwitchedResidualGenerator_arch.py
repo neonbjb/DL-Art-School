@@ -80,99 +80,6 @@ def gather_2d(input, index):
     return result
 
 
-# Computes a linear latent by performing processing on the reference image and returning the filters of a single point,
-# which should be centered on the image patch being processed.
-#
-# Output is base_filters * 8.
-class ReferenceImageBranch(nn.Module):
-    def __init__(self, base_filters=64):
-        super(ReferenceImageBranch, self).__init__()
-        self.filter_conv = ConvGnSilu(4, base_filters, bias=True)
-        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(base_filters * 2 ** i) for i in range(3)])
-        reduction_filters = base_filters * 2 ** 3
-        self.processing_blocks = nn.Sequential(OrderedDict([('block%i' % (i,), ConvGnSilu(reduction_filters, reduction_filters, bias=False)) for i in range(4)]))
-
-    # center_point is a [b,2] long tensor describing the center point of where the patch was taken from the reference
-    # image.
-    def forward(self, x, center_point):
-        x = self.filter_conv(x)
-        reduction_identities = []
-        for b in self.reduction_blocks:
-            reduction_identities.append(x)
-            x = b(x)
-        x = self.processing_blocks(x)
-        return gather_2d(x, center_point // 8)
-
-
-class AdaInConvBlock(nn.Module):
-    def __init__(self, reference_size, in_nc, out_nc, conv_block=ConvGnLelu):
-        super(AdaInConvBlock, self).__init__()
-        self.filter_conv = conv_block(in_nc, out_nc, activation=True, norm=False, bias=False)
-        self.ref_proc = nn.Linear(reference_size, reference_size)
-        self.ref_red = nn.Linear(reference_size, out_nc * 2)
-        self.feature_norm = torch.nn.InstanceNorm2d(out_nc)
-        self.style_norm = torch.nn.InstanceNorm1d(out_nc)
-        self.post_fuse_conv = conv_block(out_nc, out_nc, activation=False, norm=True, bias=True)
-
-    def forward(self, x, ref):
-        x = self.feature_norm(self.filter_conv(x))
-        ref = self.ref_proc(ref)
-        ref = self.ref_red(ref)
-        b, c = ref.shape
-        ref = self.style_norm(ref.view(b, 2, c // 2))
-        x = x * ref[:, 0, :].unsqueeze(dim=2).unsqueeze(dim=3).expand(x.shape) + ref[:, 1, :].unsqueeze(dim=2).unsqueeze(dim=3).expand(x.shape)
-        return self.post_fuse_conv(x)
-
-
-class ProcessingBranchWithStochasticity(nn.Module):
-    def __init__(self, nf_in, nf_out, noise_filters, depth):
-        super(ProcessingBranchWithStochasticity, self).__init__()
-        nf_gap = nf_out - nf_in
-        self.noise_filters = noise_filters
-        self.processor = MultiConvBlock(nf_in + noise_filters, nf_in + nf_gap // 2, nf_out, kernel_size=3, depth=depth, weight_init_factor = .1)
-
-    def forward(self, x):
-        b, c, h, w = x.shape
-        noise = torch.randn((b, self.noise_filters, h, w), device=x.device)
-        return self.processor(torch.cat([x, noise], dim=1))
-
-
-# This is similar to ConvBasisMultiplexer, except that it takes a linear reference tensor as a second input to
-# provide better results. It also has fixed parameterization in several places
-class ReferencingConvMultiplexer(nn.Module):
-    def __init__(self, input_channels, base_filters, multiplexer_channels, use_gn=True):
-        super(ReferencingConvMultiplexer, self).__init__()
-        self.style_fuse = AdaInConvBlock(512, input_channels, base_filters, ConvGnSilu)
-
-        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(base_filters * 2 ** i) for i in range(3)])
-        reduction_filters = base_filters * 2 ** 3
-        self.processing_blocks = nn.Sequential(OrderedDict([('block%i' % (i,), ConvGnSilu(reduction_filters, reduction_filters, bias=False)) for i in range(2)]))
-        self.expansion_blocks = nn.ModuleList([ExpansionBlock2(reduction_filters // (2 ** i)) for i in range(3)])
-
-        gap = base_filters - multiplexer_channels
-        cbl1_out = ((base_filters - (gap // 2)) // 4) * 4   # Must be multiples of 4 to use with group norm.
-        self.cbl1 = ConvGnSilu(base_filters, cbl1_out, norm=use_gn, bias=False, num_groups=4)
-        cbl2_out = ((base_filters - (3 * gap // 4)) // 4) * 4
-        self.cbl2 = ConvGnSilu(cbl1_out, cbl2_out, norm=use_gn, bias=False, num_groups=4)
-        self.cbl3 = ConvGnSilu(cbl2_out, multiplexer_channels, bias=True, norm=False)
-
-    def forward(self, x, ref):
-        x = self.style_fuse(x, ref)
-
-        reduction_identities = []
-        for b in self.reduction_blocks:
-            reduction_identities.append(x)
-            x = b(x)
-        x = self.processing_blocks(x)
-        for i, b in enumerate(self.expansion_blocks):
-            x = b(x, reduction_identities[-i - 1])
-
-        x = self.cbl1(x)
-        x = self.cbl2(x)
-        x = self.cbl3(x)
-        return x
-
-
 class ConfigurableSwitchComputer(nn.Module):
     def __init__(self, base_filters, multiplexer_net, pre_transform_block, transform_block, transform_count, attention_norm,
                  init_temp=20, add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=False):
@@ -476,9 +383,28 @@ class BackboneResnet(nn.Module):
         return self.sequence(fea)
 
 
-# Note to future self:
-# Can I do a real transformer here? Such as by having the multiplexer be able to toggle off of transformations by
-# their output? The embedding will be used as the "Query" to the "QueryxKey=Value" relationship.
+# Computes a linear latent by performing processing on the reference image and returning the filters of a single point,
+# which should be centered on the image patch being processed.
+#
+# Output is base_filters * 8.
+class ReferenceImageBranch(nn.Module):
+    def __init__(self, base_filters=64):
+        super(ReferenceImageBranch, self).__init__()
+        self.features = nn.Sequential(ConvGnSilu(4, base_filters, kernel_size=7, bias=True),
+                                      HalvingProcessingBlock(base_filters),
+                                      ConvGnSilu(base_filters*2, base_filters*2, activation=True, norm=True, bias=False),
+                                      HalvingProcessingBlock(base_filters*2),
+                                      ConvGnSilu(base_filters*4, base_filters*4, activation=True, norm=True, bias=False),
+                                      HalvingProcessingBlock(base_filters*4),
+                                      ConvGnSilu(base_filters*8, base_filters*8, activation=True, norm=True, bias=False),
+                                      ConvGnSilu(base_filters*8, base_filters*8, activation=True, norm=True, bias=False))
+
+    # center_point is a [b,2] long tensor describing the center point of where the patch was taken from the reference
+    # image.
+    def forward(self, x, center_point):
+        x = self.features(x)
+        return gather_2d(x, center_point // 8)  # Divide by 8 to scale the center_point down.
+
 
 # Mutiplexer that combines a structured embedding with a contextual switch input to guide alterations to that input.
 #
@@ -526,12 +452,12 @@ class EmbeddingMultiplexer(nn.Module):
 
 
 class QueryKeyMultiplexer(nn.Module):
-    def __init__(self, nf, multiplexer_channels, reductions=2):
+    def __init__(self, nf, multiplexer_channels, embedding_channels=256, reductions=2):
         super(QueryKeyMultiplexer, self).__init__()
 
         # Blocks used to create the query
         self.input_process = ConvGnSilu(nf, nf, activation=True, norm=False, bias=True)
-        self.embedding_process = ConvGnSilu(256, 256, activation=True, norm=False, bias=True)
+        self.embedding_process = ConvGnSilu(embedding_channels, 256, activation=True, norm=False, bias=True)
         self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(nf * 2 ** i) for i in range(reductions)])
         reduction_filters = nf * 2 ** reductions
         self.processing_blocks = nn.Sequential(
@@ -571,7 +497,7 @@ class QueryKeyMultiplexer(nn.Module):
         v = self.cbl2(v)
 
         return v.view(b, t, h, w)
-    
+
 
 class QueryKeyPyramidMultiplexer(nn.Module):
     def __init__(self, nf, multiplexer_channels, reductions=3):
@@ -614,6 +540,7 @@ class QueryKeyPyramidMultiplexer(nn.Module):
         v = self.cbl2(v)
 
         return v.view(b, t, h, w)
+
 
 if __name__ == '__main__':
     bb = BackboneEncoder(64)
