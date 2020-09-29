@@ -571,7 +571,49 @@ class QueryKeyMultiplexer(nn.Module):
         v = self.cbl2(v)
 
         return v.view(b, t, h, w)
+    
 
+class QueryKeyPyramidMultiplexer(nn.Module):
+    def __init__(self, nf, multiplexer_channels, reductions=3):
+        super(QueryKeyPyramidMultiplexer, self).__init__()
+
+        # Blocks used to create the query
+        self.input_process = ConvGnSilu(nf, nf, activation=True, norm=False, bias=True)
+        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(nf * 2 ** i) for i in range(reductions)])
+        reduction_filters = nf * 2 ** reductions
+        self.processing_blocks = nn.Sequential(OrderedDict([('block%i' % (i,), ConvGnSilu(reduction_filters, reduction_filters, kernel_size=1, norm=True, bias=False)) for i in range(3)]))
+        self.expansion_blocks = nn.ModuleList([ExpansionBlock2(reduction_filters // (2 ** i)) for i in range(reductions)])
+
+        # Blocks used to create the key
+        self.key_process = ConvGnSilu(nf, nf, kernel_size=1, activation=True, norm=False, bias=True)
+
+        # Postprocessing blocks.
+        self.query_key_combine = ConvGnSilu(nf*2, nf, kernel_size=3, activation=True, norm=False, bias=False)
+        self.cbl0 = ConvGnSilu(nf, nf, kernel_size=3, activation=True, norm=True, bias=False)
+        self.cbl1 = ConvGnSilu(nf, nf // 2, kernel_size=1, norm=True, bias=False, num_groups=4)
+        self.cbl2 = ConvGnSilu(nf // 2, 1, kernel_size=1, norm=False, bias=False)
+
+    def forward(self, x, transformations):
+        q = self.input_process(x)
+        reduction_identities = []
+        for b in self.reduction_blocks:
+            reduction_identities.append(q)
+            q = b(q)
+        q = self.processing_blocks(q)
+        for i, b in enumerate(self.expansion_blocks):
+            q = b(q, reduction_identities[-i - 1])
+
+        b, t, f, h, w = transformations.shape
+        k = transformations.view(b * t, f, h, w)
+        k = self.key_process(k)
+
+        q = q.view(b, 1, f, h, w).repeat(1, t, 1, 1, 1).view(b * t, f, h, w)
+        v = self.query_key_combine(torch.cat([q, k], dim=1))
+        v = self.cbl0(v)
+        v = self.cbl1(v)
+        v = self.cbl2(v)
+
+        return v.view(b, t, h, w)
 
 if __name__ == '__main__':
     bb = BackboneEncoder(64)
