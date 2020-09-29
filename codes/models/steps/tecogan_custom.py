@@ -1,5 +1,7 @@
 from models.steps.losses import ConfigurableLoss, GANLoss, extract_params_from_state
 from models.layers.resample2d_package.resample2d import Resample2d
+from models.steps.recurrent import RecurrentController
+from models.steps.injectors import Injector
 import torch
 from apex import amp
 
@@ -13,6 +15,85 @@ def create_teco_discriminator_sextuplet(input_list, index, flow_gen, resampler, 
         last_flow = last_flow.detach()
     flow_triplet = [resampler(triplet[0], first_flow), triplet[1], resampler(triplet[2], last_flow)]
     return torch.cat(triplet + flow_triplet, dim=1)
+
+
+# Controller class that schedules the recurring inputs of tecogan
+class TecoGanController(RecurrentController):
+    def __init__(self, opt, env):
+        super(TecoGanController, self).__init__(opt, env)
+        self.sequence_len = opt['teco_sequence_length']
+
+    def get_next_step(self, state, recurrent_state):
+        # The first stage feeds the LR input into both generator inputs.
+        if recurrent_state is None:
+            return {
+                '_gen_lr_input_index': 0,
+                '_teco_recurrent_counter': 0
+                '_teco_stage': 0
+            }
+        # The second stage is truly recurrent, but needs its own stage counter because the temporal discriminator
+        # cannot come online yet.
+        elif recurrent_state['_teco_recurrent_counter'] == 1:
+            return {
+                '_gen_lr_input_index': 1,
+                '_teco_stage': 1,
+                '_teco_recurrent_counter': recurrent_state['_teco_recurrent_counter'] + 1
+            }
+        # The third stage is truly recurrent through the end of the sequence.
+        elif recurrent_state['_teco_recurrent_counter'] < self.sequence_len:
+            return {
+                '_gen_lr_input_index': recurrent_state['_gen_lr_input_index'] + 1,
+                '_teco_stage': 2,
+                '_teco_recurrent_counter': recurrent_state['_teco_recurrent_counter'] + 1
+            }
+        # The fourth stage regresses backwards through the sequence.
+        elif recurrent_state['_teco_recurrent_counter'] < self.sequence_len * 2 - 1:
+            return {
+                '_gen_lr_input_index': self.sequence_len - recurrent_state['teco_recurrent_counter'] - 1,
+                '_teco_stage': 3,
+                '_teco_recurrent_counter': recurrent_state['_teco_recurrent_counter'] + 1
+            }
+        else:
+            return None
+
+
+# Uses a generator to synthesize a sequence of images from [in] and injects the results into a list [out]
+# Images are fed in sequentially forward and back, resulting in len([out])=2*len([in])-1 (last element is not repeated).
+# All computation is done with torch.no_grad().
+class RecurrentImageGeneratorSequenceInjector(Injector):
+    def __init__(self, opt, env):
+        super(RecurrentImageGeneratorSequenceInjector, self).__init__(opt, env)
+
+    def forward(self, state):
+        gen = self.env['generators'][self.opt['generator']]
+        results = []
+        with torch.no_grad():
+            recurrent_input = torch.zeros_like(state[self.input][0])
+            # Go forward in the sequence first.
+            for input in state[self.input]:
+                recurrent_input = gen(input, recurrent_input)
+                results.append(recurrent_input)
+
+            # Now go backwards, skipping the last element (it's already stored in recurrent_input)
+            it = reversed(range(len(results) - 1))
+            for i in it:
+                recurrent_input = gen(results[i], recurrent_input)
+                results.append(recurrent_input)
+
+            new_state = {self.output: results}
+        return new_state
+
+
+class ImageFlowInjector(Injector):
+    def __init__(self, opt, env):
+        # Requires building this custom cuda kernel. Only require it if explicitly needed.
+        from models.networks.layers.resample2d_package.resample2d import Resample2d
+        super(ImageFlowInjector, self).__init__(opt, env)
+        self.resample = Resample2d()
+
+    def forward(self, state):
+        return self.resample(state[self.opt['in']], state[self.opt['flow']])
+
 
 # This is the temporal discriminator loss from TecoGAN.
 #
@@ -45,7 +126,6 @@ class TecoGanDiscriminatorLoss(ConfigurableLoss):
         fake = state[self.opt['fake']]
         backwards_count = range(len(real)-2)
         for i in range(len(real) - 2):
-            if self.env['']
             real_sext = create_teco_discriminator_sextuplet(real, i, flow_gen, self.resampler)
             fake_sext = create_teco_discriminator_sextuplet(fake, i, flow_gen, self.resampler)
 
