@@ -258,6 +258,7 @@ class TranslationInvarianceLoss(ConfigurableLoss):
         self.gen_output_to_use = opt['generator_output_index'] if 'generator_output_index' in opt.keys() else None
         self.patch_size = opt['patch_size']
         self.overlap = opt['overlap']  # For maximum overlap, can be calculated as 2*patch_size-image_size
+        self.detach_fake = opt['detach_fake']
         assert(self.patch_size > self.overlap)
 
     def forward(self, net, state):
@@ -271,15 +272,19 @@ class TranslationInvarianceLoss(ConfigurableLoss):
                                  ("bottom_right", 0, self.overlap, 0, self.overlap)])
         trans_name, hl, hh, wl, wh = translation
         # Change the "fake" input name that we are translating to one that specifies the random translation.
-        self.opt['fake'][self.gen_input_for_alteration] = "%s_%s" % (self.opt['fake'], trans_name)
-        input = extract_params_from_state(self.opt['fake'], state)
-        with torch.no_grad():
+        fake = self.opt['fake'].copy()
+        fake[self.gen_input_for_alteration] = "%s_%s" % (fake[self.gen_input_for_alteration], trans_name)
+        input = extract_params_from_state(fake, state)
+        if self.detach_fake:
+            with torch.no_grad():
+                trans_output = net(*input)
+        else:
             trans_output = net(*input)
-        fake_shared_output = trans_output[:, hl:hh, wl:wh][self.gen_output_to_use]
+        fake_shared_output = trans_output[self.gen_output_to_use][:, :, hl:hh, wl:wh]
 
         # The "real" input is assumed to always come from the top left tile.
         gen_output = state[self.opt['real']]
-        real_shared_output = gen_output[:, border_sz:border_sz+self.overlap, border_sz:border_sz+self.overlap][self.gen_output_to_use]
+        real_shared_output = gen_output[:, :, border_sz:border_sz+self.overlap, border_sz:border_sz+self.overlap]
 
         return self.criterion(fake_shared_output, real_shared_output)
 

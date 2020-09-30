@@ -145,10 +145,16 @@ class GreyInjector(Injector):
 class InterpolateInjector(Injector):
     def __init__(self, opt, env):
         super(InterpolateInjector, self).__init__(opt, env)
+        if 'scale_factor' in opt.keys():
+            self.scale_factor = opt['scale_factor']
+            self.size = None
+        else:
+            self.scale_factor = None
+            self.size = (opt['size'], opt['size'])
 
     def forward(self, state):
         scaled = torch.nn.functional.interpolate(state[self.opt['in']], scale_factor=self.opt['scale_factor'],
-                                                 mode=self.opt['mode'])
+                                                 size=self.opt['size'], mode=self.opt['mode'])
         return {self.opt['out']: scaled}
 
 
@@ -171,11 +177,11 @@ class ImagePatchInjector(Injector):
     def forward(self, state):
         im = state[self.opt['in']]
         if self.env['training']:
-            return { self.opt['out']: im[:, :self.patch_size, :self.patch_size],
-                     '%s_top_left' % (self.opt['out'],): im[:, :self.patch_size, :self.patch_size],
-                     '%s_top_right' % (self.opt['out'],): im[:, :self.patch_size, -self.patch_size:],
-                     '%s_bottom_left' % (self.opt['out'],): im[:, -self.patch_size:, :self.patch_size],
-                     '%s_bottom_right' % (self.opt['out'],): im[:, -self.patch_size:, -self.patch_size:] }
+            return { self.opt['out']: im[:, :3, :self.patch_size, :self.patch_size],
+                     '%s_top_left' % (self.opt['out'],): im[:, :, :self.patch_size, :self.patch_size],
+                     '%s_top_right' % (self.opt['out'],): im[:, :, :self.patch_size, -self.patch_size:],
+                     '%s_bottom_left' % (self.opt['out'],): im[:, :, -self.patch_size:, :self.patch_size],
+                     '%s_bottom_right' % (self.opt['out'],): im[:, :, -self.patch_size:, -self.patch_size:] }
         else:
             return { self.opt['out']: im,
                      '%s_top_left' % (self.opt['out'],): im,
