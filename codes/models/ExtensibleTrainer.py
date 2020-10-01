@@ -177,8 +177,8 @@ class ExtensibleTrainer(BaseModel):
         # Iterate through the steps, performing them one at a time.
         state = self.dstate
         for step_num, s in enumerate(self.steps):
-            # Skip steps if mod_step doesn't line up.
-            if 'mod_step' in s.step_opt.keys() and step % s.step_opt['mod_step'] != 0:
+            # 'every' is used to denote steps that should only occur at a certain integer factor rate. e.g. '2' occurs every 2 steps.
+            if 'every' in s.step_opt.keys() and step % s.step_opt['every'] != 0:
                 continue
             # Steps can opt out of early (or late) training, make sure that happens here.
             if 'after' in s.step_opt.keys() and step < s.step_opt['after'] or 'before' in s.step_opt.keys() and step > s.step_opt['before']:
