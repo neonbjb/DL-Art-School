@@ -32,7 +32,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_spsr7_multiloss.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_ssgr.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
@@ -61,6 +61,12 @@ def main():
         opt['dist'] = False
         rank = -1
         print('Disabled distributed training.')
+        if torch.cuda.device_count() > 1:
+            gpu = input('I noticed you have multiple GPUs. Starting two jobs on the same GPU sucks. Please confirm which GPU'
+                  'you want to use. Press enter to use the specified one [%i]' % (opt['gpu_ids']))
+            if gpu:
+                opt['gpu_ids'] = [int(gpu)]
+
     else:
         opt['dist'] = True
         init_dist()
