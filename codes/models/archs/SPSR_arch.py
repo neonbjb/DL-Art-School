@@ -458,7 +458,7 @@ class Spsr6(nn.Module):
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
 
-# Variant of Spsr7 which uses multiplexer blocks that feed off of a reference embedding. Also computes that embedding.
+# Variant of Spsr6 which uses multiplexer blocks that feed off of a reference embedding. Also computes that embedding.
 class Spsr7(nn.Module):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, multiplexer_reductions=3, init_temperature=10):
         super(Spsr7, self).__init__()
@@ -566,6 +566,135 @@ class Spsr7(nn.Module):
         self.grad_fea_std = grad_fea_std.detach().cpu()
         self.fea_grad_std = fea_grad_std.detach().cpu()
         return x_grad_out, x_out, s1out, s2out
+
+    def set_temperature(self, temp):
+        [sw.set_temperature(temp) for sw in self.switches]
+
+    def update_for_step(self, step, experiments_path='.'):
+        if self.attentions:
+            temp = max(1, 1 + self.init_temperature *
+                       (self.final_temperature_step - step) / self.final_temperature_step)
+            self.set_temperature(temp)
+            if step % 500 == 0:
+                output_path = os.path.join(experiments_path, "attention_maps")
+                prefix = "amap_%i_a%i_%%i.png"
+                [save_attention_to_image_rgb(output_path, self.attentions[i], self.transformation_counts, prefix % (step, i), step, output_mag=False) for i in range(len(self.attentions))]
+                torchvision.utils.save_image(self.lr, os.path.join(experiments_path, "attention_maps", "amap_%i_base_image.png" % (step,)))
+
+    def get_debug_values(self, step, net_name):
+        temp = self.switches[0].switch.temperature
+        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
+        means = [i[0] for i in mean_hists]
+        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
+        val = {"switch_temperature": temp,
+               "grad_branch_feat_intg_std_dev": self.grad_fea_std,
+               "conjoin_branch_grad_intg_std_dev": self.fea_grad_std}
+        for i in range(len(means)):
+            val["switch_%i_specificity" % (i,)] = means[i]
+            val["switch_%i_histogram" % (i,)] = hists[i]
+        return val
+
+
+# Based on Spsr7 but swaps sw2 to the end of the chain. Also re-enables pretransform convs.
+class Spsr8(nn.Module):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, multiplexer_reductions=3, init_temperature=10):
+        super(Spsr7, self).__init__()
+        n_upscale = int(math.log(upscale, 2))
+
+        # processing the input embedding
+        self.reference_embedding = ReferenceImageBranch(nf)
+
+        # switch options
+        self.nf = nf
+        transformation_filters = nf
+        self.transformation_counts = xforms
+        multiplx_fn = functools.partial(QueryKeyMultiplexer, transformation_filters, embedding_channels=512, reductions=multiplexer_reductions)
+        pretransform_fn = functools.partial(ConvGnLelu, transformation_filters, transformation_filters, norm=False, bias=False, weight_init_factor=.1)
+        transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.5),
+                                         transformation_filters, kernel_size=3, depth=3,
+                                         weight_init_factor=.1)
+
+        # Feature branch
+        self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False)
+        self.sw1 = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
+                                                   pre_transform_block=pretransform_fn, transform_block=transform_fn,
+                                                   attention_norm=True,
+                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+
+        # Grad branch. Note - groupnorm on this branch is REALLY bad. Avoid it like the plague.
+        self.get_g_nopadding = ImageGradientNoPadding()
+        self.grad_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False, bias=False)
+        self.grad_ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3, final_norm=False)
+
+        self.sw_grad = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
+                                                   pre_transform_block=pretransform_fn, transform_block=transform_fn,
+                                                   attention_norm=True,
+                                                   transform_count=self.transformation_counts // 2, init_temp=init_temperature,
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+        self.grad_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
+        self.grad_lr_conv2 = ConvGnLelu(nf, nf, kernel_size=1, norm=False, activation=True, bias=True)
+        self.upsample_grad = nn.Sequential(*[UpconvBlock(nf, nf, block=ConvGnLelu, norm=False, activation=True, bias=False) for _ in range(n_upscale)])
+        self.grad_branch_output_conv = ConvGnLelu(nf, out_nc, kernel_size=1, norm=False, activation=False, bias=True)
+
+        # Join branch (grad+fea)
+        self.noise_ref_join_conjoin = ReferenceJoinBlock(nf, residual_weight_init_factor=.1)
+        self.conjoin_ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3)
+        self.conjoin_sw = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
+                                                   pre_transform_block=pretransform_fn, transform_block=transform_fn,
+                                                   attention_norm=True,
+                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+        self.final_sw = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
+                                                   pre_transform_block=pretransform_fn, transform_block=transform_fn,
+                                                   attention_norm=True,
+                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+        self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
+        self.upsample = nn.Sequential(*[UpconvBlock(nf, nf, block=ConvGnLelu, norm=False, activation=True, bias=True) for _ in range(n_upscale)])
+        self.final_hr_conv1 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False, bias=True)
+        self.final_hr_conv2 = ConvGnLelu(nf, out_nc, kernel_size=1, norm=False, activation=False, bias=False)
+        self.switches = [self.sw1, self.sw2, self.sw_grad, self.conjoin_sw]
+        self.attentions = None
+        self.init_temperature = init_temperature
+        self.final_temperature_step = 10000
+        self.lr = None
+
+    def forward(self, x, ref, ref_center):
+        # The attention_maps debugger outputs <x>. Save that here.
+        self.lr = x.detach().cpu()
+
+        x_grad = self.get_g_nopadding(x)
+        ref_code = self.reference_embedding(ref, ref_center)
+        ref_embedding = ref_code.view(-1, self.nf * 8, 1, 1).repeat(1, 1, x.shape[2] // 8, x.shape[3] // 8)
+
+        x = self.model_fea_conv(x)
+        x1 = x
+        x1, a1 = self.sw1(x1, True, identity=x, att_in=(x1, ref_embedding))
+
+        x_grad = self.grad_conv(x_grad)
+        x_grad_identity = x_grad
+        x_grad, grad_fea_std = self.grad_ref_join(x_grad, x1)
+        x_grad, a2 = self.sw_grad(x_grad, True, identity=x_grad_identity, att_in=(x_grad, ref_embedding))
+        x_grad = self.grad_lr_conv(x_grad)
+        x_grad = self.grad_lr_conv2(x_grad)
+        x_grad_out = self.upsample_grad(x_grad)
+        x_grad_out = self.grad_branch_output_conv(x_grad_out)
+
+        x_out = x1
+        x_out, fea_grad_std = self.conjoin_ref_join(x_out, x_grad)
+        x_out, a3 = self.conjoin_sw(x_out, True, identity=x1, att_in=(x_out, ref_embedding))
+        x_out, a4 = self.sw2(x_out, True, identity=x_out, att_in=(x_out, ref_embedding))
+
+        x_out = self.final_lr_conv(x_out)
+        x_out = checkpoint(self.upsample, x_out)
+        x_out = checkpoint(self.final_hr_conv1, x_out)
+        x_out = self.final_hr_conv2(x_out)
+
+        self.attentions = [a1, a2, a3, a4]
+        self.grad_fea_std = grad_fea_std.detach().cpu()
+        self.fea_grad_std = fea_grad_std.detach().cpu()
+        return x_grad_out, x_out
 
     def set_temperature(self, temp):
         [sw.set_temperature(temp) for sw in self.switches]
