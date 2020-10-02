@@ -11,6 +11,12 @@ class SingleImageDataset(BaseUnsupervisedImageDataset):
     def __init__(self, opt):
         super(SingleImageDataset, self).__init__(opt)
 
+    def get_paths(self):
+        for i in range(len(self)):
+            chunk_ind = bisect_left(self.starting_indices, i)
+            chunk_ind = chunk_ind if chunk_ind < len(self.starting_indices) and self.starting_indices[chunk_ind] == i else chunk_ind-1
+            yield self.chunks[chunk_ind].tiles[i-self.starting_indices[chunk_ind]]
+
     def __getitem__(self, item):
         chunk_ind = bisect_left(self.starting_indices, item)
         chunk_ind = chunk_ind if chunk_ind < len(self.starting_indices) and self.starting_indices[chunk_ind] == item else chunk_ind-1
