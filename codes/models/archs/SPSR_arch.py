@@ -598,7 +598,7 @@ class Spsr7(nn.Module):
 # Based on Spsr7 but swaps sw2 to the end of the chain. Also re-enables pretransform convs.
 class Spsr8(nn.Module):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, multiplexer_reductions=3, init_temperature=10):
-        super(Spsr7, self).__init__()
+        super(Spsr8, self).__init__()
         n_upscale = int(math.log(upscale, 2))
 
         # processing the input embedding
