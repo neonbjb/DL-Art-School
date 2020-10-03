@@ -15,7 +15,7 @@ from shutil import get_terminal_size
 import scp
 import paramiko
 import options.options as options
-from utils.util import checkpoint
+from torch.utils.checkpoint import checkpoint
 
 import yaml
 try:
