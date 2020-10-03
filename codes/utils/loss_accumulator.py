@@ -10,7 +10,11 @@ class LossAccumulator:
         if name not in self.buffers.keys():
             self.buffers[name] = (0, torch.zeros(self.buffer_sz))
         i, buf = self.buffers[name]
-        buf[i] = tensor.detach().cpu()
+        # Can take tensors or just plain python numbers.
+        if isinstance(tensor, torch.Tensor):
+            buf[i] = tensor.detach().cpu()
+        else:
+            buf[i] = tensor
         self.buffers[name] = ((i+1) % self.buffer_sz, buf)
 
     def as_dict(self):
