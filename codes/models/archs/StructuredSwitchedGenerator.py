@@ -129,7 +129,7 @@ class ReferenceImageBranch(nn.Module):
 
 
 class SSGr1(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10, use_bn_attention_norm=False):
         super(SSGr1, self).__init__()
         n_upscale = int(math.log(upscale, 2))
         self.nf = nf
@@ -144,14 +144,16 @@ class SSGr1(nn.Module):
         transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.25),
                                          transformation_filters, kernel_size=3, depth=4,
                                          weight_init_factor=.1)
+        use_attention_norm = not use_bn_attention_norm
 
         # Feature branch
         self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False)
         self.sw1 = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                    pre_transform_block=None, transform_block=transform_fn,
-                                                   attention_norm=True,
+                                                   attention_norm=use_attention_norm,
                                                    transform_count=self.transformation_counts, init_temp=init_temperature,
-                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True,
+                                                   attention_batchnorm=use_bn_attention_norm)
 
         # Grad branch. Note - groupnorm on this branch is REALLY bad. Avoid it like the plague.
         self.get_g_nopadding = ImageGradientNoPadding()
@@ -159,9 +161,10 @@ class SSGr1(nn.Module):
         self.grad_ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3, final_norm=False, kernel_size=1, depth=2)
         self.sw_grad = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                    pre_transform_block=None, transform_block=transform_fn,
-                                                   attention_norm=True,
+                                                   attention_norm=use_attention_norm,
                                                    transform_count=self.transformation_counts // 2, init_temp=init_temperature,
-                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True,
+                                                   attention_batchnorm=use_bn_attention_norm)
         self.grad_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
         self.upsample_grad = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=False)
         self.grad_branch_output_conv = ConvGnLelu(nf // 2, out_nc, kernel_size=1, norm=False, activation=False, bias=True)
@@ -170,9 +173,10 @@ class SSGr1(nn.Module):
         self.conjoin_ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3, kernel_size=1, depth=2)
         self.conjoin_sw = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                    pre_transform_block=None, transform_block=transform_fn,
-                                                   attention_norm=True,
+                                                   attention_norm=use_attention_norm,
                                                    transform_count=self.transformation_counts, init_temp=init_temperature,
-                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True,
+                                                   attention_batchnorm=use_bn_attention_norm)
         self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
         self.upsample = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=True)
         self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)

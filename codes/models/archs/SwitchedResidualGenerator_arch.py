@@ -11,10 +11,6 @@ from utils.util import checkpoint
 from models.archs.spinenet_arch import SpineNet
 
 
-# Set to true to relieve memory pressure by using utils.util in several memory-critical locations.
-memory_checkpointing_enabled = True
-
-
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
 class HalvingProcessingBlock(nn.Module):
@@ -81,8 +77,8 @@ def gather_2d(input, index):
 
 
 class ConfigurableSwitchComputer(nn.Module):
-    def __init__(self, base_filters, multiplexer_net, pre_transform_block, transform_block, transform_count, attention_norm,
-                 init_temp=20, add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=False):
+    def __init__(self, base_filters, multiplexer_net, pre_transform_block, transform_block, transform_count, attention_norm=None,
+                 init_temp=20, add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=False, attention_batchnorm=None):
         super(ConfigurableSwitchComputer, self).__init__()
 
         tc = transform_count
@@ -105,6 +101,11 @@ class ConfigurableSwitchComputer(nn.Module):
         # depending on its needs.
         self.psc_scale = nn.Parameter(torch.full((1,), float(.1)))
 
+        if attention_batchnorm:
+            self.att_bn = nn.BatchNorm2d(transform_count)
+            self.att_relu = nn.ReLU()
+        else:
+            self.att_bn = None
 
     # Regarding inputs: it is acceptable to pass in a tuple/list as an input for (x), but the first element
     # *must* be the actual parameter that gets fed through the network - it is assumed to be the identity.
@@ -133,21 +134,16 @@ class ConfigurableSwitchComputer(nn.Module):
             x = self.pre_transform(*x)
         if not isinstance(x, tuple):
             x = (x,)
-        if memory_checkpointing_enabled:
-            xformed = [checkpoint(t, *x) for t in self.transforms]
-        else:
-            xformed = [t(*x) for t in self.transforms]
+        xformed = [checkpoint(t, *x) for t in self.transforms]
 
         if not isinstance(att_in, tuple):
             att_in = (att_in,)
         if self.feed_transforms_into_multiplexer:
             att_in = att_in + (torch.stack(xformed, dim=1),)
-        if memory_checkpointing_enabled:
-            m = checkpoint(self.multiplexer, *att_in)
-        else:
-            m = self.multiplexer(*att_in)
+        m = checkpoint(self.multiplexer, *att_in)
+        if self.att_bn:
+            m = self.att_relu(self.att_bn(m))
 
-        # It is assumed that [xformed] and [m] are collapsed into tensors at this point.
         outputs, attention = self.switch(xformed, m, True)
         outputs = identity + outputs * self.switch_scale * fixed_scale
         outputs = outputs + self.post_switch_conv(outputs) * self.psc_scale * fixed_scale
