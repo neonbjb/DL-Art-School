@@ -246,12 +246,12 @@ def main():
                     model.force_restore_swapout()
                     val_batch_sz = 1 if 'batch_size' not in opt['datasets']['val'].keys() else opt['datasets']['val']['batch_size']
                     # does not support multi-GPU validation
-                    pbar = util.ProgressBar(len(val_loader) * val_batch_sz)
                     avg_psnr = 0.
                     avg_fea_loss = 0.
                     idx = 0
                     colab_imgs_to_copy = []
-                    for val_data in val_loader:
+                    val_tqdm = tqdm(val_loader)
+                    for val_data in val_tqdm:
                         idx += 1
                         for b in range(len(val_data['LQ_path'])):
                             img_name = os.path.splitext(os.path.basename(val_data['LQ_path'][b]))[0]
