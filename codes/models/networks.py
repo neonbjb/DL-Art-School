@@ -81,8 +81,7 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == "ssgr1":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = ssg.SSGr1(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                         init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10,
-                         use_bn_attention_norm=opt_net['bn_attention_norm'] if 'bn_attention_norm' in opt_net.keys() else False)
+                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == 'ssg_no_embedding':
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = ssg.SSGNoEmbedding(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
