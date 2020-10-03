@@ -294,7 +294,7 @@ def main():
                     # log
                     logger.info('# Validation # PSNR: {:.4e} Fea: {:.4e}'.format(avg_psnr, avg_fea_loss))
                     # tensorboard logger
-                    if opt['use_tb_logger'] and 'debug' not in opt['name']:
+                    if opt['use_tb_logger'] and 'debug' not in opt['name'] and rank <= 0:
                         #tb_logger.add_scalar('val_psnr', avg_psnr, current_step)
                         tb_logger.add_scalar('val_fea', avg_fea_loss, current_step)
 

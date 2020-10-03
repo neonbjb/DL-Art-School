@@ -300,7 +300,8 @@ class ExtensibleTrainer(BaseModel):
             for name, net in netdict.items():
                 load_path = self.opt['path']['pretrain_model_%s' % (name,)]
                 if load_path is not None:
-                    logger.info('Loading model for [%s]' % (load_path))
+                    if self.rank <= 0:
+                        logger.info('Loading model for [%s]' % (load_path,))
                     self.load_network(load_path, net, self.opt['path']['strict_load'])
 
     def save(self, iter_step):
