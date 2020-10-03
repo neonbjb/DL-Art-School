@@ -226,7 +226,7 @@ class ExtensibleTrainer(BaseModel):
             [e.after_optimize(state) for e in self.experiments]
 
         # Record visual outputs for usage in debugging and testing.
-        if 'visuals' in self.opt['logger'].keys():
+        if 'visuals' in self.opt['logger'].keys() and self.rank <= 0:
             sample_save_path = os.path.join(self.opt['path']['models'], "..", "visual_dbg")
             for v in self.opt['logger']['visuals']:
                 if v not in state.keys():
