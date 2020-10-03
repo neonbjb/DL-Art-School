@@ -1,7 +1,7 @@
 import torch.nn
 from models.archs.SPSR_arch import ImageGradientNoPadding
 from data.weight_scheduler import get_scheduler_for_opt
-from torch.utils.checkpoint import checkpoint
+from utils.util import checkpoint
 import torchvision.utils as utils
 #from models.steps.recursive_gen_injectors import ImageFlowInjector
 

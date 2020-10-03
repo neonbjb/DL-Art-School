@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import models.archs.arch_util as arch_util
 from models.archs.arch_util import PixelUnshuffle
 import torchvision
-from torch.utils.checkpoint import checkpoint
+from utils.util import checkpoint
 
 
 class ResidualDenseBlock_5C(nn.Module):

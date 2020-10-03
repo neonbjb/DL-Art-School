@@ -7,11 +7,11 @@ from collections import OrderedDict
 from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock, SiLU
 from switched_conv_util import save_attention_to_image_rgb
 import os
-from torch.utils.checkpoint import checkpoint
+from utils.util import checkpoint
 from models.archs.spinenet_arch import SpineNet
 
 
-# Set to true to relieve memory pressure by using torch.utils.checkpoint in several memory-critical locations.
+# Set to true to relieve memory pressure by using utils.util in several memory-critical locations.
 memory_checkpointing_enabled = True
 
 

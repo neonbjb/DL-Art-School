@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-from torch.utils.checkpoint import checkpoint
+from utils.util import checkpoint
 
 from models.archs import SPSR_util as B
 from models.archs.SwitchedResidualGenerator_arch import ConfigurableSwitchComputer, ReferenceImageBranch, \

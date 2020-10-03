@@ -5,6 +5,7 @@ import yaml
 from utils.util import OrderedYaml
 Loader, Dumper = OrderedYaml()
 
+loaded_options = None
 
 def parse(opt_path, is_train=True):
     with open(opt_path, mode='r') as f:

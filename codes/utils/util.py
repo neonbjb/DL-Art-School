@@ -14,6 +14,8 @@ from torchvision.utils import make_grid
 from shutil import get_terminal_size
 import scp
 import paramiko
+import options.options as options
+from utils.util import checkpoint
 
 import yaml
 try:
@@ -41,6 +43,13 @@ def OrderedYaml():
 # miscellaneous
 ####################
 
+# Conditionally uses torch's checkpoint functionality if it is enabled in the opt file.
+def checkpoint(fn, *args):
+    enabled = options.loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in options.loaded_options.keys() else True
+    if enabled:
+        return checkpoint(fn, *args)
+    else:
+        return fn(*args)
 
 def get_timestamp():
     return datetime.now().strftime('%y%m%d-%H%M%S')
