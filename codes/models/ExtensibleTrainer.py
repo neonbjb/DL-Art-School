@@ -240,8 +240,8 @@ class ExtensibleTrainer(BaseModel):
 
     def compute_fea_loss(self, real, fake):
         with torch.no_grad():
-            logits_real = self.netF(real)
-            logits_fake = self.netF(fake)
+            logits_real = self.netF(real.to(self.device))
+            logits_fake = self.netF(fake.to(self.device))
         return nn.L1Loss().to(self.device)(logits_fake, logits_real)
 
     def test(self):

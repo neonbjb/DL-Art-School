@@ -883,7 +883,7 @@ class SRGANModel(BaseModel):
         with torch.no_grad():
             real = real.unsqueeze(dim=0).to(self.device)
             fake = fake.unsqueeze(dim=0).to(self.device)
-            real_fea = self.netF(real).detach()
+            real_fea = self.netF(real)
             fake_fea = self.netF(fake)
             return self.cri_fea(fake_fea, real_fea).item()
 
