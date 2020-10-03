@@ -528,7 +528,7 @@ class Spsr7(nn.Module):
         self.final_temperature_step = 10000
         self.lr = None
 
-    def forward(self, x, ref, ref_center):
+    def forward(self, x, ref, ref_center, only_return_final_feature_map=False):
         # The attention_maps debugger outputs <x>. Save that here.
         self.lr = x.detach().cpu()
 
@@ -551,13 +551,17 @@ class Spsr7(nn.Module):
         x_grad, a3 = self.sw_grad(x_grad, True, identity=x_grad_identity, att_in=(x_grad, ref_embedding))
         x_grad = self.grad_lr_conv(x_grad)
         x_grad = self.grad_lr_conv2(x_grad)
-        x_grad_out = self.upsample_grad(x_grad)
-        x_grad_out = self.grad_branch_output_conv(x_grad_out)
+        if not only_return_final_feature_map:
+            x_grad_out = self.upsample_grad(x_grad)
+            x_grad_out = self.grad_branch_output_conv(x_grad_out)
 
         x_out = x2
         x_out, fea_grad_std = self.conjoin_ref_join(x_out, x_grad)
         x_out, a4 = self.conjoin_sw(x_out, True, identity=x2, att_in=(x_out, ref_embedding))
         x_out = self.final_lr_conv(x_out)
+        final_feature_map = x_out
+        if only_return_final_feature_map:
+            return final_feature_map
         x_out = checkpoint(self.upsample, x_out)
         x_out = checkpoint(self.final_hr_conv1, x_out)
         x_out = self.final_hr_conv2(x_out)
@@ -565,7 +569,7 @@ class Spsr7(nn.Module):
         self.attentions = [a1, a2, a3, a4]
         self.grad_fea_std = grad_fea_std.detach().cpu()
         self.fea_grad_std = fea_grad_std.detach().cpu()
-        return x_grad_out, x_out, s1out, s2out
+        return x_grad_out, x_out, final_feature_map
 
     def set_temperature(self, temp):
         [sw.set_temperature(temp) for sw in self.switches]

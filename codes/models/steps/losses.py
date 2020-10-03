@@ -28,11 +28,16 @@ def create_loss(opt_loss, env):
 
 
 # Converts params to a list of tensors extracted from state. Works with list/tuple params as well as scalars.
-def extract_params_from_state(params, state):
+def extract_params_from_state(params, state, root=True):
     if isinstance(params, list) or isinstance(params, tuple):
-        p = [state[r] for r in params]
+        p = [extract_params_from_state(r, state, False) for r in params]
+    elif isinstance(params, str):
+        p = state[params]
     else:
-        p = [state[params]]
+        p = params
+    # The root return must always be a list.
+    if root and not isinstance(p, list):
+        p = [p]
     return p
 
 
@@ -241,7 +246,10 @@ class GeometricSimilarityGeneratorLoss(ConfigurableLoss):
         # Undo alteration on HR image
         upsampled_altered = undo_fn(upsampled_altered)
 
-        return self.criterion(state[self.opt['real']], upsampled_altered)
+        if self.opt['criterion'] == 'cosine':
+            return self.criterion(state[self.opt['real']], upsampled_altered, torch.ones(1, device=upsampled_altered.device))
+        else:
+            return self.criterion(state[self.opt['real']], upsampled_altered)
 
 
 # Computes a loss created by comparing the output of a generator to the output from the same generator when fed an
@@ -280,11 +288,17 @@ class TranslationInvarianceLoss(ConfigurableLoss):
                 trans_output = net(*input)
         else:
             trans_output = net(*input)
-        fake_shared_output = trans_output[self.gen_output_to_use][:, :, hl:hh, wl:wh]
+        if self.gen_output_to_use:
+            fake_shared_output = trans_output[self.gen_output_to_use][:, :, hl:hh, wl:wh]
+        else:
+            fake_shared_output = trans_output[:, :, hl:hh, wl:wh]
 
         # The "real" input is assumed to always come from the top left tile.
         gen_output = state[self.opt['real']]
         real_shared_output = gen_output[:, :, border_sz:border_sz+self.overlap, border_sz:border_sz+self.overlap]
 
-        return self.criterion(fake_shared_output, real_shared_output)
+        if self.opt['criterion'] == 'cosine':
+            return self.criterion(fake_shared_output, real_shared_output, torch.ones(1, device=real_shared_output.device))
+        else:
+            return self.criterion(fake_shared_output, real_shared_output)
 
