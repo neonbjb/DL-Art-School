@@ -483,17 +483,11 @@ class Spsr7(nn.Module):
                                                    attention_norm=True,
                                                    transform_count=self.transformation_counts, init_temp=init_temperature,
                                                    add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
-        self.sw1_out = nn.Sequential(ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True),
-                                     ConvGnLelu(nf, 3, kernel_size=1, norm=False, activation=False, bias=True))
         self.sw2 = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                    pre_transform_block=None, transform_block=transform_fn,
                                                    attention_norm=True,
                                                    transform_count=self.transformation_counts, init_temp=init_temperature,
                                                    add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
-        self.feature_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=True, activation=False)
-        self.feature_lr_conv2 = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False, bias=False)
-        self.sw2_out = nn.Sequential(ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True),
-                                     ConvGnLelu(nf, 3, kernel_size=1, norm=False, activation=False, bias=True))
 
         # Grad branch. Note - groupnorm on this branch is REALLY bad. Avoid it like the plague.
         self.get_g_nopadding = ImageGradientNoPadding()
@@ -539,11 +533,9 @@ class Spsr7(nn.Module):
         x = self.model_fea_conv(x)
         x1 = x
         x1, a1 = self.sw1(x1, True, identity=x, att_in=(x1, ref_embedding))
-        s1out = self.sw1_out(x1)
 
         x2 = x1
         x2, a2 = self.sw2(x2, True, identity=x1, att_in=(x2, ref_embedding))
-        s2out = self.sw2_out(x2)
 
         x_grad = self.grad_conv(x_grad)
         x_grad_identity = x_grad
