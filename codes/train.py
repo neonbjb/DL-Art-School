@@ -127,7 +127,7 @@ def main():
     # torch.autograd.set_detect_anomaly(True)
 
     # Save the compiled opt dict to the global loaded_options variable.
-    option.loaded_options = opt
+    util.loaded_options = opt
 
     #### create train and val dataloader
     dataset_ratio = 1  # enlarge the size of each epoch

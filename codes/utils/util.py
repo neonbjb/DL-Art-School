@@ -14,7 +14,6 @@ from torchvision.utils import make_grid
 from shutil import get_terminal_size
 import scp
 import paramiko
-from options.options import loaded_options
 from torch.utils.checkpoint import checkpoint
 
 import yaml
@@ -23,6 +22,7 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
+loaded_options = None
 
 def OrderedYaml():
     '''yaml orderedDict support'''
