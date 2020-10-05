@@ -4,6 +4,7 @@ from data.weight_scheduler import get_scheduler_for_opt
 from utils.util import checkpoint
 import torchvision.utils as utils
 #from models.steps.recursive_gen_injectors import ImageFlowInjector
+from models.steps.losses import extract_params_from_state
 
 # Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
 def create_injector(opt_inject, env):
@@ -43,7 +44,6 @@ class Injector(torch.nn.Module):
     def forward(self, state):
         raise NotImplementedError
 
-
 # Uses a generator to synthesize an image from [in] and injects the results into [out]
 # Note that results are *not* detached.
 class ImageGeneratorInjector(Injector):
@@ -53,7 +53,7 @@ class ImageGeneratorInjector(Injector):
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
         if isinstance(self.input, list):
-            params = [state[i] for i in self.input]
+            params = extract_params_from_state(self.input, state)
             results = gen(*params)
         else:
             results = gen(state[self.input])

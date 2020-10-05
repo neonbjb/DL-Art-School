@@ -104,7 +104,10 @@ class ConfigurableSwitchComputer(nn.Module):
         # The post_switch_conv gets a low scale initially. The network can decide to magnify it (or not)
         # depending on its needs.
         self.psc_scale = nn.Parameter(torch.full((1,), float(.1)))
+        self.update_norm = True
 
+    def set_update_attention_norm(self, set_val):
+        self.update_norm = set_val
 
     # Regarding inputs: it is acceptable to pass in a tuple/list as an input for (x), but the first element
     # *must* be the actual parameter that gets fed through the network - it is assumed to be the identity.
@@ -148,7 +151,7 @@ class ConfigurableSwitchComputer(nn.Module):
             m = self.multiplexer(*att_in)
 
         # It is assumed that [xformed] and [m] are collapsed into tensors at this point.
-        outputs, attention = self.switch(xformed, m, True)
+        outputs, attention = self.switch(xformed, m, True, self.update_norm)
         outputs = identity + outputs * self.switch_scale * fixed_scale
         outputs = outputs + self.post_switch_conv(outputs) * self.psc_scale * fixed_scale
         if output_attention_weights:
