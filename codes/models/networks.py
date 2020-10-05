@@ -73,9 +73,9 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = spsr.Spsr7(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == "spsr8":
+    elif which_model == "spsr9":
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.Spsr8(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+        netG = spsr.Spsr9(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "ssgr1":

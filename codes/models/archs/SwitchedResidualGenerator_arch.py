@@ -7,13 +7,7 @@ from collections import OrderedDict
 from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock, SiLU
 from switched_conv_util import save_attention_to_image_rgb
 import os
-from utils.util import checkpoint
 from models.archs.spinenet_arch import SpineNet
-
-
-# Set to true to relieve memory pressure by using utils.util in several memory-critical locations.
-memory_checkpointing_enabled = True
-
 
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
@@ -136,19 +130,13 @@ class ConfigurableSwitchComputer(nn.Module):
             x = self.pre_transform(*x)
         if not isinstance(x, tuple):
             x = (x,)
-        if memory_checkpointing_enabled:
-            xformed = [checkpoint(t, *x) for t in self.transforms]
-        else:
-            xformed = [t(*x) for t in self.transforms]
+        xformed = [t(*x) for t in self.transforms]
 
         if not isinstance(att_in, tuple):
             att_in = (att_in,)
         if self.feed_transforms_into_multiplexer:
             att_in = att_in + (torch.stack(xformed, dim=1),)
-        if memory_checkpointing_enabled:
-            m = checkpoint(self.multiplexer, *att_in)
-        else:
-            m = self.multiplexer(*att_in)
+        m = self.multiplexer(*att_in)
 
         # It is assumed that [xformed] and [m] are collapsed into tensors at this point.
         outputs, attention = self.switch(xformed, m, True, self.update_norm)
@@ -286,10 +274,10 @@ class BackboneEncoder(nn.Module):
 
         # [ref] will have a 'mask' channel which we cannot use with pretrained spinenet.
         ref = ref[:, :3, :, :]
-        ref_emb = checkpoint(self.ref_spine, ref)[0]
+        ref_emb = self.ref_spine(ref)[0]
         ref_code = gather_2d(ref_emb, ref_center_point // 8)  # Divide by 8 to bring the center point to the correct location.
 
-        patch = checkpoint(self.patch_spine, x)[0]
+        patch = self.patch_spine(x)[0]
         ref_code_expanded = ref_code.view(-1, 256, 1, 1).repeat(1, 1, patch.shape[2], patch.shape[3])
         combined = self.merge_process1(torch.cat([patch, ref_code_expanded], dim=1))
         combined = self.merge_process2(combined)
@@ -316,7 +304,7 @@ class BackboneEncoderNoRef(nn.Module):
         if self.interpolate_first:
             x = F.interpolate(x, scale_factor=2, mode="bicubic")
 
-        patch = checkpoint(self.patch_spine, x)[0]
+        patch = self.patch_spine(x)[0]
         return patch
 
 
@@ -332,10 +320,10 @@ class BackboneSpinenetNoHead(nn.Module):
         self.merge_process3 = ConvGnSilu(384, 256, kernel_size=1, activation=False, norm=False, bias=True)
 
     def forward(self, x, ref, ref_center_point):
-        ref_emb = checkpoint(self.ref_spine, ref)[0]
+        ref_emb = self.ref_spine(ref)[0]
         ref_code = gather_2d(ref_emb, ref_center_point // 4)  # Divide by 8 to bring the center point to the correct location.
 
-        patch = checkpoint(self.patch_spine, x)[0]
+        patch = self.patch_spine(x)[0]
         ref_code_expanded = ref_code.view(-1, 256, 1, 1).repeat(1, 1, patch.shape[2], patch.shape[3])
         combined = self.merge_process1(torch.cat([patch, ref_code_expanded], dim=1))
         combined = self.merge_process2(combined)
