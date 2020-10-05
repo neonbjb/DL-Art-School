@@ -10,7 +10,7 @@ from switched_conv_util import save_attention_to_image_rgb
 from switched_conv import compute_attention_specificity
 import os
 import torchvision
-from utils.util import checkpoint
+from torch.utils.checkpoint import checkpoint
 
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
@@ -127,6 +127,29 @@ class ReferenceImageBranch(nn.Module):
         x = self.features(x)
         return gather_2d(x, center_point // 8)  # Divide by 8 to scale the center_point down.
 
+class SwitchWithReference(nn.Module):
+    def __init__(self, nf, num_transforms, init_temperature=10, has_ref=True):
+        super(SwitchWithReference, self).__init__()
+        self.nf = nf
+        self.transformation_counts = num_transforms
+        multiplx_fn = functools.partial(QueryKeyMultiplexer, nf)
+        transform_fn = functools.partial(MultiConvBlock, nf, int(nf * 1.25), nf, kernel_size=3, depth=4, weight_init_factor=.1)
+        if has_ref:
+            self.ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3, final_norm=False, kernel_size=1, depth=2)
+        else:
+            self.ref_join = None
+        self.switch = ConfigurableSwitchComputer(nf, multiplx_fn,
+                                                   pre_transform_block=None, transform_block=transform_fn,
+                                                   attention_norm=True,
+                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+
+    def forward(self, x, mplex_ref=None, ref=None):
+        if self.ref_join is not None:
+            branch, ref_std = self.ref_join(x, ref)
+            return self.switch(branch, True, identity=x, att_in=(branch, mplex_ref)) + (ref_std,)
+        else:
+            return self.switch(x, True, identity=x, att_in=(x, mplex_ref))
 
 class SSGr1(nn.Module):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
@@ -137,47 +160,25 @@ class SSGr1(nn.Module):
         # processing the input embedding
         self.reference_embedding = ReferenceImageBranch(nf)
 
-        # switch options
-        transformation_filters = nf
-        self.transformation_counts = xforms
-        multiplx_fn = functools.partial(QueryKeyMultiplexer, transformation_filters)
-        transform_fn = functools.partial(MultiConvBlock, transformation_filters, int(transformation_filters * 1.25),
-                                         transformation_filters, kernel_size=3, depth=4,
-                                         weight_init_factor=.1)
-
         # Feature branch
         self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False)
-        self.sw1 = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
-                                                   pre_transform_block=None, transform_block=transform_fn,
-                                                   attention_norm=True,
-                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
-                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+        self.sw1 = SwitchWithReference(nf, xforms, init_temperature, has_ref=False)
 
         # Grad branch. Note - groupnorm on this branch is REALLY bad. Avoid it like the plague.
         self.get_g_nopadding = ImageGradientNoPadding()
         self.grad_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False, bias=False)
-        self.grad_ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3, final_norm=False, kernel_size=1, depth=2)
-        self.sw_grad = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
-                                                   pre_transform_block=None, transform_block=transform_fn,
-                                                   attention_norm=True,
-                                                   transform_count=self.transformation_counts // 2, init_temp=init_temperature,
-                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+        self.sw_grad = SwitchWithReference(nf, xforms // 2, init_temperature, has_ref=True)
         self.grad_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
         self.upsample_grad = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=False)
         self.grad_branch_output_conv = ConvGnLelu(nf // 2, out_nc, kernel_size=1, norm=False, activation=False, bias=True)
 
         # Join branch (grad+fea)
-        self.conjoin_ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3, kernel_size=1, depth=2)
-        self.conjoin_sw = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
-                                                   pre_transform_block=None, transform_block=transform_fn,
-                                                   attention_norm=True,
-                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
-                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+        self.conjoin_sw = SwitchWithReference(nf, xforms, init_temperature, has_ref=True)
         self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
         self.upsample = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=True)
         self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
         self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
-        self.switches = [self.sw1, self.sw_grad, self.conjoin_sw]
+        self.switches = [self.sw1.switch, self.sw_grad.switch, self.conjoin_sw.switch]
         self.attentions = None
         self.lr = None
         self.init_temperature = init_temperature
@@ -192,23 +193,18 @@ class SSGr1(nn.Module):
         ref_embedding = ref_code.view(-1, ref_code.shape[1], 1, 1).repeat(1, 1, x.shape[2] // 8, x.shape[3] // 8)
 
         x = self.model_fea_conv(x)
-        x1 = x
-        x1, a1 = self.sw1(x1, True, identity=x, att_in=(x1, ref_embedding))
+        x1, a1 = checkpoint(self.sw1, x, ref_embedding)
 
         x_grad = self.grad_conv(x_grad)
-        x_grad_identity = x_grad
-        x_grad, grad_fea_std = self.grad_ref_join(x_grad, x1)
-        x_grad, a3 = self.sw_grad(x_grad, True, identity=x_grad_identity, att_in=(x_grad, ref_embedding))
-        x_grad = self.grad_lr_conv(x_grad)
-        x_grad_out = self.upsample_grad(x_grad)
-        x_grad_out = self.grad_branch_output_conv(x_grad_out)
+        x_grad, a3, grad_fea_std = checkpoint(self.sw_grad, x_grad, ref_embedding, x1)
+        x_grad = checkpoint(self.grad_lr_conv, x_grad)
+        x_grad_out = checkpoint(self.upsample_grad, x_grad)
+        x_grad_out = checkpoint(self.grad_branch_output_conv, x_grad_out)
 
-        x_out = x1
-        x_out, fea_grad_std = self.conjoin_ref_join(x_out, x_grad)
-        x_out, a4 = self.conjoin_sw(x_out, True, identity=x1, att_in=(x_out, ref_embedding))
-        x_out = self.final_lr_conv(x_out)
+        x_out, a4, fea_grad_std = checkpoint(self.conjoin_sw, x1, ref_embedding, x_grad)
+        x_out = checkpoint(self.final_lr_conv, x_out)
         x_out = checkpoint(self.upsample, x_out)
-        x_out = self.final_hr_conv2(x_out)
+        x_out = checkpoint(self.final_hr_conv2, x_out)
 
         self.attentions = [a1, a3, a4]
         self.grad_fea_std = grad_fea_std.detach().cpu()
