@@ -268,7 +268,7 @@ class GeometricSimilarityGeneratorLoss(ConfigurableLoss):
         else:
             upsampled_altered = net(*altered)
 
-        if self.gen_output_to_use:
+        if self.gen_output_to_use is not None:
             upsampled_altered = upsampled_altered[self.gen_output_to_use]
 
         # Undo alteration on HR image
