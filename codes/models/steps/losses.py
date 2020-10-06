@@ -9,7 +9,10 @@ import torchvision
 
 def create_loss(opt_loss, env):
     type = opt_loss['type']
-    if type == 'pix':
+    if 'teco_' in type:
+        from models.steps.tecogan_losses import create_teco_loss
+        return create_teco_loss(opt_loss, env)
+    elif type == 'pix':
         return PixLoss(opt_loss, env)
     elif type == 'feature':
         return FeatureLoss(opt_loss, env)
