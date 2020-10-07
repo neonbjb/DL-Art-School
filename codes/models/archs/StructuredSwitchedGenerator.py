@@ -151,6 +151,7 @@ class SwitchWithReference(nn.Module):
         else:
             return self.switch(x, True, identity=x, att_in=(x, mplex_ref))
 
+
 class SSGr1(nn.Module):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
         super(SSGr1, self).__init__()
@@ -233,16 +234,17 @@ class SSGr1(nn.Module):
 
 
     def get_debug_values(self, step, net_name):
-        temp = self.switches[0].switch.temperature
-        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
-        means = [i[0] for i in mean_hists]
-        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
-        val = {"switch_temperature": temp,
-               "grad_branch_feat_intg_std_dev": self.grad_fea_std,
-               "conjoin_branch_grad_intg_std_dev": self.fea_grad_std}
-        for i in range(len(means)):
-            val["switch_%i_specificity" % (i,)] = means[i]
-            val["switch_%i_histogram" % (i,)] = hists[i]
+        if self.attentions:
+            temp = self.switches[0].switch.temperature
+            mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
+            means = [i[0] for i in mean_hists]
+            hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
+            val = {"switch_temperature": temp,
+                   "grad_branch_feat_intg_std_dev": self.grad_fea_std,
+                   "conjoin_branch_grad_intg_std_dev": self.fea_grad_std}
+            for i in range(len(means)):
+                val["switch_%i_specificity" % (i,)] = means[i]
+                val["switch_%i_histogram" % (i,)] = hists[i]
         return val
 
 
@@ -410,6 +412,87 @@ class SSGDeep(nn.Module):
         val = {"switch_temperature": temp,
                "grad_branch_feat_intg_std_dev": self.grad_fea_std,
                "conjoin_branch_grad_intg_std_dev": self.fea_grad_std}
+        for i in range(len(means)):
+            val["switch_%i_specificity" % (i,)] = means[i]
+            val["switch_%i_histogram" % (i,)] = hists[i]
+        return val
+
+
+class StackedSwitchGenerator5Layer(nn.Module):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
+        super(StackedSwitchGenerator5Layer, self).__init__()
+        n_upscale = int(math.log(upscale, 2))
+        self.nf = nf
+
+        # processing the input embedding
+        self.reference_embedding = ReferenceImageBranch(nf)
+
+        # Feature branch
+        self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False)
+        self.sw1 = SwitchWithReference(nf, xforms, init_temperature, has_ref=False)
+        self.sw2 = SwitchWithReference(nf, xforms // 2, init_temperature, has_ref=False)
+        self.sw3 = SwitchWithReference(nf, xforms // 2, init_temperature, has_ref=False)
+        self.sw4 = SwitchWithReference(nf, xforms // 2, init_temperature, has_ref=False)
+        self.sw5 = SwitchWithReference(nf, xforms, init_temperature, has_ref=False)
+        self.switches = [self.sw1.switch, self.sw2.switch, self.sw3.switch, self.sw4.switch, self.sw5.switch]
+
+        self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
+        self.upsample = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=True)
+        self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
+        self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
+        self.attentions = None
+        self.lr = None
+        self.init_temperature = init_temperature
+        self.final_temperature_step = 10000
+
+    def forward(self, x, ref, ref_center, save_attentions=True):
+        # The attention_maps debugger outputs <x>. Save that here.
+        self.lr = x.detach().cpu()
+
+        # If we're not saving attention, we also shouldn't be updating the attention norm. This is because the attention
+        # norm should only be getting updates with new data, not recurrent generator sampling.
+        for sw in self.switches:
+            sw.set_update_attention_norm(save_attentions)
+
+        ref_code = checkpoint(self.reference_embedding, ref, ref_center)
+        ref_embedding = ref_code.view(-1, ref_code.shape[1], 1, 1).repeat(1, 1, x.shape[2] // 8, x.shape[3] // 8)
+
+        x = self.model_fea_conv(x)
+        x1, a1 = checkpoint(self.sw1, x, ref_embedding)
+        x2, a2 = checkpoint(self.sw2, x1, ref_embedding)
+        x3, a3 = checkpoint(self.sw3, x2, ref_embedding)
+        x4, a4 = checkpoint(self.sw4, x3, ref_embedding)
+        x5, a5 = checkpoint(self.sw5, x4, ref_embedding)
+        x_out = checkpoint(self.final_lr_conv, x5)
+        x_out = checkpoint(self.upsample, x_out)
+        x_out = checkpoint(self.final_hr_conv2, x_out)
+
+        if save_attentions:
+            self.attentions = [a1, a3, a3, a4, a5]
+        return x_out,
+
+    def set_temperature(self, temp):
+        [sw.set_temperature(temp) for sw in self.switches]
+
+    def update_for_step(self, step, experiments_path='.'):
+        if self.attentions:
+            temp = max(1, 1 + self.init_temperature *
+                       (self.final_temperature_step - step) / self.final_temperature_step)
+            self.set_temperature(temp)
+            if step % 200 == 0:
+                output_path = os.path.join(experiments_path, "attention_maps")
+                prefix = "amap_%i_a%i_%%i.png"
+                [save_attention_to_image_rgb(output_path, self.attentions[i], self.nf, prefix % (step, i), step,
+                                             output_mag=False) for i in range(len(self.attentions))]
+                torchvision.utils.save_image(self.lr, os.path.join(experiments_path, "attention_maps",
+                                                                   "amap_%i_base_image.png" % (step,)))
+
+    def get_debug_values(self, step, net_name):
+        temp = self.switches[0].switch.temperature
+        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
+        means = [i[0] for i in mean_hists]
+        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
+        val = {"switch_temperature": temp}
         for i in range(len(means)):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
