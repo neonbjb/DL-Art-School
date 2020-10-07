@@ -484,7 +484,7 @@ class StackedSwitchGenerator5Layer(nn.Module):
                 prefix = "amap_%i_a%i_%%i.png"
                 [save_attention_to_image_rgb(output_path, self.attentions[i], self.nf, prefix % (step, i), step,
                                              output_mag=False) for i in range(len(self.attentions))]
-                torchvision.utils.save_image(self.lr, os.path.join(experiments_path, "attention_maps",
+                torchvision.utils.save_image(self.lr[:,:3], os.path.join(experiments_path, "attention_maps",
                                                                    "amap_%i_base_image.png" % (step,)))
 
     def get_debug_values(self, step, net_name):
