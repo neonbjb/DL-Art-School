@@ -3,6 +3,9 @@ from models.layers.resample2d_package.resample2d import Resample2d
 from models.steps.recurrent import RecurrentController
 from models.steps.injectors import Injector
 import torch
+import os
+import os.path as osp
+import torchvision
 
 def create_teco_loss(opt, env):
     type = opt['type']
@@ -114,7 +117,6 @@ class TecoGanDiscriminatorLoss(ConfigurableLoss):
 class TecoGanGeneratorLoss(ConfigurableLoss):
     def __init__(self, opt, env):
         super(TecoGanGeneratorLoss, self).__init__(opt, env)
-        self.opt = opt
         self.criterion = GANLoss(opt['gan_type'], 1.0, 0.0).to(env['device'])
         # TecoGAN parameters
         self.image_flow_generator = opt['image_flow_generator']
@@ -130,6 +132,10 @@ class TecoGanGeneratorLoss(ConfigurableLoss):
             fake_sext = create_teco_discriminator_sextuplet(fake, i, flow_gen, self.resampler)
             d_fake = net(fake_sext)
 
+            if self.env['step'] % 100 == 0:
+                self.produce_teco_visual_debugs(fake_sext, 'fake', i)
+                self.produce_teco_visual_debugs(real_sext, 'real', i)
+
             if self.opt['gan_type'] in ['gan', 'pixgan']:
                 self.metrics.append(("d_fake", torch.mean(d_fake)))
                 l_fake = self.criterion(d_fake, True)
@@ -142,7 +148,15 @@ class TecoGanGeneratorLoss(ConfigurableLoss):
                            self.criterion(d_fake_diff, True))
             else:
                 raise NotImplementedError
+
         return l_total
+
+    def produce_teco_visual_debugs(self, sext, lbl, it):
+        base_path = osp.join(self.env['base_path'], "visual_dbg", "teco_sext", str(self.env['step']), lbl)
+        os.makedirs(base_path, exist_ok=True)
+        lbls = ['first', 'second', 'third', 'first_flow', 'second_flow', 'third_flow']
+        for i in range(6):
+            torchvision.utils.save_image(sext[:, i*3:(i+1)*3-1, :, :], osp.join(base_path, "%s_%s.png" % (lbls[i], it)))
 
 
 # This loss doesn't have a real entry - only fakes are used.
@@ -159,4 +173,15 @@ class PingPongLoss(ConfigurableLoss):
             early = fake[i]
             late = fake[-i]
             l_total += self.criterion(early, late)
+
+        if self.env['step'] % 100 == 0:
+            self.produce_teco_visual_debugs(fake)
+
         return l_total
+
+    def produce_teco_visual_debugs(self, imglist):
+        base_path = osp.join(self.env['base_path'], "visual_dbg", "teco_pingpong", str(self.env['step']))
+        os.makedirs(base_path, exist_ok=True)
+        assert isinstance(imglist, list)
+        for i, img in enumerate(imglist):
+            torchvision.utils.save_image(img, osp.join(base_path, "%s.png" % (i, )))
