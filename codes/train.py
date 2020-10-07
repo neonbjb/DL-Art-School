@@ -32,7 +32,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_ssgr_recursively_constrained.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_stacked_5lyr_constrained.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
@@ -57,15 +57,15 @@ def main():
             util.get_files_from_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'], os.path.join(opt['remote_path'], 'models', opt['path']['pretrain_model_D']))
 
     #### distributed training settings
+    if len(opt['gpu_ids']) == 1 and torch.cuda.device_count() > 1:
+        gpu = input('I noticed you have multiple GPUs. Starting two jobs on the same GPU sucks. Please confirm which GPU'
+              'you want to use. Press enter to use the specified one [%s]' % (opt['gpu_ids']))
+        if gpu:
+            opt['gpu_ids'] = [int(gpu)]
     if args.launcher == 'none':  # disabled distributed training
         opt['dist'] = False
         rank = -1
         print('Disabled distributed training.')
-        if torch.cuda.device_count() > 1:
-            gpu = input('I noticed you have multiple GPUs. Starting two jobs on the same GPU sucks. Please confirm which GPU'
-                  'you want to use. Press enter to use the specified one [%i]' % (opt['gpu_ids']))
-            if gpu:
-                opt['gpu_ids'] = [int(gpu)]
 
     else:
         opt['dist'] = True
