@@ -9,7 +9,10 @@ from models.steps.losses import extract_params_from_state
 # Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
 def create_injector(opt_inject, env):
     type = opt_inject['type']
-    if type == 'generator':
+    if 'teco_' in type:
+        from models.steps.tecogan_losses import create_teco_injector
+        return create_teco_injector(opt_inject, env)
+    elif type == 'generator':
         return ImageGeneratorInjector(opt_inject, env)
     elif type == 'discriminator':
         return DiscriminatorInjector(opt_inject, env)
@@ -27,6 +30,8 @@ def create_injector(opt_inject, env):
         return ImageFlowInjector(opt_inject, env)
     elif type == 'image_patch':
         return ImagePatchInjector(opt_inject, env)
+    elif type == 'concatenate':
+        return ConcatenateInjector(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -188,3 +193,14 @@ class ImagePatchInjector(Injector):
                      '%s_top_right' % (self.opt['out'],): im,
                      '%s_bottom_left' % (self.opt['out'],): im,
                      '%s_bottom_right' % (self.opt['out'],): im }
+
+
+# Concatenates a list of tensors on the specified dimension.
+class ConcatenateInjector(Injector):
+    def __init__(self, opt, env):
+        super(ConcatenateInjector, self).__init__(opt, env)
+        self.dim = opt['dim']
+
+    def forward(self, state):
+        input = [state[i] for i in self.input]
+        return {self.opt['out']: torch.cat(input, dim=self.dim)}
