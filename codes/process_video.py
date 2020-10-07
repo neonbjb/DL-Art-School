@@ -105,6 +105,7 @@ if __name__ == "__main__":
                       screen=True, tofile=True)
     logger = logging.getLogger('base')
     logger.info(option.dict2str(opt))
+    util.loaded_options = opt
 
     #### Create test dataset and dataloader
     test_loaders = []
