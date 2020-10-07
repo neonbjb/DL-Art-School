@@ -29,7 +29,8 @@ class ExtensibleTrainer(BaseModel):
         self.env = {'device': self.device,
                'rank': self.rank,
                'opt': opt,
-               'step': 0}
+               'step': 0,
+               'base_path': os.path.join(opt['path']['models'])}
 
         self.mega_batch_factor = 1
         if self.is_train:
