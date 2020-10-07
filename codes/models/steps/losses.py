@@ -28,6 +28,8 @@ def create_loss(opt_loss, env):
         return TranslationInvarianceLoss(opt_loss, env)
     elif type == 'recursive':
         return RecursiveInvarianceLoss(opt_loss, env)
+    elif type == 'recurrent':
+        return RecurrentLoss(opt_loss, env)
     else:
         raise NotImplementedError
 
@@ -371,4 +373,26 @@ class RecursiveInvarianceLoss(ConfigurableLoss):
             return self.criterion(compare_real, compare_fake, torch.ones(1, device=compare_real.device))
         else:
             return self.criterion(compare_real, compare_fake)
+
+
+# Loss that pulls tensors from dim 1 of the input and repeatedly feeds them into the
+# 'subtype' loss.
+class RecurrentLoss(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super(RecurrentLoss, self).__init__(opt, env)
+        o = opt.copy()
+        o['type'] = opt['subtype']
+        o['fake'] = '_fake'
+        o['real'] = '_real'
+        self.loss = create_loss(o, self.env)
+
+    def forward(self, net, state):
+        total_loss = 0
+        st = state.copy()
+        real = state[self.opt['real']]
+        for i in range(real.shape[1]):
+            st['_real'] = real[:, i]
+            st['_fake'] = state[self.opt['fake']][i]
+            total_loss += self.loss(net, st)
+        return total_loss
 

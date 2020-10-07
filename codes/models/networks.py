@@ -1,3 +1,4 @@
+import munch
 import torch
 import logging
 from munch import munchify
@@ -14,7 +15,6 @@ import models.archs.rcan as rcan
 from collections import OrderedDict
 import torchvision
 import functools
-from models.flownet2.models import FlowNet2
 
 
 logger = logging.getLogger('base')
@@ -86,20 +86,24 @@ def define_G(opt, net_key='network_G', scale=None):
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == 'stacked_switches':
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = ssg.StackedSwitchGenerator(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
+        netG = ssg.StackedSwitchGenerator(in_nc=in_nc, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == 'stacked_switches_5lyr':
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = ssg.StackedSwitchGenerator5Layer(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
+        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
+        netG = ssg.StackedSwitchGenerator5Layer(in_nc=in_nc, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == 'ssg_deep':
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = ssg.SSGDeep(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "flownet2":
-        args_dict = {}
-        args = munchify(args_dict)
+        from models.flownet2.models import FlowNet2
+        ld = torch.load(opt_net['load_path'])
+        args = munch.Munch({'fp16': False, 'rgb_max': 1.0})
         netG = FlowNet2(args)
+        netG.load_state_dict(ld['state_dict'])
     elif which_model == "backbone_encoder":
         netG = SwitchedGen_arch.BackboneEncoder(pretrained_backbone=opt_net['pretrained_spinenet'])
     elif which_model == "backbone_encoder_no_ref":
