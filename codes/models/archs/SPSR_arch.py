@@ -542,7 +542,7 @@ class Spsr7(nn.Module):
         x_grad, grad_fea_std = checkpoint(self.grad_ref_join, x_grad, x1)
         x_grad, a3 = self.sw_grad(x_grad, True, identity=x_grad_identity, att_in=(x_grad, ref_embedding))
         x_grad = checkpoint(self.grad_lr_conv, x_grad)
-        x_grad = checkpoint(grad_lr_conv2, x_grad)
+        x_grad = checkpoint(self.grad_lr_conv2, x_grad)
         x_grad_out = checkpoint(self.upsample_grad, x_grad)
         x_grad_out = checkpoint(self.grad_branch_output_conv, x_grad_out)
 
