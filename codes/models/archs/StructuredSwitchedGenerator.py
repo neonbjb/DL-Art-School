@@ -1,7 +1,7 @@
 import math
 import functools
 from models.archs.arch_util import MultiConvBlock, ConvGnLelu, ConvGnSilu, ReferenceJoinBlock
-from models.archs.SwitchedResidualGenerator_arch import ConfigurableSwitchComputer, gather_2d
+from models.archs.SwitchedResidualGenerator_arch import ConfigurableSwitchComputer, gather_2d, SwitchModelBase
 from models.archs.SPSR_arch import ImageGradientNoPadding
 from torch import nn
 import torch
@@ -152,9 +152,9 @@ class SwitchWithReference(nn.Module):
             return self.switch(x, True, identity=x, att_in=(x, mplex_ref))
 
 
-class SSGr1(nn.Module):
+class SSGr1(SwitchModelBase):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
-        super(SSGr1, self).__init__()
+        super(SSGr1, self).__init__(init_temperature, 10000)
         n_upscale = int(math.log(upscale, 2))
         self.nf = nf
 
@@ -180,10 +180,6 @@ class SSGr1(nn.Module):
         self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
         self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
         self.switches = [self.sw1.switch, self.sw_grad.switch, self.conjoin_sw.switch]
-        self.attentions = None
-        self.lr = None
-        self.init_temperature = init_temperature
-        self.final_temperature_step = 10000
 
     def forward(self, x, ref, ref_center, save_attentions=True):
         # The attention_maps debugger outputs <x>. Save that here.
@@ -218,39 +214,10 @@ class SSGr1(nn.Module):
         self.fea_grad_std = fea_grad_std.detach().cpu()
         return x_grad_out, x_out, x_grad
 
-    def set_temperature(self, temp):
-        [sw.set_temperature(temp) for sw in self.switches]
 
-    def update_for_step(self, step, experiments_path='.'):
-        if self.attentions:
-            temp = max(1, 1 + self.init_temperature *
-                       (self.final_temperature_step - step) / self.final_temperature_step)
-            self.set_temperature(temp)
-            if step % 200 == 0:
-                output_path = os.path.join(experiments_path, "attention_maps")
-                prefix = "amap_%i_a%i_%%i.png"
-                [save_attention_to_image_rgb(output_path, self.attentions[i], self.nf, prefix % (step, i), step, output_mag=False) for i in range(len(self.attentions))]
-                torchvision.utils.save_image(self.lr, os.path.join(experiments_path, "attention_maps", "amap_%i_base_image.png" % (step,)))
-
-
-    def get_debug_values(self, step, net_name):
-        if self.attentions:
-            temp = self.switches[0].switch.temperature
-            mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
-            means = [i[0] for i in mean_hists]
-            hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
-            val = {"switch_temperature": temp,
-                   "grad_branch_feat_intg_std_dev": self.grad_fea_std,
-                   "conjoin_branch_grad_intg_std_dev": self.fea_grad_std}
-            for i in range(len(means)):
-                val["switch_%i_specificity" % (i,)] = means[i]
-                val["switch_%i_histogram" % (i,)] = hists[i]
-        return val
-
-
-class StackedSwitchGenerator(nn.Module):
+class StackedSwitchGenerator(SwitchModelBase):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
-        super(StackedSwitchGenerator, self).__init__()
+        super(StackedSwitchGenerator, self).__init__(init_temperature, 10000)
         n_upscale = int(math.log(upscale, 2))
         self.nf = nf
 
@@ -268,10 +235,6 @@ class StackedSwitchGenerator(nn.Module):
         self.upsample = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=True)
         self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
         self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
-        self.attentions = None
-        self.lr = None
-        self.init_temperature = init_temperature
-        self.final_temperature_step = 10000
 
     def forward(self, x, ref, ref_center, save_attentions=True):
         # The attention_maps debugger outputs <x>. Save that here.
@@ -292,36 +255,10 @@ class StackedSwitchGenerator(nn.Module):
             self.attentions = [a1, a3, a3]
         return x_out,
 
-    def set_temperature(self, temp):
-        [sw.set_temperature(temp) for sw in self.switches]
 
-    def update_for_step(self, step, experiments_path='.'):
-        if self.attentions:
-            temp = max(1, 1 + self.init_temperature *
-                       (self.final_temperature_step - step) / self.final_temperature_step)
-            self.set_temperature(temp)
-            if step % 200 == 0:
-                output_path = os.path.join(experiments_path, "attention_maps")
-                prefix = "amap_%i_a%i_%%i.png"
-                [save_attention_to_image_rgb(output_path, self.attentions[i], self.nf, prefix % (step, i), step, output_mag=False) for i in range(len(self.attentions))]
-                torchvision.utils.save_image(self.lr, os.path.join(experiments_path, "attention_maps", "amap_%i_base_image.png" % (step,)))
-
-
-    def get_debug_values(self, step, net_name):
-        temp = self.switches[0].switch.temperature
-        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
-        means = [i[0] for i in mean_hists]
-        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
-        val = {"switch_temperature": temp}
-        for i in range(len(means)):
-            val["switch_%i_specificity" % (i,)] = means[i]
-            val["switch_%i_histogram" % (i,)] = hists[i]
-        return val
-
-
-class SSGDeep(nn.Module):
+class SSGDeep(SwitchModelBase):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
-        super(SSGDeep, self).__init__()
+        super(SSGDeep, self).__init__(init_temperature, 10000)
         n_upscale = int(math.log(upscale, 2))
         self.nf = nf
 
@@ -349,10 +286,6 @@ class SSGDeep(nn.Module):
         self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
         self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
         self.switches = [self.sw1.switch, self.sw_grad.switch, self.conjoin_sw.switch, self.sw3.switch, self.sw4.switch]
-        self.attentions = None
-        self.lr = None
-        self.init_temperature = init_temperature
-        self.final_temperature_step = 10000
 
     def forward(self, x, ref, ref_center, save_attentions=True):
         # The attention_maps debugger outputs <x>. Save that here.
@@ -389,38 +322,10 @@ class SSGDeep(nn.Module):
         self.fea_grad_std = fea_grad_std.detach().cpu()
         return x_grad_out, x_out, x_grad
 
-    def set_temperature(self, temp):
-        [sw.set_temperature(temp) for sw in self.switches]
 
-    def update_for_step(self, step, experiments_path='.'):
-        if self.attentions:
-            temp = max(1, 1 + self.init_temperature *
-                       (self.final_temperature_step - step) / self.final_temperature_step)
-            self.set_temperature(temp)
-            if step % 200 == 0:
-                output_path = os.path.join(experiments_path, "attention_maps")
-                prefix = "amap_%i_a%i_%%i.png"
-                [save_attention_to_image_rgb(output_path, self.attentions[i], self.nf, prefix % (step, i), step, output_mag=False) for i in range(len(self.attentions))]
-                torchvision.utils.save_image(self.lr, os.path.join(experiments_path, "attention_maps", "amap_%i_base_image.png" % (step,)))
-
-
-    def get_debug_values(self, step, net_name):
-        temp = self.switches[0].switch.temperature
-        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
-        means = [i[0] for i in mean_hists]
-        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
-        val = {"switch_temperature": temp,
-               "grad_branch_feat_intg_std_dev": self.grad_fea_std,
-               "conjoin_branch_grad_intg_std_dev": self.fea_grad_std}
-        for i in range(len(means)):
-            val["switch_%i_specificity" % (i,)] = means[i]
-            val["switch_%i_histogram" % (i,)] = hists[i]
-        return val
-
-
-class StackedSwitchGenerator5Layer(nn.Module):
+class StackedSwitchGenerator5Layer(SwitchModelBase):
     def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
-        super(StackedSwitchGenerator5Layer, self).__init__()
+        super(StackedSwitchGenerator5Layer, self).__init__(init_temperature, 10000)
         n_upscale = int(math.log(upscale, 2))
         self.nf = nf
 
@@ -440,10 +345,6 @@ class StackedSwitchGenerator5Layer(nn.Module):
         self.upsample = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=True)
         self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
         self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
-        self.attentions = None
-        self.lr = None
-        self.init_temperature = init_temperature
-        self.final_temperature_step = 10000
 
     def forward(self, x, ref, ref_center, save_attentions=True):
         # The attention_maps debugger outputs <x>. Save that here.
@@ -471,33 +372,3 @@ class StackedSwitchGenerator5Layer(nn.Module):
             self.attentions = [a1, a3, a3, a4, a5]
         return x_out,
 
-    def set_temperature(self, temp):
-        [sw.set_temperature(temp) for sw in self.switches]
-
-    def update_for_step(self, step, experiments_path='.'):
-        if self.attentions:
-            # All-reduce the attention norm.
-            for sw in self.switches:
-                sw.switch.reduce_norm_params()
-            
-            temp = max(1, 1 + self.init_temperature *
-                       (self.final_temperature_step - step) / self.final_temperature_step)
-            self.set_temperature(temp)
-            if step % 200 == 0:
-                output_path = os.path.join(experiments_path, "attention_maps")
-                prefix = "amap_%i_a%i_%%i.png"
-                [save_attention_to_image_rgb(output_path, self.attentions[i], self.nf, prefix % (step, i), step,
-                                             output_mag=False) for i in range(len(self.attentions))]
-                torchvision.utils.save_image(self.lr[:,:3], os.path.join(experiments_path, "attention_maps",
-                                                                   "amap_%i_base_image.png" % (step,)))
-
-    def get_debug_values(self, step, net_name):
-        temp = self.switches[0].switch.temperature
-        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
-        means = [i[0] for i in mean_hists]
-        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
-        val = {"switch_temperature": temp}
-        for i in range(len(means)):
-            val["switch_%i_specificity" % (i,)] = means[i]
-            val["switch_%i_histogram" % (i,)] = hists[i]
-        return val

@@ -8,6 +8,7 @@ from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, Expan
 from switched_conv.switched_conv_util import save_attention_to_image_rgb
 import os
 from models.archs.spinenet_arch import SpineNet
+import torchvision
 
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
@@ -531,6 +532,64 @@ class QueryKeyPyramidMultiplexer(nn.Module):
         v = self.cbl2(v)
 
         return v.view(b, t, h, w)
+
+
+# Base class for models that utilize ConfigurableSwitchComputer. Provides basis functionality like logging
+# switch temperature, distribution and images, as well as managing attention norms.
+class SwitchModelBase(nn.Module):
+    def __init__(self, init_temperature=10, final_temperature_step=10000):
+        super(SwitchModelBase, self).__init__()
+        self.switches = []  # The implementing class is expected to set this to a list of all ConfigurableSwitchComputers.
+        self.attentions = []  # The implementing class is expected to set this in forward() to the output of the attention blocks.
+        self.lr = None  # The implementing class is expected to set this to the input image fed into the generator. If not
+                        # set, the attention logger will not output an image reference.
+        self.init_temperature = init_temperature
+        self.final_temperature_step = final_temperature_step
+
+    def set_temperature(self, temp):
+        [sw.set_temperature(temp) for sw in self.switches]
+
+    def update_for_step(self, step, experiments_path='.'):
+        # All-reduce the attention norm.
+        for sw in self.switches:
+            sw.switch.reduce_norm_params()
+
+        temp = max(1, 1 + self.init_temperature *
+                   (self.final_temperature_step - step) / self.final_temperature_step)
+        self.set_temperature(temp)
+        if step % 200 == 0:
+            output_path = os.path.join(experiments_path, "attention_maps")
+            prefix = "amap_%i_a%i_%%i.png"
+            [save_attention_to_image_rgb(output_path, self.attentions[i], self.nf, prefix % (step, i), step,
+                                         output_mag=False) for i in range(len(self.attentions))]
+            if self.lr:
+                torchvision.utils.save_image(self.lr[:, :3], os.path.join(experiments_path, "attention_maps",
+                                                                          "amap_%i_base_image.png" % (step,)))
+
+    # This is a bit awkward. We want this plot to show up in TB as a histogram, but we are getting an intensity
+    # plot out of the attention norm tensor. So we need to convert it back into a list of indexes, then feed into TB.
+    def compute_anorm_histogram(self):
+        intensities = [sw.switch.attention_norm.compute_buffer_norm().clone().detach().cpu() for sw in self.switches]
+        result = []
+        for intensity in intensities:
+            intensity = intensity * 10
+            bins = torch.tensor(list(range(len(intensity))))
+            intensity = intensity.long()
+            result.append(bins.repeat_interleave(intensity, 0))
+        return result
+
+    def get_debug_values(self, step, net_name):
+        temp = self.switches[0].switch.temperature
+        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
+        means = [i[0] for i in mean_hists]
+        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
+        anorms = self.compute_anorm_histogram()
+        val = {"switch_temperature": temp}
+        for i in range(len(means)):
+            val["switch_%i_specificity" % (i,)] = means[i]
+            val["switch_%i_histogram" % (i,)] = hists[i]
+            val["switch_%i_attention_norm_histogram" % (i,)] = anorms[i]
+        return val
 
 
 if __name__ == '__main__':
