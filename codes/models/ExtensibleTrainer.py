@@ -298,6 +298,8 @@ class ExtensibleTrainer(BaseModel):
     def load(self):
         for netdict in [self.netsG, self.netsD]:
             for name, net in netdict.items():
+                if not self.opt['networks'][name]['trainable']:
+                    continue
                 load_path = self.opt['path']['pretrain_model_%s' % (name,)]
                 if load_path is not None:
                     if self.rank <= 0:
