@@ -12,8 +12,8 @@ from models.archs import SPSR_util as B
 from models.archs.SwitchedResidualGenerator_arch import ConfigurableSwitchComputer, ReferenceImageBranch, \
     QueryKeyMultiplexer, QueryKeyPyramidMultiplexer
 from models.archs.arch_util import ConvGnLelu, UpconvBlock, MultiConvBlock, ReferenceJoinBlock
-from switched_conv import compute_attention_specificity
-from switched_conv_util import save_attention_to_image_rgb
+from switched_conv.switched_conv import compute_attention_specificity
+from switched_conv.switched_conv_util import save_attention_to_image_rgb
 from .RRDBNet_arch import RRDB
 
 

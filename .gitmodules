@@ -4,3 +4,6 @@
 [submodule "codes/models/flownet2"]
 	path = codes/models/flownet2
 	url = https://github.com/NVIDIA/flownet2-pytorch.git
+[submodule "codes/switched_conv"]
+	path = codes/switched_conv
+	url = https://github.com/neonbjb/SwitchedConvolutions.git

@@ -109,7 +109,7 @@ class ExtensibleTrainer(BaseModel):
             if opt['dist']:
                 dnet = DistributedDataParallel(anet,
                                                device_ids=[torch.cuda.current_device()],
-                                               find_unused_parameters=True)
+                                               find_unused_parameters=False)
             else:
                 dnet = DataParallel(anet)
             if self.is_train:

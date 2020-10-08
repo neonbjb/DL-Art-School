@@ -6,8 +6,8 @@ from models.archs.SPSR_arch import ImageGradientNoPadding
 from torch import nn
 import torch
 import torch.nn.functional as F
-from switched_conv_util import save_attention_to_image_rgb
-from switched_conv import compute_attention_specificity
+from switched_conv.switched_conv_util import save_attention_to_image_rgb
+from switched_conv.switched_conv import compute_attention_specificity
 import os
 import torchvision
 from torch.utils.checkpoint import checkpoint
