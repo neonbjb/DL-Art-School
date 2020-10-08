@@ -10,7 +10,7 @@ from switched_conv.switched_conv_util import save_attention_to_image_rgb
 from switched_conv.switched_conv import compute_attention_specificity
 import os
 import torchvision
-from torch.utils.checkpoint import checkpoint
+from utils.util import checkpoint
 
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
