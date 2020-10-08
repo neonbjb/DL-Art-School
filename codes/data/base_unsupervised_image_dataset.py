@@ -34,7 +34,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
                 for c in chunks:
                     c.reload(opt)
             else:
-                chunks = [ChunkWithReference(opt, d) for d in os.scandir(path) if d.is_dir()]
+                chunks = [ChunkWithReference(opt, d) for d in sorted(os.scandir(path), key=lambda e: e.name) if d.is_dir()]
                 # Prune out chunks that have no images
                 res = []
                 for c in chunks:

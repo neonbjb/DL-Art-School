@@ -23,6 +23,7 @@ class MultiFrameDataset(BaseUnsupervisedImageDataset):
                 frames_needed -= 1
                 search_idx -= 1
             else:
+                search_idx += 1
                 break
 
         # Now build num_frames starting from search_idx.
@@ -62,7 +63,7 @@ class MultiFrameDataset(BaseUnsupervisedImageDataset):
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\vixen\\full_video_256_tiled_with_ref'],
+        'paths': ['/content/fullvideo_256_tiled_test'],
         'weights': [1],
         'target_size': 128,
         'force_multiple': 32,
@@ -77,13 +78,14 @@ if __name__ == '__main__':
     ds = MultiFrameDataset(opt)
     import os
     os.makedirs("debug", exist_ok=True)
-    for i in range(100000, len(ds)):
+    for i in [3]:
         import random
-        o = ds[random.randint(0, 1000000)]
+        o = ds[i]
         k = 'GT'
         v = o[k]
         if 'path' not in k and 'center' not in k:
             fr, f, h, w = v.shape
             for j in range(fr):
                 import torchvision
-                torchvision.utils.save_image(v[j].unsqueeze(0), "debug/%i_%s_%i.png" % (i, k, j))
+                base=osp.basename(o["GT_path"])
+                torchvision.utils.save_image(v[j].unsqueeze(0), "debug/%i_%s_%i__%s.png" % (i, k, j, base))

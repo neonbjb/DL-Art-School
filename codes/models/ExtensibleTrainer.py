@@ -3,7 +3,8 @@ import os
 
 import torch
 from apex import amp
-from torch.nn.parallel import DataParallel, DistributedDataParallel
+from apex.parallel import DistributedDataParallel
+from torch.nn.parallel import DataParallel
 import torch.nn as nn
 
 import models.lr_scheduler as lr_scheduler
@@ -107,9 +108,7 @@ class ExtensibleTrainer(BaseModel):
         dnets = []
         for anet in amp_nets:
             if opt['dist']:
-                dnet = DistributedDataParallel(anet,
-                                               device_ids=[torch.cuda.current_device()],
-                                               find_unused_parameters=False)
+                dnet = DistributedDataParallel(anet, delay_allreduce=True)
             else:
                 dnet = DataParallel(anet)
             if self.is_train:
@@ -299,6 +298,8 @@ class ExtensibleTrainer(BaseModel):
     def load(self):
         for netdict in [self.netsG, self.netsD]:
             for name, net in netdict.items():
+                if not self.opt['networks'][name]['trainable']:
+                    continue
                 load_path = self.opt['path']['pretrain_model_%s' % (name,)]
                 if load_path is not None:
                     if self.rank <= 0:

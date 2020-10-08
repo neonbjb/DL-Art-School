@@ -476,6 +476,10 @@ class StackedSwitchGenerator5Layer(nn.Module):
 
     def update_for_step(self, step, experiments_path='.'):
         if self.attentions:
+            # All-reduce the attention norm.
+            for sw in self.switches:
+                sw.switch.reduce_norm_params()
+            
             temp = max(1, 1 + self.init_temperature *
                        (self.final_temperature_step - step) / self.final_temperature_step)
             self.set_temperature(temp)
