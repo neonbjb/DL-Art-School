@@ -56,8 +56,7 @@ class MultiFrameDataset(BaseUnsupervisedImageDataset):
         lq_ref = torch.cat([lq_ref, lq_mask], dim=1)
 
         return {'LQ': lq, 'GT': hq, 'gt_fullsize_ref': hq_ref, 'lq_fullsize_ref': lq_ref,
-             'lq_center': torch.tensor(lcs, dtype=torch.long), 'gt_center': torch.tensor(hcs, dtype=torch.long),
-             'LQ_path': path, 'GT_path': path}
+             'lq_center': torch.tensor(lcs, dtype=torch.long), 'gt_center': torch.tensor(hcs, dtype=torch.long)}
 
 
 if __name__ == '__main__':

@@ -30,9 +30,6 @@ class BaseUnsupervisedImageDataset(data.Dataset):
             cache_path = os.path.join(path, 'cache.pth')
             if os.path.exists(cache_path):
                 chunks = torch.load(cache_path)
-                # Update the options.
-                for c in chunks:
-                    c.reload(opt)
             else:
                 chunks = [ChunkWithReference(opt, d) for d in sorted(os.scandir(path), key=lambda e: e.name) if d.is_dir()]
                 # Prune out chunks that have no images
