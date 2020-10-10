@@ -413,5 +413,5 @@ class ForElementLoss(ConfigurableLoss):
     def forward(self, net, state):
         st = state.copy()
         st['_real'] = state[self.opt['real']][:, self.index]
-        st['_fake'] = state[self.opt['fake']][:, self.index]
+        st['_fake'] = state[self.opt['fake']][self.index]
         return self.loss(net, st)
