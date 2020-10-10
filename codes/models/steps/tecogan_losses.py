@@ -21,6 +21,8 @@ def create_teco_injector(opt, env):
     type = opt['type']
     if type == 'teco_recurrent_generated_sequence_injector':
         return RecurrentImageGeneratorSequenceInjector(opt, env)
+    elif type == 'teco_flow_adjustment':
+        return FlowAdjustment(opt, env)
     return None
 
 def create_teco_discriminator_sextuplet(input_list, lr_imgs, scale, index, flow_gen, resampler, margin):
@@ -130,6 +132,23 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
         os.makedirs(base_path, exist_ok=True)
         torchvision.utils.save_image(gen_input[:, :3], osp.join(base_path, "%s_img.png" % (it,)))
         torchvision.utils.save_image(gen_input[:, 3:], osp.join(base_path, "%s_recurrent.png" % (it,)))
+
+
+class FlowAdjustment(Injector):
+    def __init__(self, opt, env):
+        super(FlowAdjustment, self).__init__(opt, env)
+        self.resample = Resample2d()
+        self.flow = opt['flow_network']
+        self.flow_target = opt['flow_target']
+        self.flowed = opt['flowed']
+
+    def forward(self, state):
+        flow = self.env['generators'][self.flow]
+        flow_target = state[self.flow_target]
+        flowed = state[self.flowed]
+        flow_input = torch.stack([flow_target, flowed], dim=2)
+        flowfield = flow(flow_input)
+        return {self.output: self.resample(flowed.float(), flowfield.float())}
 
 
 # This is the temporal discriminator loss from TecoGAN.

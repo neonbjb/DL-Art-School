@@ -28,6 +28,7 @@ class FfmpegBackedVideoDataset(data.Dataset):
         self.frame_rate = self.opt['frame_rate']
         self.start_at = self.opt['start_at_seconds']
         self.end_at = self.opt['end_at_seconds']
+        self.force_multiple = self.opt['force_multiple']
         self.frame_count = (self.end_at - self.start_at) * self.frame_rate
         # The number of (original) video frames that will be stored on the filesystem at a time.
         self.max_working_files = 20
@@ -69,6 +70,18 @@ class FfmpegBackedVideoDataset(data.Dataset):
 
         mask = torch.ones(1, img_LQ.shape[1], img_LQ.shape[2])
         ref = torch.cat([img_LQ, mask], dim=0)
+
+        if self.force_multiple > 1:
+            assert self.vertical_splits <= 1   # This is not compatible with vertical splits for now.
+            _, h, w = img_LQ.shape
+            height_removed = h % self.force_multiple
+            width_removed = w % self.force_multiple
+            if height_removed != 0:
+                img_LQ = img_LQ[:, :-height_removed, :]
+                ref = ref[:, :-height_removed, :]
+            if width_removed != 0:
+                img_LQ = img_LQ[:, :, :-width_removed]
+                ref = ref[:, :, :-width_removed]
         return {'LQ': img_LQ, 'lq_fullsize_ref': ref,
                 'lq_center': torch.tensor([img_LQ.shape[1] // 2, img_LQ.shape[2] // 2], dtype=torch.long) }
 
@@ -128,18 +141,30 @@ if __name__ == "__main__":
     vid_output = opt['mini_vid_output_folder'] if 'mini_vid_output_folder' in opt.keys() else dataset_dir
     vid_counter = opt['minivid_start_no'] if 'minivid_start_no' in opt.keys() else 0
     img_index = opt['generator_img_index']
+    recurrent_mode = opt['recurrent_mode']
+    first_frame = True
     ffmpeg_proc = None
 
     tq = tqdm(test_loader)
     for data in tq:
         need_GT = False if test_loader.dataset.opt['dataroot_GT'] is None else True
+
+        if recurrent_mode and first_frame:
+            recurrent_entry = data['LQ'].detach().clone()
+        first_frame = False
+        if recurrent_mode:
+            data['recurrent'] = recurrent_entry
+
         model.feed_data(data, need_GT=need_GT)
         model.test()
 
         if isinstance(model.fake_H, tuple):
-            visuals = model.fake_H[img_index].detach().float().cpu()
+            visuals = model.fake_H[img_index].detach()
         else:
-            visuals = model.fake_H.detach().float().cpu()
+            visuals = model.fake_H.detach()
+        if recurrent_mode:
+            recurrent_entry = torch.nn.functional.interpolate(visuals, scale_factor=1/opt['scale'], mode='bicubic')
+        visuals = visuals.cpu().float()
         for i in range(visuals.shape[0]):
             sr_img = util.tensor2img(visuals[i])  # uint8
 
@@ -147,7 +172,6 @@ if __name__ == "__main__":
             save_img_path = osp.join(dataset_dir, '%08d.png' % (frame_counter,))
             util.save_img(sr_img, save_img_path)
             frame_counter += 1
-
 
             if frame_counter % frames_per_vid == 0:
                 if ffmpeg_proc is not None:

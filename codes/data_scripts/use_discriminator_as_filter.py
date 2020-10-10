@@ -61,19 +61,20 @@ if __name__ == "__main__":
 
         tq = tqdm(test_loader)
         removed = 0
+        means = []
+        dataset_mean = -7.133
         for data in tq:
             model.feed_data(data, need_GT=True)
             model.test()
             results = model.eval_state['discriminator_out'][0]
-            print(torch.mean(results), torch.max(results), torch.min(results))
+            means.append(torch.mean(results).item())
+            print(sum(means)/len(means), torch.mean(results), torch.max(results), torch.min(results))
             for i in range(results.shape[0]):
-                if results[i] < .8:
-                    os.remove(data['GT_path'][i])
-                    removed += 1
-                #imname = osp.basename(data['GT_path'][i])
-                #if results[i] > .8:
-                #    torchvision.utils.save_image(data['GT'][i], osp.join(good_path, imname))
-                #else:
-                #    torchvision.utils.save_image(data['GT'][i], osp.join(bin_path, imname))
+                #if results[i] < .8:
+                #    os.remove(data['GT_path'][i])
+                #    removed += 1
+                imname = osp.basename(data['GT_path'][i])
+                if results[i]-dataset_mean > 1:
+                    torchvision.utils.save_image(data['GT'][i], osp.join(bin_path, imname))
 
         print("Removed %i/%i images" % (removed, len(test_set)))
