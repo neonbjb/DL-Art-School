@@ -30,6 +30,8 @@ def create_loss(opt_loss, env):
         return RecursiveInvarianceLoss(opt_loss, env)
     elif type == 'recurrent':
         return RecurrentLoss(opt_loss, env)
+    elif type == 'for_element':
+        return ForElementLoss(opt_loss, env)
     else:
         raise NotImplementedError
 
@@ -396,3 +398,20 @@ class RecurrentLoss(ConfigurableLoss):
             total_loss += self.loss(net, st)
         return total_loss
 
+
+# Loss that pulls a tensor from dim 1 of the input and feeds it into a "sub" loss.
+class ForElementLoss(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super(ForElementLoss, self).__init__(opt, env)
+        o = opt.copy()
+        o['type'] = opt['subtype']
+        self.index = opt['index']
+        o['fake'] = '_fake'
+        o['real'] = '_real'
+        self.loss = create_loss(o, self.env)
+
+    def forward(self, net, state):
+        st = state.copy()
+        st['_real'] = state[self.opt['real']][:, self.index]
+        st['_fake'] = state[self.opt['fake']][:, self.index]
+        return self.loss(net, st)
