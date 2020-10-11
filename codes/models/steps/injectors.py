@@ -34,6 +34,8 @@ def create_injector(opt_inject, env):
         return ConcatenateInjector(opt_inject, env)
     elif type == 'margin_removal':
         return MarginRemoval(opt_inject, env)
+    elif type == 'constant':
+        return ConstantInjector(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -217,3 +219,20 @@ class MarginRemoval(Injector):
     def forward(self, state):
         input = state[self.input]
         return {self.opt['out']: input[:, :, self.margin:-self.margin, self.margin:-self.margin]}
+
+
+class ConstantInjector(Injector):
+    def __init__(self, opt, env):
+        super(ConstantInjector, self).__init__(opt, env)
+        self.constant_type = opt['constant_type']
+        self.dim = opt['dim']
+        self.like = opt['like']  # This injector uses this tensor to determine what batch size and device to use.
+
+    def forward(self, state):
+        bs = state[self.like].shape[0]
+        dev = state[self.like].device
+        if self.constant_type == 'zeros':
+            out = torch.zeros((bs,) + tuple(self.dim), device=dev)
+        else:
+            raise NotImplementedError
+        return { self.opt['out']: out }

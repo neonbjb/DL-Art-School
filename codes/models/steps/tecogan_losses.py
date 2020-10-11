@@ -93,7 +93,7 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                     flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2)
                     flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
                     # Resample does not work in FP16.
-                    recurrent_input = self.resample(reduced_recurrent.float(), flowfield.float())
+                    recurrent_input = self.resample(recurrent_input.float(), flowfield.float())
             input[self.recurrent_index] = recurrent_input
             if self.env['step'] % 50 == 0:
                 self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
@@ -113,11 +113,11 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                     reduced_recurrent = F.interpolate(recurrent_input, scale_factor=1 / self.scale, mode='bicubic')
                     flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2)
                     flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
-                    recurrent_input = self.resample(reduced_recurrent.float(), flowfield.float())
+                    recurrent_input = self.resample(recurrent_input.float(), flowfield.float())
                 input[self.recurrent_index
                 ] = recurrent_input
                 if self.env['step'] % 50 == 0:
-                    self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.self.recurrent_index], debug_index)
+                    self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
                     debug_index += 1
                 gen_out = gen(*input)
                 if isinstance(gen_out, torch.Tensor):
