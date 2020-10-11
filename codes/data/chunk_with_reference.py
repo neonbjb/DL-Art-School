@@ -9,10 +9,16 @@ class ChunkWithReference:
         self.path = path.path
         self.tiles, _ = util.get_image_paths('img', self.path)
 
+    # Odd failures occur at times. Rather than crashing, report the error and just return zeros.
+    def read_image_or_get_zero(self, img_path):
+        img = util.read_img(None, img_path, rgb=True)
+        if img is None:
+            return np.zeros(128, 128, 3)
+
     def __getitem__(self, item):
         centers = torch.load(osp.join(self.path, "centers.pt"))
-        ref = util.read_img(None, osp.join(self.path, "ref.jpg"), rgb=True)
-        tile = util.read_img(None, self.tiles[item], rgb=True)
+        ref = self.read_image_or_get_zero(osp.join(self.path, "ref.jpg"))
+        tile = self.read_image_or_get_zero(self.tiles[item])
         tile_id = int(osp.splitext(osp.basename(self.tiles[item]))[0])
         center, tile_width = centers[tile_id]
         mask = np.full(tile.shape[:2] + (1,), fill_value=.1, dtype=tile.dtype)
