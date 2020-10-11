@@ -36,6 +36,8 @@ def create_injector(opt_inject, env):
         return MarginRemoval(opt_inject, env)
     elif type == 'foreach':
         return ForEachInjector(opt_inject, env)
+    elif type == 'constant':
+        return ConstantInjector(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -220,7 +222,6 @@ class MarginRemoval(Injector):
         input = state[self.input]
         return {self.opt['out']: input[:, :, self.margin:-self.margin, self.margin:-self.margin]}
 
-
 # Produces an injection which is composed of applying a single injector multiple times across a single dimension.
 class ForEachInjector(Injector):
     def __init__(self, opt, env):
@@ -238,4 +239,21 @@ class ForEachInjector(Injector):
         for i in range(inputs.shape[1]):
             st['_in'] = inputs[:, i]
             injs.append(self.injector(st)['_out'])
-        return {self.output: torch.stack(injs, dim=1)}
+        return {self.output: torch.stack(injs, dim=1)}        
+
+    
+class ConstantInjector(Injector):
+    def __init__(self, opt, env):
+        super(ConstantInjector, self).__init__(opt, env)
+        self.constant_type = opt['constant_type']
+        self.dim = opt['dim']
+        self.like = opt['like']  # This injector uses this tensor to determine what batch size and device to use.
+
+    def forward(self, state):
+        bs = state[self.like].shape[0]
+        dev = state[self.like].device
+        if self.constant_type == 'zeroes':
+            out = torch.zeros((bs,) + tuple(self.dim), device=dev)
+        else:
+            raise NotImplementedError
+        return { self.opt['out']: out }

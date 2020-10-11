@@ -247,9 +247,10 @@ class PingPongLoss(ConfigurableLoss):
     def forward(self, _, state):
         fake = state[self.opt['fake']]
         l_total = 0
-        for i in range((len(fake) - 1) // 2):
-            early = fake[i]
-            late = fake[-i]
+        img_count = fake.shape[1]
+        for i in range((img_count - 1) // 2):
+            early = fake[:, i]
+            late = fake[:, -i]
             l_total += self.criterion(early, late)
 
         if self.env['step'] % 50 == 0:
@@ -262,6 +263,7 @@ class PingPongLoss(ConfigurableLoss):
             return
         base_path = osp.join(self.env['base_path'], "..", "visual_dbg", "teco_pingpong", str(self.env['step']))
         os.makedirs(base_path, exist_ok=True)
-        assert isinstance(imglist, list)
-        for i, img in enumerate(imglist):
+        cnt = imglist.shape[1]
+        for i in range(cnt):
+            img = imglist[:, i]
             torchvision.utils.save_image(img, osp.join(base_path, "%s.png" % (i, )))
