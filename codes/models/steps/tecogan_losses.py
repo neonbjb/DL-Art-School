@@ -61,7 +61,7 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
         super(RecurrentImageGeneratorSequenceInjector, self).__init__(opt, env)
         self.flow = opt['flow_network']
         self.input_lq_index = opt['input_lq_index'] if 'input_lq_index' in opt.keys() else 0
-        self.output_hq_index = opt['output_hq_index'] if 'output_hq_index' in opt.keys() else 0
+        self.output_hq_index = opt['output_hq_index'] if 'output_index' in opt.keys() else 0
         self.recurrent_index = opt['recurrent_index']
         self.scale = opt['scale']
         self.resample = Resample2d()
@@ -71,11 +71,16 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
         flow = self.env['generators'][self.flow]
-        results = []
         first_inputs = extract_params_from_state(self.first_inputs, state)
         inputs = extract_params_from_state(self.input, state)
         if not isinstance(inputs, list):
             inputs = [inputs]
+
+        if not isinstance(self.output, list):
+            self.output = [self.output]
+        results = {}
+        for out_key in self.output:
+            results[out_key] = []
 
         # Go forward in the sequence first.
         first_step = True
@@ -101,8 +106,9 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
             gen_out = gen(*input)
             if isinstance(gen_out, torch.Tensor):
                 gen_out = [gen_out]
+            for i, out_key in enumerate(self.output):
+                results[out_key].append(gen_out[i])
             recurrent_input = gen_out[self.output_hq_index]
-            results.append(recurrent_input)
 
         # Now go backwards, skipping the last element (it's already stored in recurrent_input)
         if self.do_backwards:
@@ -122,10 +128,13 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                 gen_out = gen(*input)
                 if isinstance(gen_out, torch.Tensor):
                     gen_out = [gen_out]
+                for i, out_key in enumerate(self.output):
+                    results[out_key].append(gen_out[i])
                 recurrent_input = gen_out[self.output_hq_index]
-                results.append(recurrent_input)
 
-        return {self.output: results}
+        for k, v in results.items():
+            results[k] = torch.stack(v, dim=1)
+        return results
 
     def produce_teco_visual_debugs(self, gen_input, gen_recurrent, it):
         if self.env['rank'] > 0:
@@ -183,7 +192,7 @@ class TecoGanLoss(ConfigurableLoss):
         net = self.env['discriminators'][self.opt['discriminator']]
         flow_gen = self.env['generators'][self.image_flow_generator]
         real = state[self.opt['real']]
-        fake = torch.stack(state[self.opt['fake']], dim=1)
+        fake = state[self.opt['fake']]
         sequence_len = real.shape[1]
         lr = state[self.opt['lr_inputs']]
         l_total = 0

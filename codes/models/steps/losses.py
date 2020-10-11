@@ -394,7 +394,7 @@ class RecurrentLoss(ConfigurableLoss):
         real = state[self.opt['real']]
         for i in range(real.shape[1]):
             st['_real'] = real[:, i]
-            st['_fake'] = state[self.opt['fake']][i]
+            st['_fake'] = state[self.opt['fake']][:, i]
             total_loss += self.loss(net, st)
         return total_loss
 
@@ -413,5 +413,5 @@ class ForElementLoss(ConfigurableLoss):
     def forward(self, net, state):
         st = state.copy()
         st['_real'] = state[self.opt['real']][:, self.index]
-        st['_fake'] = state[self.opt['fake']][self.index]
+        st['_fake'] = state[self.opt['fake']][:, self.index]
         return self.loss(net, st)

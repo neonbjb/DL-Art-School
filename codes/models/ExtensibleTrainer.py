@@ -234,10 +234,18 @@ class ExtensibleTrainer(BaseModel):
                     continue   # This can happen for several reasons (ex: 'after' defs), just ignore it.
                 if step % self.opt['logger']['visual_debug_rate'] == 0:
                     for i, dbgv in enumerate(state[v]):
-                        if dbgv.shape[1] > 3:
-                            dbgv = dbgv[:,:3,:,:]
-                        os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
-                        utils.save_image(dbgv, os.path.join(sample_save_path, v, "%05i_%02i.png" % (step, i)))
+                        if 'recurrent_visual_indices' in self.opt['logger'].keys():
+                            for rvi in self.opt['logger']['recurrent_visual_indices']:
+                                rdbgv = dbgv[:, rvi]
+                                if rdbgv.shape[1] > 3:
+                                    rdbgv = rdbgv[:, :3, :, :]
+                                os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
+                                utils.save_image(rdbgv, os.path.join(sample_save_path, v, "%05i_%02i_%02i.png" % (step, rvi, i)))
+                        else:
+                            if dbgv.shape[1] > 3:
+                                dbgv = dbgv[:,:3,:,:]
+                            os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
+                            utils.save_image(dbgv, os.path.join(sample_save_path, v, "%05i_%02i.png" % (step, i)))
 
     def compute_fea_loss(self, real, fake):
         with torch.no_grad():

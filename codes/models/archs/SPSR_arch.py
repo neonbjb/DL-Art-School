@@ -460,12 +460,18 @@ class Spsr6(nn.Module):
 
 # Variant of Spsr6 which uses multiplexer blocks that feed off of a reference embedding. Also computes that embedding.
 class Spsr7(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, multiplexer_reductions=3, init_temperature=10):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, multiplexer_reductions=3, recurrent=False, init_temperature=10):
         super(Spsr7, self).__init__()
         n_upscale = int(math.log(upscale, 2))
 
         # processing the input embedding
         self.reference_embedding = ReferenceImageBranch(nf)
+
+        self.recurrent = recurrent
+        if recurrent:
+            self.model_recurrent_conv = ConvGnLelu(3, nf, kernel_size=3, stride=2, norm=False, activation=False,
+                                                   bias=True)
+            self.model_fea_recurrent_combine = ConvGnLelu(nf * 2, nf, 1, activation=False, norm=False, bias=False, weight_init_factor=.01)
 
         # switch options
         self.nf = nf
@@ -522,7 +528,7 @@ class Spsr7(nn.Module):
         self.final_temperature_step = 10000
         self.lr = None
 
-    def forward(self, x, ref, ref_center, update_attention_norm=True):
+    def forward(self, x, ref, ref_center, update_attention_norm=True, recurrent=None):
         # The attention_maps debugger outputs <x>. Save that here.
         self.lr = x.detach().cpu()
 
@@ -531,6 +537,11 @@ class Spsr7(nn.Module):
         ref_embedding = ref_code.view(-1, self.nf * 8, 1, 1).repeat(1, 1, x.shape[2] // 8, x.shape[3] // 8)
 
         x = self.model_fea_conv(x)
+        if self.recurrent:
+            rec = self.model_recurrent_conv(recurrent)
+            br = self.model_fea_recurrent_combine(torch.cat([x, rec], dim=1))
+            x = x + br
+
         x1 = x
         x1, a1 = self.sw1(x1, True, identity=x, att_in=(x1, ref_embedding))
 
