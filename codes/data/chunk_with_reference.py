@@ -14,6 +14,7 @@ class ChunkWithReference:
         img = util.read_img(None, img_path, rgb=True)
         if img is None:
             return np.zeros(128, 128, 3)
+        return img
 
     def __getitem__(self, item):
         centers = torch.load(osp.join(self.path, "centers.pt"))
