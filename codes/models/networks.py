@@ -89,9 +89,10 @@ def define_G(opt, net_key='network_G', scale=None):
                                  multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "ssgr1":
+        recurrent = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = ssg.SSGr1(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
+                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10, recurrent=recurrent)
     elif which_model == 'stacked_switches':
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3

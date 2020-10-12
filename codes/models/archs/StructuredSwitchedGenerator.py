@@ -153,10 +153,17 @@ class SwitchWithReference(nn.Module):
 
 
 class SSGr1(SwitchModelBase):
-    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10, recurrent=False):
         super(SSGr1, self).__init__(init_temperature, 10000)
         n_upscale = int(math.log(upscale, 2))
         self.nf = nf
+
+        if recurrent:
+            self.recurrent = True
+            self.recurrent_process = ConvGnLelu(in_nc, nf, kernel_size=3, stride=2, norm=False, bias=True, activation=False)
+            self.recurrent_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.01, final_norm=False, kernel_size=1, depth=3, join=False)
+        else:
+            self.recurrent = False
 
         # processing the input embedding
         self.reference_embedding = ReferenceImageBranch(nf)
@@ -181,7 +188,7 @@ class SSGr1(SwitchModelBase):
         self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
         self.switches = [self.sw1.switch, self.sw_grad.switch, self.conjoin_sw.switch]
 
-    def forward(self, x, ref, ref_center, save_attentions=True):
+    def forward(self, x, ref, ref_center, save_attentions=True, recurrent=None):
         # The attention_maps debugger outputs <x>. Save that here.
         self.lr = x.detach().cpu()
 
@@ -195,6 +202,9 @@ class SSGr1(SwitchModelBase):
         ref_embedding = ref_code.view(-1, ref_code.shape[1], 1, 1).repeat(1, 1, x.shape[2] // 8, x.shape[3] // 8)
 
         x = self.model_fea_conv(x)
+        if self.recurrent:
+            rec = self.recurrent_process(recurrent)
+            x = self.recurrent_join(x, rec)
         x1, a1 = checkpoint(self.sw1, x, ref_embedding)
 
         x_grad = self.grad_conv(x_grad)
