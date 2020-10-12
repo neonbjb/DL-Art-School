@@ -257,17 +257,24 @@ class StackedSwitchGenerator(SwitchModelBase):
 
 
 class SSGDeep(SwitchModelBase):
-    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, upscale=4, init_temperature=10, recurrent=False):
         super(SSGDeep, self).__init__(init_temperature, 10000)
         n_upscale = int(math.log(upscale, 2))
         self.nf = nf
 
         # processing the input embedding
+        if recurrent:
+            self.recurrent = True
+            self.recurrent_process = ConvGnLelu(in_nc, nf, kernel_size=3, stride=2, norm=False, bias=True, activation=False)
+            self.recurrent_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.01, final_norm=False, kernel_size=1, depth=3, join=False)
+        else:
+            self.recurrent = False
         self.reference_embedding = ReferenceImageBranch(nf)
 
         # Feature branch
         self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False)
         self.sw1 = SwitchWithReference(nf, xforms, init_temperature, has_ref=False)
+        self.sw2 = SwitchWithReference(nf, xforms, init_temperature, has_ref=False)
 
         # Grad branch. Note - groupnorm on this branch is REALLY bad. Avoid it like the plague.
         self.get_g_nopadding = ImageGradientNoPadding()
@@ -279,15 +286,14 @@ class SSGDeep(SwitchModelBase):
 
         # Join branch (grad+fea)
         self.conjoin_sw = SwitchWithReference(nf, xforms, init_temperature, has_ref=True)
-        self.sw3 = SwitchWithReference(nf, xforms, init_temperature, has_ref=False)
         self.sw4 = SwitchWithReference(nf, xforms, init_temperature, has_ref=False)
         self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
         self.upsample = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=True)
         self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
         self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
-        self.switches = [self.sw1.switch, self.sw_grad.switch, self.conjoin_sw.switch, self.sw3.switch, self.sw4.switch]
+        self.switches = [self.sw1.switch, self.sw2.switch, self.sw_grad.switch, self.conjoin_sw.switch, self.sw4.switch]
 
-    def forward(self, x, ref, ref_center, save_attentions=True):
+    def forward(self, x, ref, ref_center, save_attentions=True, recurrent=None):
         # The attention_maps debugger outputs <x>. Save that here.
         self.lr = x.detach().cpu()
 
@@ -301,7 +307,11 @@ class SSGDeep(SwitchModelBase):
         ref_embedding = ref_code.view(-1, ref_code.shape[1], 1, 1).repeat(1, 1, x.shape[2] // 8, x.shape[3] // 8)
 
         x = self.model_fea_conv(x)
+        if self.recurrent:
+            rec = self.recurrent_process(recurrent)
+            x = self.recurrent_join(x, rec)
         x1, a1 = checkpoint(self.sw1, x, ref_embedding)
+        x2, a2 = checkpoint(self.sw2, x1, ref_embedding)
 
         x_grad = self.grad_conv(x_grad)
         x_grad, a3, grad_fea_std = checkpoint(self.sw_grad, x_grad, ref_embedding, x1)
@@ -309,18 +319,17 @@ class SSGDeep(SwitchModelBase):
         x_grad_out = checkpoint(self.upsample_grad, x_grad)
         x_grad_out = checkpoint(self.grad_branch_output_conv, x_grad_out)
 
-        x_out, a4, fea_grad_std = checkpoint(self.conjoin_sw, x1, ref_embedding, x_grad)
-        x_out, a5 = checkpoint(self.sw3, x_out, ref_embedding)
-        x_out, a6 = checkpoint(self.sw4, x_out, ref_embedding)
+        x3, a4, fea_grad_std = checkpoint(self.conjoin_sw, x2, ref_embedding, x_grad)
+        x_out, a5 = checkpoint(self.sw4, x3, ref_embedding)
         x_out = checkpoint(self.final_lr_conv, x_out)
         x_out = checkpoint(self.upsample, x_out)
         x_out = checkpoint(self.final_hr_conv2, x_out)
 
         if save_attentions:
-            self.attentions = [a1, a3, a4, a5, a6]
+            self.attentions = [a1, a2, a3, a4, a5]
         self.grad_fea_std = grad_fea_std.detach().cpu()
         self.fea_grad_std = fea_grad_std.detach().cpu()
-        return x_grad_out, x_out, x_grad
+        return x_grad_out, x_out
 
 
 class StackedSwitchGenerator5Layer(SwitchModelBase):
