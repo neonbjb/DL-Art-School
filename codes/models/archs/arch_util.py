@@ -456,17 +456,23 @@ class ConjoinBlock(nn.Module):
 
 # Designed explicitly to join a mainline trunk with reference data. Implemented as a residual branch.
 class ReferenceJoinBlock(nn.Module):
-    def __init__(self, nf, residual_weight_init_factor=1, block=ConvGnLelu, final_norm=False, kernel_size=3, depth=3):
+    def __init__(self, nf, residual_weight_init_factor=1, block=ConvGnLelu, final_norm=False, kernel_size=3, depth=3, join=True):
         super(ReferenceJoinBlock, self).__init__()
         self.branch = MultiConvBlock(nf * 2, nf + nf // 2, nf, kernel_size=kernel_size, depth=depth,
                                      scale_init=residual_weight_init_factor, norm=False,
                                      weight_init_factor=residual_weight_init_factor)
-        self.join_conv = block(nf, nf, kernel_size=kernel_size, norm=final_norm, bias=False, activation=True)
+        if join:
+            self.join_conv = block(nf, nf, kernel_size=kernel_size, norm=final_norm, bias=False, activation=True)
+        else:
+            self.join_conv = None
 
     def forward(self, x, ref):
         joined = torch.cat([x, ref], dim=1)
         branch = self.branch(joined)
-        return self.join_conv(x + branch), torch.std(branch)
+        if self.join_conv is not None:
+            return self.join_conv(x + branch), torch.std(branch)
+        else:
+            return x + branch, torch.std(branch)
 
 
 # Basic convolutional upsampling block that uses interpolate.

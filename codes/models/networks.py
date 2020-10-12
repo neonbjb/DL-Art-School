@@ -12,6 +12,7 @@ import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.SPSR_arch as spsr
 import models.archs.StructuredSwitchedGenerator as ssg
 import models.archs.rcan as rcan
+import models.archs.panet.panet as panet
 from collections import OrderedDict
 import torchvision
 import functools
@@ -48,6 +49,12 @@ def define_G(opt, net_key='network_G', scale=None):
         opt_net['n_colors'] = 3
         args_obj = munchify(opt_net)
         netG = rcan.RCAN(args_obj)
+    elif which_model == 'panet':
+        #args: n_resblocks, res_scale, scale, n_feats
+        opt_net['rgb_range'] = 255
+        opt_net['n_colors'] = 3
+        args_obj = munchify(opt_net)
+        netG = panet.PANET(args_obj)
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
