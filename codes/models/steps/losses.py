@@ -64,6 +64,9 @@ class ConfigurableLoss(nn.Module):
     def extra_metrics(self):
         return self.metrics
 
+    def clear_metrics(self):
+        self.metrics = []
+
 
 def get_basic_criterion_for_name(name, device):
     if name == 'l1':
@@ -192,7 +195,6 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         self.losses_computed = 0
 
     def forward(self, net, state):
-        self.metrics = []
         real = extract_params_from_state(self.opt['real'], state)
         real = [r.detach() for r in real]
         fake = extract_params_from_state(self.opt['fake'], state)
@@ -258,7 +260,6 @@ class GeometricSimilarityGeneratorLoss(ConfigurableLoss):
                               (functools.partial(torch.rot90, k=3, dims=[2,3]), functools.partial(torch.rot90, k=1, dims=[2,3]))])
 
     def forward(self, net, state):
-        self.metrics = []
         net = self.env['generators'][self.generator]  # Get the network from an explicit parameter.
                                                     # The <net> parameter is not reliable for generator losses since often they are combined with many networks.
         fake = extract_params_from_state(self.opt['fake'], state)
@@ -305,7 +306,6 @@ class TranslationInvarianceLoss(ConfigurableLoss):
         assert(self.patch_size > self.overlap)
 
     def forward(self, net, state):
-        self.metrics = []
         net = self.env['generators'][self.generator]  # Get the network from an explicit parameter.
         # The <net> parameter is not reliable for generator losses since often they are combined with many networks.
 
@@ -356,7 +356,6 @@ class RecursiveInvarianceLoss(ConfigurableLoss):
         assert(self.recursive_depth > 0)
 
     def forward(self, net, state):
-        self.metrics = []
         net = self.env['generators'][self.generator]  # Get the network from an explicit parameter.
         # The <net> parameter is not reliable for generator losses since they can be combined with many networks.
 
