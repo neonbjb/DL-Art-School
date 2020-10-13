@@ -6,42 +6,7 @@ import torch.nn.functional as F
 from torch.nn.init import kaiming_normal
 
 from torchvision.models.resnet import BasicBlock, Bottleneck
-from torch.nn.modules.batchnorm import _BatchNorm
-
-
-''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
-class ConvBnRelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, relu=True, bn=True, bias=True):
-        super(ConvBnRelu, self).__init__()
-        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
-        assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
-        if bn:
-            self.bn = nn.BatchNorm2d(filters_out)
-        else:
-            self.bn = None
-        if relu:
-            self.relu = nn.ReLU()
-        else:
-            self.relu = None
-
-        # Init params.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.relu else 'linear')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.bn:
-            x = self.bn(x)
-        if self.relu:
-            return self.relu(x)
-        else:
-            return x
+from models.archs.arch_util import ConvGnSilu
 
 
 def constant_init(module, val, bias=0):
@@ -194,10 +159,10 @@ class Resample(nn.Module):
         new_in_channels = int(in_channels * alpha)
         if block_type == Bottleneck:
             in_channels *= 4
-        self.squeeze_conv = ConvBnRelu(in_channels, new_in_channels, kernel_size=1)
+        self.squeeze_conv = ConvGnSilu(in_channels, new_in_channels, kernel_size=1)
         if scale < 1:
-            self.downsample_conv = ConvBnRelu(new_in_channels, new_in_channels, kernel_size=3, stride=2)
-        self.expand_conv = ConvBnRelu(new_in_channels, out_channels, kernel_size=1, relu=False)
+            self.downsample_conv = ConvGnSilu(new_in_channels, new_in_channels, kernel_size=3, stride=2)
+        self.expand_conv = ConvGnSilu(new_in_channels, out_channels, kernel_size=1, activation=False)
 
     def _resize(self, x):
         if self.scale == 1:
@@ -277,14 +242,14 @@ class SpineNet(nn.Module):
         """Build the stem network."""
         # Build the first conv and maxpooling layers.
         if self._early_double_reduce:
-            self.conv1 = ConvBnRelu(
+            self.conv1 = ConvGnSilu(
                 in_channels,
                 64,
                 kernel_size=7,
                 stride=2)
             self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         else:
-            self.conv1 = ConvBnRelu(
+            self.conv1 = ConvGnSilu(
                 in_channels,
                 64,
                 kernel_size=7,
@@ -308,10 +273,10 @@ class SpineNet(nn.Module):
         for block_spec in self._block_specs:
             if block_spec.is_output:
                 in_channels = int(FILTER_SIZE_MAP[block_spec.level]*self._filter_size_scale) * 4
-                self.endpoint_convs[str(block_spec.level)] = ConvBnRelu(in_channels,
+                self.endpoint_convs[str(block_spec.level)] = ConvGnSilu(in_channels,
                                                                    self._endpoints_num_filters,
                                                                    kernel_size=1,
-                                                                   relu=False)
+                                                                   activation=False)
 
     def _make_scale_permuted_network(self):
         self.merge_ops = nn.ModuleList()

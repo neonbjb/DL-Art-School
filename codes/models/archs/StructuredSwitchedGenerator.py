@@ -147,9 +147,9 @@ class SwitchWithReference(nn.Module):
     def forward(self, x, mplex_ref=None, ref=None):
         if self.ref_join is not None:
             branch, ref_std = self.ref_join(x, ref)
-            return self.switch(branch, True, identity=x, att_in=(branch, mplex_ref)) + (ref_std,)
+            return self.switch(branch, identity=x, att_in=(branch, mplex_ref)) + (ref_std,)
         else:
-            return self.switch(x, True, identity=x, att_in=(x, mplex_ref))
+            return self.switch(x, identity=x, att_in=(x, mplex_ref))
 
 
 class SSGr1(SwitchModelBase):

@@ -479,7 +479,7 @@ class ReferenceJoinBlock(nn.Module):
 class UpconvBlock(nn.Module):
     def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True, activation=True, bias=False):
         super(UpconvBlock, self).__init__()
-        self.process = block(filters_out, filters_out, kernel_size=3, bias=bias, activation=activation, norm=norm)
+        self.process = block(filters_in, filters_out, kernel_size=3, bias=bias, activation=activation, norm=norm)
 
     def forward(self, x):
         x = F.interpolate(x, scale_factor=2, mode="nearest")
