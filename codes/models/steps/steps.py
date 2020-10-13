@@ -156,6 +156,7 @@ class ConfigurableStep(Module):
                     self.loss_accumulator.add_loss(loss_name, l)
                 for n, v in loss.extra_metrics():
                     self.loss_accumulator.add_loss("%s_%s" % (loss_name, n), v)
+                loss.clear_metrics()
 
             # In some cases, the loss could not be set (e.g. all losses have 'after'
             if isinstance(total_loss, torch.Tensor):

@@ -61,7 +61,7 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
         super(RecurrentImageGeneratorSequenceInjector, self).__init__(opt, env)
         self.flow = opt['flow_network']
         self.input_lq_index = opt['input_lq_index'] if 'input_lq_index' in opt.keys() else 0
-        self.output_hq_index = opt['output_hq_index'] if 'output_index' in opt.keys() else 0
+        self.output_hq_index = opt['output_hq_index'] if 'output_hq_index' in opt.keys() else 0
         self.recurrent_index = opt['recurrent_index']
         self.scale = opt['scale']
         self.resample = Resample2d()
@@ -271,3 +271,5 @@ class PingPongLoss(ConfigurableLoss):
         for i in range(cnt):
             img = imglist[:, i]
             torchvision.utils.save_image(img, osp.join(base_path, "%s.png" % (i, )))
+
+            
