@@ -160,10 +160,10 @@ class FlowAdjustment(Injector):
     def forward(self, state):
         flow = self.env['generators'][self.flow]
         flow_target = state[self.flow_target]
-        flowed = state[self.flowed]
+        flowed = F.interpolate(state[self.flowed], size=flow_target.shape[2:], mode='bicubic')
         flow_input = torch.stack([flow_target, flowed], dim=2)
-        flowfield = flow(flow_input)
-        return {self.output: self.resample(flowed.float(), flowfield.float())}
+        flowfield = F.interpolate(flow(flow_input), size=state[self.flowed].shape[2:], mode='bicubic')
+        return {self.output: self.resample(state[self.flowed].float(), flowfield.float())}
 
 
 # This is the temporal discriminator loss from TecoGAN.
