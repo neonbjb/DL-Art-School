@@ -1,7 +1,7 @@
 # Tool that can be used to add a new layer into an existing model save file. Primarily useful for "progressive"
 # models which can be trained piecemeal.
 
-import options.options as option
+from utils import options as option
 from models import create_model
 import torch
 import os

@@ -3,16 +3,14 @@ import math
 import argparse
 import random
 import logging
-import shutil
 from tqdm import tqdm
 
 import torch
 from data.data_sampler import DistIterSampler
 
-import options.options as option
-from utils import util
+from models.ExtensibleTrainer import ExtensibleTrainer
+from utils import util, options as option
 from data import create_dataloader, create_dataset
-from models import create_model
 from time import time
 
 
@@ -159,7 +157,7 @@ def main():
     assert train_loader is not None
 
     #### create model
-    model = create_model(opt)
+    model = ExtensibleTrainer(opt)
 
     #### resume training
     if resume_state:

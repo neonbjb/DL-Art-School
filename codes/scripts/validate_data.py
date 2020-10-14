@@ -5,10 +5,8 @@ import math
 import argparse
 import random
 import torch
-import options.options as option
-from utils import util
+from utils import util, options as option
 from data import create_dataloader, create_dataset
-from time import time
 from tqdm import tqdm
 from skimage import io
 

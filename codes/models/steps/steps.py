@@ -6,7 +6,6 @@ import torch
 from apex import amp
 from collections import OrderedDict
 from .injectors import create_injector
-from models.novograd import NovoGrad
 from utils.util import recursively_detach
 
 logger = logging.getLogger('base')

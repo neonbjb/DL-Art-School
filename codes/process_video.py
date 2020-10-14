@@ -11,7 +11,7 @@ import torchvision.transforms.functional as F
 from PIL import Image
 from tqdm import tqdm
 
-import options.options as option
+from utils import options as option
 import utils.util as util
 from data import create_dataloader
 from models import create_model

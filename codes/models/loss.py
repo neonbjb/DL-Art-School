@@ -49,7 +49,7 @@ class GANLoss(nn.Module):
 
 
 # Frequency Domain Perceptual Loss, from https://github.com/sdv4/FDPL
-# Utilizes pre-computed perceptual_weights. To generate these from your dataset, see data_scripts/compute_fdpl_perceptual_weights.py
+# Utilizes pre-computed perceptual_weights. To generate these from your dataset, see scripts/compute_fdpl_perceptual_weights.py
 # In practice, per the paper, these precomputed weights can generally be used across broad image classes (e.g. all photographs).
 class FDPLLoss(nn.Module):
     """

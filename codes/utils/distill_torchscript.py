@@ -1,7 +1,7 @@
 import argparse
 import functools
 import torch
-import options.options as option
+from utils import options as option
 from models.networks import define_G
 
 
