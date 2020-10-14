@@ -110,7 +110,8 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == 'ssg_teco':
         netG = ssg.StackedSwitchGenerator2xTeco(nf=opt_net['nf'], xforms=opt_net['num_transforms'], init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == 'big_switch':
-        netG = SwitchedGen_arch.TheBigSwitch(opt_net['in_nc'], opt_net['nf'], opt_net['num_transforms'], opt_net['scale'], opt_net['temperature'])
+        netG = SwitchedGen_arch.TheBigSwitch(opt_net['in_nc'], nf=opt_net['nf'], xforms=opt_net['num_transforms'], upscale=opt_net['scale'],
+                                             init_temperature=opt_net['temperature'], mode=opt_net['mode'])
     elif which_model == "flownet2":
         from models.flownet2.models import FlowNet2
         ld = torch.load(opt_net['load_path'])

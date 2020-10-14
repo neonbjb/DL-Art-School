@@ -184,21 +184,28 @@ class ImagePatchInjector(Injector):
     def __init__(self, opt, env):
         super(ImagePatchInjector, self).__init__(opt, env)
         self.patch_size = opt['patch_size']
+        self.resize = opt['resize'] if 'resize' in opt.keys() else None  # If specified, the output is resized to a square with this size after patch extraction.
 
     def forward(self, state):
         im = state[self.opt['in']]
         if self.env['training']:
-            return { self.opt['out']: im[:, :3, :self.patch_size, :self.patch_size],
+            res = { self.opt['out']: im[:, :3, :self.patch_size, :self.patch_size],
                      '%s_top_left' % (self.opt['out'],): im[:, :, :self.patch_size, :self.patch_size],
                      '%s_top_right' % (self.opt['out'],): im[:, :, :self.patch_size, -self.patch_size:],
                      '%s_bottom_left' % (self.opt['out'],): im[:, :, -self.patch_size:, :self.patch_size],
                      '%s_bottom_right' % (self.opt['out'],): im[:, :, -self.patch_size:, -self.patch_size:] }
         else:
-            return { self.opt['out']: im,
+            res = { self.opt['out']: im,
                      '%s_top_left' % (self.opt['out'],): im,
                      '%s_top_right' % (self.opt['out'],): im,
                      '%s_bottom_left' % (self.opt['out'],): im,
                      '%s_bottom_right' % (self.opt['out'],): im }
+        if self.resize is not None:
+            res2 = {}
+            for k, v in res.items():
+                res2[k] = torch.nn.functional.interpolate(v, size=(self.resize, self.resize), mode="nearest")
+            res = res2
+        return res
 
 
 # Concatenates a list of tensors on the specified dimension.

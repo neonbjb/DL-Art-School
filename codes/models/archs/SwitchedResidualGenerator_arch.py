@@ -108,7 +108,8 @@ class ConfigurableSwitchComputer(nn.Module):
 
     # Regarding inputs: it is acceptable to pass in a tuple/list as an input for (x), but the first element
     # *must* be the actual parameter that gets fed through the network - it is assumed to be the identity.
-    def forward(self, x, att_in=None, identity=None, output_attention_weights=True, fixed_scale=1, do_checkpointing=False):
+    def forward(self, x, att_in=None, identity=None, output_attention_weights=True, fixed_scale=1, do_checkpointing=False,
+                output_att_logits=False):
         if isinstance(x, tuple):
             x1 = x[0]
         else:
@@ -148,11 +149,14 @@ class ConfigurableSwitchComputer(nn.Module):
             m = self.multiplexer(*att_in)
 
         # It is assumed that [xformed] and [m] are collapsed into tensors at this point.
-        outputs, attention = self.switch(xformed, m, True, self.update_norm)
+        outputs, attention, att_logits = self.switch(xformed, m, True, self.update_norm, output_attention_logits=True)
         outputs = identity + outputs * self.switch_scale * fixed_scale
         outputs = outputs + self.post_switch_conv(outputs) * self.psc_scale * fixed_scale
         if output_attention_weights:
-            return outputs, attention
+            if output_att_logits:
+                return outputs, attention, att_logits
+            else:
+                return outputs, attention
         else:
             return outputs
 
@@ -602,7 +606,7 @@ class SwitchModelBase(nn.Module):
 
 from models.archs.spinenet_arch import make_res_layer, BasicBlock
 class BigMultiplexer(nn.Module):
-    def __init__(self, in_nc, nf, multiplexer_channels):
+    def __init__(self, in_nc, nf, mode, multiplexer_channels):
         super(BigMultiplexer, self).__init__()
 
         self.spine = SpineNet(arch='96', output_level=[3], double_reduce_early=False)
@@ -611,20 +615,28 @@ class BigMultiplexer(nn.Module):
         self.tail_proc = make_res_layer(BasicBlock, nf, nf, 2)
         self.tail_join = ReferenceJoinBlock(nf)
 
-        # Blocks used to create the key
-        self.key_process = ConvGnSilu(nf, nf, kernel_size=1, activation=True, norm=False, bias=True)
-
-        # Postprocessing blocks.
-        self.query_key_combine = ConvGnSilu(nf*2, nf, kernel_size=3, activation=True, norm=False, bias=False)
-        self.cbl0 = ConvGnSilu(nf, nf, kernel_size=3, activation=True, norm=True, bias=False)
-        self.cbl1 = ConvGnSilu(nf, nf // 2, kernel_size=1, norm=True, bias=False, num_groups=4)
-        self.cbl2 = ConvGnSilu(nf // 2, 1, kernel_size=1, norm=False, bias=False)
+        self.mode = mode
+        if mode == 0:
+            self.key_process = ConvGnSilu(nf, nf, kernel_size=1, activation=True, norm=False, bias=True)
+            self.query_key_combine = ConvGnSilu(nf*2, nf, kernel_size=3, activation=True, norm=False, bias=False)
+            self.cbl0 = ConvGnSilu(nf, nf, kernel_size=3, activation=True, norm=True, bias=False)
+            self.cbl1 = ConvGnSilu(nf, nf // 2, kernel_size=1, norm=True, bias=False, num_groups=4)
+            self.cbl2 = ConvGnSilu(nf // 2, 1, kernel_size=1, norm=False, bias=False)
+        else:
+            self.key_process = ConvGnSilu(nf, nf, kernel_size=3, activation=True, norm=False, bias=True)
+            self.query_key_combine = ConvGnSilu(nf*2, nf, kernel_size=1, activation=True, norm=True, bias=False)
+            self.cbl0 = ConvGnSilu(nf, nf, kernel_size=1, activation=True, norm=True, bias=False)
+            self.cbl1 = ConvGnSilu(nf, nf // 2, kernel_size=1, activation=True, norm=False, bias=False)
+            self.cbl2 = ConvGnSilu(nf // 2, 1, kernel_size=1, activation=False, norm=False, bias=False)
 
     def forward(self, x, transformations):
         s = self.spine(x)[0]
         tail = self.fea_tail(x)
         tail = self.tail_proc(tail)
-        q = F.interpolate(s, scale_factor=2, mode='bilinear')
+        if self.mode == 0:
+            q = F.interpolate(s, scale_factor=2, mode='bilinear')
+        else:
+            q = F.interpolate(s, scale_factor=2, mode='nearest')
         q = self.spine_red_proc(q)
         q, _ = self.tail_join(q, tail)
 
@@ -642,14 +654,15 @@ class BigMultiplexer(nn.Module):
 
 
 class TheBigSwitch(SwitchModelBase):
-    def __init__(self, in_nc, nf, xforms=16, upscale=2, init_temperature=10):
+    def __init__(self, in_nc, nf, xforms=16, upscale=2, mode=0, init_temperature=10):
         super(TheBigSwitch, self).__init__(init_temperature, 10000)
         self.nf = nf
         self.transformation_counts = xforms
+        self.mode = mode
 
         self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False)
 
-        multiplx_fn = functools.partial(BigMultiplexer, in_nc, nf)
+        multiplx_fn = functools.partial(BigMultiplexer, in_nc, nf, mode)
         transform_fn = functools.partial(MultiConvBlock, nf, int(nf * 1.5), nf, kernel_size=3, depth=4, weight_init_factor=.1)
         self.switch = ConfigurableSwitchComputer(nf, multiplx_fn,
                                                    pre_transform_block=None, transform_block=transform_fn,
@@ -673,14 +686,20 @@ class TheBigSwitch(SwitchModelBase):
             sw.set_update_attention_norm(save_attentions)
 
         x1 = self.model_fea_conv(x)
-        x1, a1 = self.switch(x1, att_in=x, do_checkpointing=True)
+        if self.mode == 0:
+            x1, a1 = self.switch(x1, att_in=x, do_checkpointing=True)
+        else:
+            x1, a1, attlogits = self.switch(x1, att_in=x, do_checkpointing=True, output_att_logits=True)
         x_out = checkpoint(self.final_lr_conv, x1)
         x_out = checkpoint(self.upsample, x_out)
         x_out = checkpoint(self.final_hr_conv2, x_out)
 
         if save_attentions:
             self.attentions = [a1]
-        return x_out,
+        if self.mode == 0:
+            return x_out,
+        else:
+            return x_out, attlogits.permute(0,3,1,2)
 
 
 if __name__ == '__main__':
