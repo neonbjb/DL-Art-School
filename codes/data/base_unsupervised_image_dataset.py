@@ -68,9 +68,9 @@ class BaseUnsupervisedImageDataset(data.Dataset):
             for hq, hq_ref, hq_mask, hq_center in zip(imgs_hq, refs_hq, masks_hq, centers_hq):
                 # It is assumed that the target size is a square.
                 target_size = (self.target_hq_size, self.target_hq_size)
-                hqs_adjusted.append(cv2.resize(hq, target_size, interpolation=cv2.INTER_LINEAR))
-                hq_refs_adjusted.append(cv2.resize(hq_ref, target_size, interpolation=cv2.INTER_LINEAR))
-                hq_masks_adjusted.append(cv2.resize(hq_mask, target_size, interpolation=cv2.INTER_LINEAR))
+                hqs_adjusted.append(cv2.resize(hq, target_size, interpolation=cv2.INTER_AREA))
+                hq_refs_adjusted.append(cv2.resize(hq_ref, target_size, interpolation=cv2.INTER_AREA))
+                hq_masks_adjusted.append(cv2.resize(hq_mask, target_size, interpolation=cv2.INTER_AREA))
                 hq_centers_adjusted.append(self.resize_point(hq_center, (h, w), target_size))
             h, w = self.target_hq_size, self.target_hq_size
         else:
@@ -97,9 +97,9 @@ class BaseUnsupervisedImageDataset(data.Dataset):
                 lms.append(hq_mask)
                 lcs.append(hq_center)
             else:
-                ls.append(cv2.resize(hq, (h // self.scale, w // self.scale), interpolation=cv2.INTER_LINEAR))
-                lrs.append(cv2.resize(hq_ref, (h // self.scale, w // self.scale), interpolation=cv2.INTER_LINEAR))
-                lms.append(cv2.resize(hq_mask, (h // self.scale, w // self.scale), interpolation=cv2.INTER_LINEAR))
+                ls.append(cv2.resize(hq, (h // self.scale, w // self.scale), interpolation=cv2.INTER_AREA))
+                lrs.append(cv2.resize(hq_ref, (h // self.scale, w // self.scale), interpolation=cv2.INTER_AREA))
+                lms.append(cv2.resize(hq_mask, (h // self.scale, w // self.scale), interpolation=cv2.INTER_AREA))
                 lcs.append(self.resize_point(hq_center, (h, w), ls[0].shape[:2]))
         # Corrupt the LQ image (only in eval mode)
         if not self.for_eval:
