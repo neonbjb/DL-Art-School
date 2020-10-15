@@ -96,7 +96,7 @@ class ImageCorruptor:
                 lo=23
                 range=25
             elif aug == 'jpeg-broad':
-                lo=10
+                lo=15
                 range=60
             # JPEG compression
             qf = (rand_int % range + lo)
