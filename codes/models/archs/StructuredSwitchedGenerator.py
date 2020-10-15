@@ -1,16 +1,15 @@
-import math
 import functools
-from models.archs.arch_util import MultiConvBlock, ConvGnLelu, ConvGnSilu, ReferenceJoinBlock
-from models.archs.SwitchedResidualGenerator_arch import ConfigurableSwitchComputer, gather_2d, SwitchModelBase
-from models.archs.SPSR_arch import ImageGradientNoPadding
-from torch import nn
+import math
+
 import torch
 import torch.nn.functional as F
-from switched_conv.switched_conv_util import save_attention_to_image_rgb
-from switched_conv.switched_conv import compute_attention_specificity
-import os
-import torchvision
+from torch import nn
+
+from models.archs.SPSR_arch import ImageGradientNoPadding
+from models.archs.SwitchedResidualGenerator_arch import ConfigurableSwitchComputer, gather_2d, SwitchModelBase
+from models.archs.arch_util import MultiConvBlock, ConvGnLelu, ConvGnSilu, ReferenceJoinBlock
 from utils.util import checkpoint
+
 
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
@@ -446,3 +445,132 @@ class StackedSwitchGenerator2xTeco(SwitchModelBase):
             self.attentions = [a1, a3, a3, a4, a5]
         return x_out,
 
+
+class SimplePyramidMultiplexer(nn.Module):
+    def __init__(self, nf, transforms):
+        super(SimplePyramidMultiplexer, self).__init__()
+
+        # Blocks used to create the query
+        reductions = 3
+        self.input_process = ConvGnSilu(nf, nf, activation=True, norm=False, bias=True)
+        self.reduction_blocks = nn.ModuleList([HalvingProcessingBlock(int(nf * 1.5 ** i), factor=1.5)
+                                               for i in range(reductions)])
+        reduction_filters = int(nf * 1.5 ** reductions)
+        self.processing_blocks = nn.Sequential(
+            ConvGnSilu(reduction_filters, reduction_filters, kernel_size=3, activation=True, norm=True, bias=False),
+            ConvGnSilu(reduction_filters, reduction_filters, kernel_size=3, activation=True, norm=True, bias=False))
+        self.expansion_blocks = nn.ModuleList([ExpansionBlock2(int(reduction_filters // (1.5 ** i)), factor=1.5)
+                                               for i in range(reductions)])
+
+        self.cbl1 = ConvGnSilu(nf, nf // 2, kernel_size=1, norm=False, bias=False)
+        self.cbl2 = ConvGnSilu(nf // 2, transforms, kernel_size=1, norm=False, bias=False)
+
+    def forward(self, x):
+        q = self.input_process(x)
+        reduction_identities = []
+        for b in self.reduction_blocks:
+            reduction_identities.append(q)
+            q = b(q)
+        q = self.processing_blocks(q)
+        for i, b in enumerate(self.expansion_blocks):
+            q = b(q, reduction_identities[-i - 1])
+        q = self.cbl1(q)
+        q = self.cbl2(q)
+        return q
+
+
+class SimplerSwitchWithReference(nn.Module):
+    def __init__(self, nf, num_transforms, init_temperature=10, has_ref=True):
+        super(SimplerSwitchWithReference, self).__init__()
+        self.nf = nf
+        self.transformation_counts = num_transforms
+        multiplx_fn = functools.partial(SimplePyramidMultiplexer, nf)
+        pretransform = functools.partial(ConvGnLelu, nf, int(nf*1.5), kernel_size=3, bias=False, norm=False, activation=True, weight_init_factor=.1)
+        transform_fn = functools.partial(ConvGnLelu, int(nf * 1.5), int(nf * 1.5), kernel_size=3, bias=False, norm=False, activation=True, weight_init_factor=.1)
+        posttransform = ConvGnLelu(int(nf*1.5), nf, kernel_size=3, bias=False, norm=False, activation=True, weight_init_factor=.1)
+        if has_ref:
+            self.ref_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.3, final_norm=False, kernel_size=1, depth=2)
+        else:
+            self.ref_join = None
+        self.switch = ConfigurableSwitchComputer(nf, multiplx_fn,
+                                                   pre_transform_block=pretransform, transform_block=transform_fn,
+                                                   post_transform_block=posttransform,
+                                                   attention_norm=True,
+                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=False)
+
+    def forward(self, x, ref=None):
+        if self.ref_join is not None:
+            branch, ref_std = self.ref_join(x, ref)
+            return self.switch(branch, identity=x) + (ref_std,)
+        else:
+            return self.switch(x, identity=x)
+
+
+class SsgSimpler(SwitchModelBase):
+    def __init__(self, in_nc, out_nc, nf, xforms=8, init_temperature=10, recurrent=False):
+        super(SsgSimpler, self).__init__(init_temperature, 10000)
+        self.nf = nf
+
+        # processing the input embedding
+        if recurrent:
+            self.recurrent = True
+            self.recurrent_process = ConvGnLelu(in_nc, nf, kernel_size=3, stride=2, norm=False, bias=True, activation=False)
+            self.recurrent_join = ReferenceJoinBlock(nf, residual_weight_init_factor=.01, final_norm=False, kernel_size=1, depth=3, join=False)
+        else:
+            self.recurrent = False
+
+        # Feature branch
+        self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False)
+        self.sw1 = SimplerSwitchWithReference(nf, xforms, init_temperature, has_ref=False)
+        self.sw2 = SimplerSwitchWithReference(nf, xforms, init_temperature, has_ref=False)
+
+        # Grad branch. Note - groupnorm on this branch is REALLY bad. Avoid it like the plague.
+        self.get_g_nopadding = ImageGradientNoPadding()
+        self.grad_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False, bias=False)
+        self.sw_grad = SimplerSwitchWithReference(nf, xforms // 2, init_temperature, has_ref=True)
+        self.grad_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
+        self.upsample_grad = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=False)
+        self.grad_branch_output_conv = ConvGnLelu(nf // 2, out_nc, kernel_size=1, norm=False, activation=False, bias=True)
+
+        # Join branch (grad+fea)
+        self.conjoin_sw = SimplerSwitchWithReference(nf, xforms, init_temperature, has_ref=True)
+        self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
+        self.upsample = UpconvBlock(nf, nf // 2, block=ConvGnLelu, norm=False, activation=True, bias=True)
+        self.final_hr_conv1 = ConvGnLelu(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True)
+        self.final_hr_conv2 = ConvGnLelu(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False)
+        self.switches = [self.sw1.switch, self.sw2.switch, self.sw_grad.switch, self.conjoin_sw.switch]
+
+    def forward(self, x, save_attentions=True, recurrent=None):
+        # The attention_maps debugger outputs <x>. Save that here.
+        self.lr = x.detach().cpu()
+
+        # If we're not saving attention, we also shouldn't be updating the attention norm. This is because the attention
+        # norm should only be getting updates with new data, not recurrent generator sampling.
+        for sw in self.switches:
+            sw.set_update_attention_norm(save_attentions)
+
+        x1 = self.model_fea_conv(x)
+        if self.recurrent:
+            rec = self.recurrent_process(recurrent)
+            x1, recurrent_std = self.recurrent_join(x1, rec)
+        x1, a1 = checkpoint(self.sw1, x1)
+        x2, a2 = checkpoint(self.sw2, x1)
+
+        x_grad = self.get_g_nopadding(x)
+        x_grad = self.grad_conv(x_grad)
+        x_grad, a3, grad_fea_std = checkpoint(self.sw_grad, x_grad, x1)
+        x_grad = checkpoint(self.grad_lr_conv, x_grad)
+        x_grad_out = checkpoint(self.upsample_grad, x_grad)
+        x_grad_out = checkpoint(self.grad_branch_output_conv, x_grad_out)
+
+        x3, a4, fea_grad_std = checkpoint(self.conjoin_sw, x2, x_grad)
+        x_out = checkpoint(self.final_lr_conv, x3)
+        x_out = checkpoint(self.upsample, x_out)
+        x_out = checkpoint(self.final_hr_conv2, x_out)
+
+        if save_attentions:
+            self.attentions = [a1, a2, a3, a4]
+        self.grad_fea_std = grad_fea_std.detach().cpu()
+        self.fea_grad_std = fea_grad_std.detach().cpu()
+        return x_grad_out, x_out
