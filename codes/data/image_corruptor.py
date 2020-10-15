@@ -47,11 +47,14 @@ class ImageCorruptor:
             img = img / 255
         elif 'gaussian_blur' in aug:
             # Gaussian Blur
-            kernel = 2 * self.blur_scale * (rand_int % 3) + 1
+            if aug == 'gaussian_blur_3':
+                kernel = 3
+            else:
+                kernel = 2 * self.blur_scale * (rand_int % 3) + 1
             img = cv2.GaussianBlur(img, (kernel, kernel), 3)
         elif 'motion_blur' in aug:
             # Motion blur
-            intensity = 2 * self.blur_scale * (rand_int % 3) + 1
+            intensity = self.blur_scale * (rand_int % 3) + 1
             angle = (rand_int // 3) % 360
             k = np.zeros((intensity, intensity), dtype=np.float32)
             k[(intensity - 1) // 2, :] = np.ones(intensity, dtype=np.float32)
@@ -79,8 +82,11 @@ class ImageCorruptor:
             # Chromatic aberration
             pass
         elif 'noise' in aug:
-            # Block noise
-            noise_intensity = (rand_int % 4 + 2) / 255.0  # Between 1-4
+            # Random noise
+            if 'noise-5' == aug:
+                noise_intensity = 5 / 255.0
+            else:
+                noise_intensity = (rand_int % 4 + 2) / 255.0  # Between 1-4
             img += np.random.randn(*img.shape) * noise_intensity
         elif 'jpeg' in aug:
             if aug == 'jpeg':
@@ -89,6 +95,9 @@ class ImageCorruptor:
             elif aug == 'jpeg-medium':
                 lo=23
                 range=25
+            elif aug == 'jpeg-broad':
+                lo=10
+                range=60
             # JPEG compression
             qf = (rand_int % range + lo)
             # cv2's jpeg compression is "odd". It introduces artifacts. Use PIL instead.
