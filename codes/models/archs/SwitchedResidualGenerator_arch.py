@@ -79,7 +79,8 @@ def gather_2d(input, index):
 
 class ConfigurableSwitchComputer(nn.Module):
     def __init__(self, base_filters, multiplexer_net, pre_transform_block, transform_block, transform_count, attention_norm,
-                 init_temp=20, add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=False):
+                 init_temp=20, add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=False, post_switch_conv=True,
+                 anorm_multiplier=16):
         super(ConfigurableSwitchComputer, self).__init__()
 
         tc = transform_count
@@ -95,12 +96,15 @@ class ConfigurableSwitchComputer(nn.Module):
         self.noise_scale = nn.Parameter(torch.full((1,), float(1e-3)))
 
         # And the switch itself, including learned scalars
-        self.switch = BareConvSwitch(initial_temperature=init_temp, attention_norm=AttentionNorm(transform_count, accumulator_size=16 * transform_count) if attention_norm else None)
+        self.switch = BareConvSwitch(initial_temperature=init_temp, attention_norm=AttentionNorm(transform_count, accumulator_size=anorm_multiplier * transform_count) if attention_norm else None)
         self.switch_scale = nn.Parameter(torch.full((1,), float(1)))
-        self.post_switch_conv = ConvBnLelu(base_filters, base_filters, norm=False, bias=True)
-        # The post_switch_conv gets a low scale initially. The network can decide to magnify it (or not)
-        # depending on its needs.
-        self.psc_scale = nn.Parameter(torch.full((1,), float(.1)))
+        if post_switch_conv:
+            self.post_switch_conv = ConvBnLelu(base_filters, base_filters, norm=False, bias=True)
+            # The post_switch_conv gets a low scale initially. The network can decide to magnify it (or not)
+            # depending on its needs.
+            self.psc_scale = nn.Parameter(torch.full((1,), float(.1)))
+        else:
+            self.post_switch_conv = None
         self.update_norm = True
 
     def set_update_attention_norm(self, set_val):
@@ -151,7 +155,8 @@ class ConfigurableSwitchComputer(nn.Module):
         # It is assumed that [xformed] and [m] are collapsed into tensors at this point.
         outputs, attention, att_logits = self.switch(xformed, m, True, self.update_norm, output_attention_logits=True)
         outputs = identity + outputs * self.switch_scale * fixed_scale
-        outputs = outputs + self.post_switch_conv(outputs) * self.psc_scale * fixed_scale
+        if self.post_switch_conv is not None:
+            outputs = outputs + self.post_switch_conv(outputs) * self.psc_scale * fixed_scale
         if output_attention_weights:
             if output_att_logits:
                 return outputs, attention, att_logits
@@ -642,7 +647,8 @@ class TheBigSwitch(SwitchModelBase):
                                                    pre_transform_block=None, transform_block=transform_fn,
                                                    attention_norm=True,
                                                    transform_count=self.transformation_counts, init_temp=init_temperature,
-                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True)
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True,
+                                                   anorm_multiplier=128)
         self.switches = [self.switch]
 
         self.final_lr_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
@@ -669,6 +675,64 @@ class TheBigSwitch(SwitchModelBase):
             self.attentions = [a1]
         return x_out,
 
+
+class ArtistMultiplexer(nn.Module):
+    def __init__(self, in_nc, nf, multiplexer_channels):
+        super(ArtistMultiplexer, self).__init__()
+
+        self.spine = SpineNet(arch='96', output_level=[3], double_reduce_early=False)
+        self.spine_red_proc = ConvGnSilu(256, nf, kernel_size=1, activation=False, norm=False, bias=False)
+        self.fea_tail = ConvGnSilu(in_nc, nf, kernel_size=7, bias=True, norm=False, activation=False)
+        self.tail_proc = make_res_layer(BasicBlock, nf, nf, 2)
+        self.tail_join = ReferenceJoinBlock(nf)
+
+        self.reduce = ConvGnSilu(nf, nf // 2, kernel_size=1, activation=True, norm=True, bias=False)
+        self.last_process = ConvGnSilu(nf // 2, nf // 2, kernel_size=1, activation=True, norm=False, bias=False)
+        self.to_attention = ConvGnSilu(nf // 2, multiplexer_channels, kernel_size=1, activation=False, norm=False, bias=False)
+
+    def forward(self, x, transformations):
+        s = self.spine(x)[0]
+        tail = self.fea_tail(x)
+        tail = self.tail_proc(tail)
+        q = F.interpolate(s, scale_factor=2, mode='nearest')
+        q = self.spine_red_proc(q)
+        q, _ = self.tail_join(q, tail)
+        q = self.reduce(q)
+        q = F.interpolate(q, scale_factor=2, mode='nearest')
+        return self.to_attention(self.last_process(q))
+
+
+class ArtistGen(SwitchModelBase):
+    def __init__(self, in_nc, nf, xforms=16, upscale=2, init_temperature=10):
+        super(ArtistGen, self).__init__(init_temperature, 10000)
+        self.nf = nf
+        self.transformation_counts = xforms
+
+        multiplx_fn = functools.partial(ArtistMultiplexer, in_nc, nf)
+        transform_fn = functools.partial(MultiConvBlock, in_nc, int(in_nc * 2), in_nc, kernel_size=3, depth=4, weight_init_factor=.1)
+        self.switch = ConfigurableSwitchComputer(nf, multiplx_fn,
+                                                   pre_transform_block=None, transform_block=transform_fn,
+                                                   attention_norm=True,
+                                                   transform_count=self.transformation_counts, init_temp=init_temperature,
+                                                   add_scalable_noise_to_transforms=False, feed_transforms_into_multiplexer=True,
+                                                   anorm_multiplier=128, post_switch_conv=False)
+        self.switches = [self.switch]
+
+    def forward(self, x, save_attentions=True):
+        # The attention_maps debugger outputs <x>. Save that here.
+        self.lr = x.detach().cpu()
+
+        # If we're not saving attention, we also shouldn't be updating the attention norm. This is because the attention
+        # norm should only be getting updates with new data, not recurrent generator sampling.
+        for sw in self.switches:
+            sw.set_update_attention_norm(save_attentions)
+
+        up = F.interpolate(x, scale_factor=2, mode="bicubic")
+        out, a1, att_logits = self.switch(up, att_in=x, do_checkpointing=True, output_att_logits=True)
+
+        if save_attentions:
+            self.attentions = [a1]
+        return out, att_logits.permute(0,3,1,2)
 
 if __name__ == '__main__':
     tbs = TheBigSwitch(3, 64)
