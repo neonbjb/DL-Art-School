@@ -11,10 +11,10 @@ import torchvision.transforms.functional as F
 from PIL import Image
 from tqdm import tqdm
 
+from models.ExtensibleTrainer import ExtensibleTrainer
 from utils import options as option
 import utils.util as util
 from data import create_dataloader
-from models import create_model
 
 
 class FfmpegBackedVideoDataset(data.Dataset):
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     logger.info('Number of test images in [{:s}]: {:d}'.format(opt['dataset']['name'], len(test_set)))
     test_loaders.append(test_loader)
 
-    model = create_model(opt)
+    model = ExtensibleTrainer(opt)
     test_set_name = test_loader.dataset.opt['name']
     logger.info('\nTesting [{:s}]...'.format(test_set_name))
     test_start_time = time.time()
