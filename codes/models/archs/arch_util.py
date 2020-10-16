@@ -484,3 +484,16 @@ class UpconvBlock(nn.Module):
     def forward(self, x):
         x = F.interpolate(x, scale_factor=2, mode="nearest")
         return self.process(x)
+
+
+# Scales an image up 2x and performs intermediary processing. Designed to be the final block in an SR network.
+class FinalUpsampleBlock2x(nn.Module):
+    def __init__(self, nf, block=ConvGnLelu):
+        super(FinalUpsampleBlock2x, self).__init__()
+        self.chain = nn.Sequential(block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
+                                   UpconvBlock(nf, nf // 2, block=block, norm=False, activation=True, bias=True),
+                                   block(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True),
+                                   block(nf // 2, 3, kernel_size=3, norm=False, activation=False, bias=False))
+
+    def forward(self, x):
+        return self.chain(x)

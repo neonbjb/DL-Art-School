@@ -17,6 +17,7 @@ from collections import OrderedDict
 import torchvision
 import functools
 
+from models.archs.ChainedEmbeddingGen import ChainedEmbeddingGen
 
 logger = logging.getLogger('base')
 
@@ -121,6 +122,8 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == 'artist':
         netG = SwitchedGen_arch.ArtistGen(opt_net['in_nc'], nf=opt_net['nf'], xforms=opt_net['num_transforms'], upscale=opt_net['scale'],
                                              init_temperature=opt_net['temperature'])
+    elif which_model == 'chained_gen':
+        netG = ChainedEmbeddingGen()
     elif which_model == "flownet2":
         from models.flownet2.models import FlowNet2
         ld = torch.load(opt_net['load_path'])
