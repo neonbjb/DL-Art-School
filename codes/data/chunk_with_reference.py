@@ -8,6 +8,11 @@ class ChunkWithReference:
     def __init__(self, opt, path):
         self.path = path.path
         self.tiles, _ = util.get_image_paths('img', self.path)
+        if 'ignore_first' in opt.keys():
+            self.ignore = opt['ignore_first']
+            self.tiles = self.tiles[self.ignore:]
+        else:
+            self.ignore = 0
 
     # Odd failures occur at times. Rather than crashing, report the error and just return zeros.
     def read_image_or_get_zero(self, img_path):
@@ -17,7 +22,7 @@ class ChunkWithReference:
         return img
 
     def __getitem__(self, item):
-        centers = torch.load(osp.join(self.path, "centers.pt"))
+        centers = torch.load(osp.join(self.path, "centers.pt"))[self.ignore:]
         ref = self.read_image_or_get_zero(osp.join(self.path, "ref.jpg"))
         tile = self.read_image_or_get_zero(self.tiles[item])
         tile_id = int(osp.splitext(osp.basename(self.tiles[item]))[0])
