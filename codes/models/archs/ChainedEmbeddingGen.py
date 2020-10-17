@@ -3,7 +3,7 @@ from torch import nn
 
 from models.archs.SPSR_arch import ImageGradientNoPadding
 from models.archs.arch_util import ConvGnLelu, ExpansionBlock2, ConvGnSilu, ConjoinBlock, MultiConvBlock, \
-    FinalUpsampleBlock2x
+    FinalUpsampleBlock2x, ReferenceJoinBlock
 from models.archs.spinenet_arch import SpineNet
 from utils.util import checkpoint
 
@@ -69,10 +69,10 @@ class ChainedEmbeddingGenWithStructure(nn.Module):
     def __init__(self, depth=10, recurrent=False):
         super(ChainedEmbeddingGenWithStructure, self).__init__()
         self.recurrent = recurrent
+        self.initial_conv = ConvGnLelu(3, 64, kernel_size=7, bias=True, norm=False, activation=False)
         if recurrent:
-            self.initial_conv_rec = ConvGnLelu(6, 64, kernel_size=7, bias=True, norm=False, activation=False)
-        else:
-            self.initial_conv = ConvGnLelu(3, 64, kernel_size=7, bias=True, norm=False, activation=False)
+            self.recurrent_process = ConvGnLelu(3, 64, kernel_size=3, stride=2, norm=False, bias=True, activation=False)
+            self.recurrent_join = ReferenceJoinBlock(64, residual_weight_init_factor=.01, final_norm=False, kernel_size=1, depth=3, join=False)
         self.spine = SpineNet(arch='49', output_level=[3, 4], double_reduce_early=False)
         self.blocks = nn.ModuleList([BasicEmbeddingPyramid() for i in range(depth)])
         self.structure_joins = nn.ModuleList([ConjoinBlock(64) for i in range(3)])
@@ -83,11 +83,10 @@ class ChainedEmbeddingGenWithStructure(nn.Module):
 
     def forward(self, x, recurrent=None):
         emb = checkpoint(self.spine, x)
+        fea = self.initial_conv(x)
         if self.recurrent:
-            fea = torch.cat([x,recurrent], dim=1)
-            fea = self.initial_conv_rec(x)
-        else:
-            fea = self.initial_conv(x)
+            rec = self.recurrent_process(recurrent)
+            fea, _ = self.recurrent_join(fea, rec)
         grad = fea
         for i, block in enumerate(self.blocks):
             fea = fea + checkpoint(block, fea, *emb)

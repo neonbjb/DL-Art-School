@@ -1,24 +1,24 @@
+import functools
+import logging
+from collections import OrderedDict
+
 import munch
 import torch
-import logging
+import torchvision
 from munch import munchify
-import models.archs.SRResNet_arch as SRResNet_arch
-import models.archs.discriminator_vgg_arch as SRGAN_arch
+
 import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.DiscriminatorResnet_arch_passthrough as DiscriminatorResnet_arch_passthrough
 import models.archs.RRDBNet_arch as RRDBNet_arch
-import models.archs.feature_arch as feature_arch
-import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.SPSR_arch as spsr
+import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.StructuredSwitchedGenerator as ssg
-import models.archs.rcan as rcan
+import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
+import models.archs.discriminator_vgg_arch as SRGAN_arch
+import models.archs.feature_arch as feature_arch
 import models.archs.panet.panet as panet
-from collections import OrderedDict
-import torchvision
-import functools
-
-from models.archs.ChainedEmbeddingGen import ChainedEmbeddingGen, ChainedEmbeddingGenWithStructure, \
-    ChainedEmbeddingGenWithStructureR2
+import models.archs.rcan as rcan
+from models.archs.ChainedEmbeddingGen import ChainedEmbeddingGen, ChainedEmbeddingGenWithStructure
 
 logger = logging.getLogger('base')
 
