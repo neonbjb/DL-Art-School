@@ -93,12 +93,8 @@ SPINENET_BLOCK_SPECS = [
     (5, BasicBlock, (6, 7), False),
     (7, BasicBlock, (6, 8), False),
     (5, Bottleneck, (8, 9), False),
-    (5, Bottleneck, (8, 10), False),
     (4, Bottleneck, (5, 10), True),
     (3, Bottleneck, (4, 10), True),
-    (5, Bottleneck, (7, 12), True),
-    (7, Bottleneck, (5, 14), True),
-    (6, Bottleneck, (12, 14), True),
 ]
 
 SCALING_MAP = {
