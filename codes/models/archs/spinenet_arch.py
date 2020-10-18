@@ -245,12 +245,7 @@ class SpineNet(nn.Module):
                 stride=2)
             self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         else:
-            self.conv1 = ConvGnSilu(
-                in_channels,
-                64,
-                kernel_size=7,
-                stride=1)
-            self.maxpool = None
+            self.conv1 = None
 
         # Build the initial level 2 blocks.
         self.init_block1 = make_res_layer(
@@ -311,8 +306,8 @@ class SpineNet(nn.Module):
             std = torch.Tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(input.device)
             input = (input - mean) / std
 
-        feat = self.conv1(input)
-        if self.maxpool:
+        if self.conv1 is not None:
+            feat = self.conv1(input)
             feat = self.maxpool(feat)
         feat1 = self.init_block1(feat)
         feat2 = self.init_block2(feat1)

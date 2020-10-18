@@ -58,8 +58,8 @@ class ChainedEmbeddingGen(nn.Module):
         self.upsample = FinalUpsampleBlock2x(64)
 
     def forward(self, x):
-        emb = checkpoint(self.spine, x)
         fea = self.initial_conv(x)
+        emb = checkpoint(self.spine, fea)
         for block in self.blocks:
             fea = fea + checkpoint(block, fea, *emb)
         return checkpoint(self.upsample, fea),
@@ -82,11 +82,11 @@ class ChainedEmbeddingGenWithStructure(nn.Module):
         self.upsample = FinalUpsampleBlock2x(64)
 
     def forward(self, x, recurrent=None):
-        emb = checkpoint(self.spine, x)
         fea = self.initial_conv(x)
         if self.recurrent:
             rec = self.recurrent_process(recurrent)
             fea, _ = self.recurrent_join(fea, rec)
+        emb = checkpoint(self.spine, fea)
         grad = fea
         for i, block in enumerate(self.blocks):
             fea = fea + checkpoint(block, fea, *emb)

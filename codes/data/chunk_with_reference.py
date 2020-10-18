@@ -32,7 +32,7 @@ class ChunkWithReference:
         elif self.strict:
             raise FileNotFoundError(tile_id, self.tiles[item])
         else:
-            center = torch.tensor([128,128], dtype=torch.long)
+            center = torch.tensor([128, 128], dtype=torch.long)
             tile_width = 256
         mask = np.full(tile.shape[:2] + (1,), fill_value=.1, dtype=tile.dtype)
         mask[center[0] - tile_width // 2:center[0] + tile_width // 2, center[1] - tile_width // 2:center[1] + tile_width // 2] = 1
