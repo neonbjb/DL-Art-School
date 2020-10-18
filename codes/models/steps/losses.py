@@ -169,8 +169,10 @@ class GeneratorGanLoss(ConfigurableLoss):
             if self.detach_real:
                 pred_d_real = pred_d_real.detach()
             pred_g_fake = netD(*fake)
+            d_fake_diff = self.criterion(pred_g_fake - torch.mean(pred_d_real), True)
+            self.metrics.append(("d_fake_diff", torch.mean(d_fake_diff)))
             loss = (self.criterion(pred_d_real - torch.mean(pred_g_fake), False) +
-                    self.criterion(pred_g_fake - torch.mean(pred_d_real), True)) / 2
+                    d_fake_diff) / 2
         else:
             raise NotImplementedError
         if self.min_loss != 0:
@@ -234,10 +236,10 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         if self.min_loss != 0:
             self.loss_rotating_buffer[self.rb_ptr] = loss.item()
             self.rb_ptr = (self.rb_ptr + 1) % self.loss_rotating_buffer.shape[0]
+            self.metrics.append(("loss_counter", self.losses_computed))
             if torch.mean(self.loss_rotating_buffer) < self.min_loss:
                 return 0
             self.losses_computed += 1
-            self.metrics.append(("loss_counter", self.losses_computed))
         return loss
 
 
