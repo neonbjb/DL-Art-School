@@ -5,8 +5,6 @@ import numpy as np
 import cv2
 from PIL import Image
 import data.util as data_util  # noqa: E402
-import lmdb
-import pyarrow
 import torch.utils.data as data
 from tqdm import tqdm
 import torch
@@ -16,7 +14,7 @@ def main():
     mode = 'single'  # single (one input folder) | pair (extract corresponding GT and LR pairs)
     split_img = False
     opt = {}
-    opt['n_thread'] = 0
+    opt['n_thread'] = 2
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
@@ -244,7 +242,7 @@ class TiledDataset(data.Dataset):
 
         h, w, c = img.shape
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < 1024:
+        if min(h,w) < 512:
             return None
         left = 0
         right = w
