@@ -67,10 +67,10 @@ class ProgressiveGeneratorInjector(Injector):
         if not isinstance(inputs, list):
             inputs = [inputs]
         if not isinstance(self.output, list):
-            self.output = [self.output]
+            output = [self.output]
         results = {}   # A list of outputs produced by feeding each progressive lq input into the generator.
         results_hq = []
-        for out_key in self.output:
+        for out_key in output:
             results[out_key] = []
 
         b, f, h, w = lq_inputs[:, 0].shape
