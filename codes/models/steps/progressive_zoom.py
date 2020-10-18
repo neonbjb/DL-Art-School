@@ -64,6 +64,7 @@ class ProgressiveGeneratorInjector(Injector):
         inputs = extract_params_from_state(self.input, state)
         lq_inputs = inputs[self.input_lq_index]
         hq_inputs = state[self.hq_key]
+        output = self.output
         if not isinstance(inputs, list):
             inputs = [inputs]
         if not isinstance(self.output, list):
