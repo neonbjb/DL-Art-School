@@ -95,7 +95,7 @@ class ProgressiveGeneratorInjector(Injector):
                 chain_output.append(recurrent_hq)
                 results_hq.append(hq_inputs[:, link.index])
 
-            if self.env['step'] % 1 == 0:
+            if self.env['step'] % 50 == 0:
                 self.produce_progressive_visual_debugs(chain_input, chain_output, debug_index)
                 debug_index += 1
         results[self.hq_output_key] = results_hq

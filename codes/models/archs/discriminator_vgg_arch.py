@@ -77,7 +77,6 @@ class Discriminator_VGG_128(nn.Module):
         out = self.linear2(fea)
         return out
 
-
 class Discriminator_VGG_128_GN(nn.Module):
     # input_img_factor = multiplier to support images over 128x128. Only certain factors are supported.
     def __init__(self, in_nc, nf, input_img_factor=1):
@@ -108,11 +107,11 @@ class Discriminator_VGG_128_GN(nn.Module):
         self.bn4_1 = nn.GroupNorm(8, nf * 8, affine=True)
         final_nf = nf * 8
 
-        self.linear1 = nn.Linear(int(final_nf * 4 * input_img_factor * 4 * input_img_factor), 100)
-        self.linear2 = nn.Linear(100, 1)
-
         # activation function
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+        self.linear1 = nn.Linear(int(final_nf * 4 * input_img_factor * 4 * input_img_factor), 100)
+        self.linear2 = nn.Linear(100, 1)
 
     def forward(self, x):
         fea = self.lrelu(self.conv0_0(x))
@@ -131,7 +130,63 @@ class Discriminator_VGG_128_GN(nn.Module):
 
         fea = self.lrelu(self.bn4_0(self.conv4_0(fea)))
         fea = self.lrelu(self.bn4_1(self.conv4_1(fea)))
+        
+        fea = fea.contiguous().view(fea.size(0), -1)
+        fea = self.lrelu(self.linear1(fea))
+        out = self.linear2(fea)
+        return out
 
+    
+from utils.util import checkpoint
+class Discriminator_VGG_128_GN_Checkpointed(nn.Module):
+    # input_img_factor = multiplier to support images over 128x128. Only certain factors are supported.
+    def __init__(self, in_nc, nf, input_img_factor=1):
+        super(Discriminator_VGG_128_GN_Checkpointed, self).__init__()
+        # [64, 128, 128]
+        self.conv0_0 = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
+        self.conv0_1 = nn.Conv2d(nf, nf, 4, 2, 1, bias=False)
+        self.bn0_1 = nn.GroupNorm(8, nf, affine=True)
+        # [64, 64, 64]
+        self.conv1_0 = nn.Conv2d(nf, nf * 2, 3, 1, 1, bias=False)
+        self.bn1_0 = nn.GroupNorm(8, nf * 2, affine=True)
+        self.conv1_1 = nn.Conv2d(nf * 2, nf * 2, 4, 2, 1, bias=False)
+        self.bn1_1 = nn.GroupNorm(8, nf * 2, affine=True)
+        # [128, 32, 32]
+        self.conv2_0 = nn.Conv2d(nf * 2, nf * 4, 3, 1, 1, bias=False)
+        self.bn2_0 = nn.GroupNorm(8, nf * 4, affine=True)
+        self.conv2_1 = nn.Conv2d(nf * 4, nf * 4, 4, 2, 1, bias=False)
+        self.bn2_1 = nn.GroupNorm(8, nf * 4, affine=True)
+        # [256, 16, 16]
+        self.conv3_0 = nn.Conv2d(nf * 4, nf * 8, 3, 1, 1, bias=False)
+        self.bn3_0 = nn.GroupNorm(8, nf * 8, affine=True)
+        self.conv3_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
+        self.bn3_1 = nn.GroupNorm(8, nf * 8, affine=True)
+        # [512, 8, 8]
+        self.conv4_0 = nn.Conv2d(nf * 8, nf * 8, 3, 1, 1, bias=False)
+        self.bn4_0 = nn.GroupNorm(8, nf * 8, affine=True)
+        self.conv4_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
+        self.bn4_1 = nn.GroupNorm(8, nf * 8, affine=True)
+        final_nf = nf * 8
+
+        # activation function
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+        self.body = nn.Sequential(self.conv0_0, self.lrelu,
+                                  self.conv0_1, self.bn0_1, self.lrelu,
+                                  self.conv1_0, self.bn1_0, self.lrelu,
+                                  self.conv1_1, self.bn1_1, self.lrelu,
+                                  self.conv2_0, self.bn2_0, self.lrelu,
+                                  self.conv2_1, self.bn2_1, self.lrelu,
+                                  self.conv3_0, self.bn3_0, self.lrelu,
+                                  self.conv3_1, self.bn3_1, self.lrelu,
+                                  self.conv4_0, self.bn4_0, self.lrelu,
+                                  self.conv4_1, self.bn4_1, self.lrelu)
+
+        self.linear1 = nn.Linear(int(final_nf * 4 * input_img_factor * 4 * input_img_factor), 100)
+        self.linear2 = nn.Linear(100, 1)
+
+    def forward(self, x):
+        fea = checkpoint(self.body, x)
         fea = fea.contiguous().view(fea.size(0), -1)
         fea = self.lrelu(self.linear1(fea))
         out = self.linear2(fea)

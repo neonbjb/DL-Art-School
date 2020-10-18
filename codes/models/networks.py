@@ -171,6 +171,8 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
         netD = SRGAN_arch.Discriminator_VGG_128_GN(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
         if wrap:
             netD = GradDiscWrapper(netD)
+    elif which_model == 'discriminator_vgg_128_gn_checkpointed':
+        netD = SRGAN_arch.Discriminator_VGG_128_GN_Checkpointed(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
     elif which_model == 'discriminator_resnet':
         netD = DiscriminatorResnet_arch.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
     elif which_model == 'discriminator_resnet_50':
