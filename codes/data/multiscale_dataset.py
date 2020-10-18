@@ -19,7 +19,7 @@ class MultiScaleDataset(data.Dataset):
         self.num_scales = self.opt['num_scales']
         self.hq_size_cap = self.tile_size * 2 ** self.num_scales
         self.scale = self.opt['scale']
-        self.paths_hq, self.sizes_hq = util.get_image_paths(self.data_type, opt['dataroot'], [1])
+        self.paths_hq, self.sizes_hq = util.get_image_paths(self.data_type, opt['paths'], [1])
 
     # Selects the smallest dimension from the image and crops it randomly so the other dimension matches. The cropping
     # offset from center is chosen on a normal probability curve.
@@ -43,7 +43,7 @@ class MultiScaleDataset(data.Dataset):
         if depth >= self.num_scales:
             return
         patch_size = self.hq_size_cap // (2 ** depth)
-        # First pull the four sub-patches.
+        # First pull the four sub-patches. Important: if this is changed, be sure to edit build_multiscale_patch_index_map() below.
         patches = [input_img[:patch_size, :patch_size],
                    input_img[:patch_size, patch_size:],
                    input_img[patch_size:, :patch_size],
@@ -67,19 +67,28 @@ class MultiScaleDataset(data.Dataset):
         if patches_hq[0].shape[2] == 3:
             patches_hq = [cv2.cvtColor(p, cv2.COLOR_BGR2RGB) for p in patches_hq]
         patches_hq = [torch.from_numpy(np.ascontiguousarray(np.transpose(p, (2, 0, 1)))).float() for p in patches_hq]
+        patches_hq = torch.stack(patches_hq, dim=0)
         patches_lq = [torch.nn.functional.interpolate(p.unsqueeze(0), scale_factor=1/self.scale, mode='bilinear').squeeze() for p in patches_hq]
+        patches_lq = torch.stack(patches_lq, dim=0)
 
-        d = {'LQ': patches_lq, 'HQ': patches_hq, 'GT_path': full_path}
+        d = {'LQ': patches_lq, 'GT': patches_hq, 'GT_path': full_path}
         return d
 
     def __len__(self):
         return len(self.paths_hq)
 
 class MultiscaleTreeNode:
-    def __init__(self, index, parent):
+    def __init__(self, index, parent, i):
         self.index = index
         self.parent = parent
         self.children = []
+
+        # These represent the offset from left and top of the image for the individual patch as a proportion of the entire image.
+        # Tightly tied to the implementation above for the order in which the patches are pulled from the base image.
+        lefts = [0, .5, 0, .5]
+        tops = [0, 0, .5, .5]
+        self.left = lefts[i]
+        self.top = tops[i]
 
     def add_child(self, child):
         self.children.append(child)
@@ -89,14 +98,14 @@ class MultiscaleTreeNode:
 def build_multiscale_patch_index_map(depth):
     if depth < 0:
         return
-    root = MultiscaleTreeNode(0, None)
+    root = MultiscaleTreeNode(0, None, 0)
     leaves = []
     _build_multiscale_patch_index_map(depth-1, 1, root, leaves)
     return leaves
 
 
 def _build_multiscale_patch_index_map(depth, ind, node, leaves):
-    subnodes = [node.add_child(MultiscaleTreeNode(ind+i, node)) for i in range(4)]
+    subnodes = [node.add_child(MultiscaleTreeNode(ind+i, node, i)) for i in range(4)]
     ind += 4
     if depth == 1:
         leaves.extend(subnodes)
@@ -109,7 +118,7 @@ def _build_multiscale_patch_index_map(depth, ind, node, leaves):
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'dataroot': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\images'],
+        'dataroot': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\images-half'],
         'num_scales': 4,
         'scale': 2,
         'hq_tile_size': 128

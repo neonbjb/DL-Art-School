@@ -1,7 +1,6 @@
 import torch.nn
 from models.archs.SPSR_arch import ImageGradientNoPadding
 from utils.weight_scheduler import get_scheduler_for_opt
-#from models.steps.recursive_gen_injectors import ImageFlowInjector
 from models.steps.losses import extract_params_from_state
 
 # Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
@@ -10,6 +9,9 @@ def create_injector(opt_inject, env):
     if 'teco_' in type:
         from models.steps.tecogan_losses import create_teco_injector
         return create_teco_injector(opt_inject, env)
+    elif 'progressive_' in type:
+        from models.steps.progressive_zoom import create_progressive_zoom_injector
+        return create_progressive_zoom_injector(opt_inject, env)
     elif type == 'generator':
         return ImageGeneratorInjector(opt_inject, env)
     elif type == 'discriminator':

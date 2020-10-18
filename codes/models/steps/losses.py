@@ -37,7 +37,7 @@ def create_loss(opt_loss, env):
 
 
 # Converts params to a list of tensors extracted from state. Works with list/tuple params as well as scalars.
-def extract_params_from_state(params, state, root=True):
+def extract_params_from_state(params: object, state: object, root: object = True) -> object:
     if isinstance(params, list) or isinstance(params, tuple):
         p = [extract_params_from_state(r, state, False) for r in params]
     elif isinstance(params, str):

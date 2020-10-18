@@ -126,9 +126,10 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == 'chained_gen':
         netG = ChainedEmbeddingGen(depth=opt_net['depth'])
     elif which_model == 'chained_gen_structured':
-        netG = ChainedEmbeddingGenWithStructure(depth=opt_net['depth'], recurrent=opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False)
-    elif which_model == 'chained_gen_structuredr2':
-        netG = ChainedEmbeddingGenWithStructureR2(depth=opt_net['depth'])
+        rec = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
+        recnf = opt_net['recurrent_nf'] if 'recurrent_nf' in opt_net.keys() else 3
+        recstd = opt_net['recurrent_stride'] if 'recurrent_stride' in opt_net.keys() else 2
+        netG = ChainedEmbeddingGenWithStructure(depth=opt_net['depth'], recurrent=rec, recurrent_nf=recnf, recurrent_stride=recstd)
     elif which_model == "flownet2":
         from models.flownet2.models import FlowNet2
         ld = torch.load(opt_net['load_path'])

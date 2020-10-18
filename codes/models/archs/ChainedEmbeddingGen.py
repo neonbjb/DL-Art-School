@@ -66,12 +66,12 @@ class ChainedEmbeddingGen(nn.Module):
 
 
 class ChainedEmbeddingGenWithStructure(nn.Module):
-    def __init__(self, depth=10, recurrent=False):
+    def __init__(self, depth=10, recurrent=False, recurrent_nf=3, recurrent_stride=2):
         super(ChainedEmbeddingGenWithStructure, self).__init__()
         self.recurrent = recurrent
         self.initial_conv = ConvGnLelu(3, 64, kernel_size=7, bias=True, norm=False, activation=False)
         if recurrent:
-            self.recurrent_process = ConvGnLelu(3, 64, kernel_size=3, stride=2, norm=False, bias=True, activation=False)
+            self.recurrent_process = ConvGnLelu(recurrent_nf, 64, kernel_size=3, stride=recurrent_stride, norm=False, bias=True, activation=False)
             self.recurrent_join = ReferenceJoinBlock(64, residual_weight_init_factor=.01, final_norm=False, kernel_size=1, depth=3, join=False)
         self.spine = SpineNet(arch='49', output_level=[3, 4], double_reduce_early=False)
         self.blocks = nn.ModuleList([BasicEmbeddingPyramid() for i in range(depth)])
@@ -80,12 +80,16 @@ class ChainedEmbeddingGenWithStructure(nn.Module):
         self.structure_upsample = FinalUpsampleBlock2x(64)
         self.grad_extract = ImageGradientNoPadding()
         self.upsample = FinalUpsampleBlock2x(64)
+        self.ref_join_std = 0
 
     def forward(self, x, recurrent=None):
         fea = self.initial_conv(x)
         if self.recurrent:
+            if recurrent is None:
+                recurrent = torch.zeros_like(fea)
             rec = self.recurrent_process(recurrent)
-            fea, _ = self.recurrent_join(fea, rec)
+            fea, recstd = self.recurrent_join(fea, rec)
+            self.ref_join_std = recstd.item()
         emb = checkpoint(self.spine, fea)
         grad = fea
         for i, block in enumerate(self.blocks):
@@ -94,4 +98,7 @@ class ChainedEmbeddingGenWithStructure(nn.Module):
                 structure_br = checkpoint(self.structure_joins[i], grad, fea)
                 grad = grad + checkpoint(self.structure_blocks[i], structure_br)
         out = checkpoint(self.upsample, fea)
-        return out, self.grad_extract(checkpoint(self.structure_upsample, grad)), self.grad_extract(out)
+        return out, self.grad_extract(checkpoint(self.structure_upsample, grad)), self.grad_extract(out), fea
+
+    def get_debug_values(self, step, net_name):
+        return { 'ref_join_std': self.ref_join_std }
