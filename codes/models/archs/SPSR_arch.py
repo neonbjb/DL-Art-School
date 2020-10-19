@@ -745,7 +745,7 @@ class SwitchedSpsr(nn.Module):
                                          weight_init_factor=.1)
 
         # Feature branch
-        self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False)
+        self.model_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False)
         self.sw1 = ConfigurableSwitchComputer(transformation_filters, multiplx_fn,
                                                    pre_transform_block=pretransform_fn, transform_block=transform_fn,
                                                    attention_norm=True,
@@ -761,7 +761,7 @@ class SwitchedSpsr(nn.Module):
 
         # Grad branch
         self.get_g_nopadding = ImageGradientNoPadding()
-        self.b_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=7, norm=False, activation=False, bias=False)
+        self.b_fea_conv = ConvGnLelu(in_nc, nf, kernel_size=3, norm=False, activation=False, bias=False)
         mplex_grad = functools.partial(ConvBasisMultiplexer, nf * 2, nf * 2, switch_reductions,
                                         switch_processing_layers, self.transformation_counts // 2, use_exp2=True)
         self.sw_grad = ConfigurableSwitchComputer(transformation_filters, mplex_grad,
