@@ -30,7 +30,7 @@ def init_dist(backend='nccl', **kwargs):
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_prog_imgset_chained.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_spsr7.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
@@ -185,10 +185,6 @@ def main():
                 print("Data fetch: %f" % (time() - _t))
                 _t = time()
 
-            #tb_logger.add_graph(model.netsG['generator'].module, [train_data['LQ'].to('cuda'),
-            #                                                      train_data['lq_fullsize_ref'].float().to('cuda'),
-            #                                                      train_data['lq_center'].to('cuda')])
-
             current_step += 1
             if current_step > total_iters:
                 break
@@ -241,9 +237,6 @@ def main():
             #### validation
             if opt['datasets'].get('val', None) and current_step % opt['train']['val_freq'] == 0:
                 if opt['model'] in ['sr', 'srgan', 'corruptgan', 'spsrgan', 'extensibletrainer'] and rank <= 0:  # image restoration validation
-                    model.force_restore_swapout()
-                    val_batch_sz = 1 if 'batch_size' not in opt['datasets']['val'].keys() else opt['datasets']['val']['batch_size']
-                    # does not support multi-GPU validation
                     avg_psnr = 0.
                     avg_fea_loss = 0.
                     idx = 0
@@ -263,23 +256,22 @@ def main():
                             if visuals is None:
                                 continue
 
+                            if colab_mode:
+                                colab_imgs_to_copy.append(save_img_path)
+
+                            # calculate PSNR
                             sr_img = util.tensor2img(visuals['rlt'][b])  # uint8
-                            #gt_img = util.tensor2img(visuals['GT'][b])  # uint8
+                            gt_img = util.tensor2img(visuals['GT'][b])  # uint8
+                            sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
+                            avg_psnr += util.calculate_psnr(sr_img, gt_img)
+
+                            # calculate fea loss
+                            avg_fea_loss += model.compute_fea_loss(visuals['rlt'][b], visuals['GT'][b])
 
                             # Save SR images for reference
                             img_base_name = '{:s}_{:d}.png'.format(img_name, current_step)
                             save_img_path = os.path.join(img_dir, img_base_name)
                             util.save_img(sr_img, save_img_path)
-                            if colab_mode:
-                                colab_imgs_to_copy.append(save_img_path)
-
-                            # calculate PSNR (Naw - don't do that. PSNR sucks)
-                            #sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
-                            #avg_psnr += util.calculate_psnr(sr_img, gt_img)
-                            #pbar.update('Test {}'.format(img_name))
-
-                            # calculate fea loss
-                            avg_fea_loss += model.compute_fea_loss(visuals['rlt'][b], visuals['GT'][b])
 
                     if colab_mode:
                         util.copy_files_to_server(opt['ssh_server'], opt['ssh_username'], opt['ssh_password'],
@@ -293,7 +285,7 @@ def main():
                     logger.info('# Validation # PSNR: {:.4e} Fea: {:.4e}'.format(avg_psnr, avg_fea_loss))
                     # tensorboard logger
                     if opt['use_tb_logger'] and 'debug' not in opt['name'] and rank <= 0:
-                        #tb_logger.add_scalar('val_psnr', avg_psnr, current_step)
+                        tb_logger.add_scalar('val_psnr', avg_psnr, current_step)
                         tb_logger.add_scalar('val_fea', avg_fea_loss, current_step)
 
     if rank <= 0:

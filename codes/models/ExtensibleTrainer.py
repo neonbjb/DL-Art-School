@@ -10,6 +10,7 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 import models.lr_scheduler as lr_scheduler
 import models.networks as networks
 from models.base_model import BaseModel
+from models.steps.injectors import create_injector
 from models.steps.steps import ConfigurableStep
 from models.experiments.experiments import get_experiment_for_name
 import torchvision.utils as utils
@@ -155,7 +156,7 @@ class ExtensibleTrainer(BaseModel):
             o.zero_grad()
         torch.cuda.empty_cache()
 
-        self.lq = torch.chunk(data['LQ'].to(self.device), chunks=self.mega_batch_factor, dim=0)
+        self.lq = [t.to(self.device) for t in torch.chunk(data['LQ'], chunks=self.mega_batch_factor, dim=0)]
         if need_GT:
             self.hq = [t.to(self.device) for t in torch.chunk(data['GT'], chunks=self.mega_batch_factor, dim=0)]
             input_ref = data['ref'] if 'ref' in data.keys() else data['GT']
@@ -260,19 +261,29 @@ class ExtensibleTrainer(BaseModel):
             net.eval()
 
         with torch.no_grad():
-            # Iterate through the steps, performing them one at a time.
-            state = self.dstate
-            for step_num, s in enumerate(self.steps):
-                ns = s.do_forward_backward(state, 0, step_num, train=False)
-                for k, v in ns.items():
-                    state[k] = [v]
+            # This can happen one of two ways: Either a 'validation injector' is provided, in which case we run that.
+            # Or, we run the entire chain of steps in "train" mode and use eval.output_state.
+            if 'injector' in self.opt['eval'].keys():
+                # Need to move from mega_batch mode to batch mode (remove chunks)
+                state = {}
+                for k, v in self.dstate.items():
+                    state[k] = v[0]
+                inj = create_injector(self.opt['eval']['injector'], self.env)
+                state.update(inj(state))
+            else:
+                # Iterate through the steps, performing them one at a time.
+                state = self.dstate
+                for step_num, s in enumerate(self.steps):
+                    ns = s.do_forward_backward(state, 0, step_num, train=False)
+                    for k, v in ns.items():
+                        state[k] = [v]
 
             self.eval_state = {}
             for k, v in state.items():
-                self.eval_state[k] = [s.detach().cpu() if isinstance(s, torch.Tensor) else s for s in v]
-
-            # For backwards compatibility..
-            self.fake_H = self.eval_state[self.opt['eval']['output_state']][0].float().cpu()
+                if isinstance(v, list):
+                    self.eval_state[k] = [s.detach().cpu() if isinstance(s, torch.Tensor) else s for s in v]
+                else:
+                    self.eval_state[k] = [v.detach().cpu() if isinstance(v, torch.Tensor) else v]
 
         for net in self.netsG.values():
             net.train()
