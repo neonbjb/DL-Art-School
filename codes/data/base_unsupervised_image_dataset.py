@@ -51,6 +51,12 @@ class BaseUnsupervisedImageDataset(data.Dataset):
             start += len(c)
         self.len = start
 
+    def get_paths(self):
+        paths = []
+        for c in self.chunks:
+            paths.extend(c.tiles)
+        return paths
+        
     # Utility method for translating a point when the dimensions of an image change.
     def resize_point(self, point, orig_dim, new_dim):
         oh, ow = orig_dim
