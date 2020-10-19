@@ -18,6 +18,14 @@ class CharbonnierLoss(nn.Module):
         return loss
 
 
+class ZeroSpreadLoss(nn.Module):
+    def __init__(self):
+        super(ZeroSpreadLoss, self).__init__()
+
+    def forward(self, x, _):
+        return 2 * torch.nn.functional.sigmoid(1 / torch.abs(torch.mean(x))) - 1
+
+
 # Define GAN loss: [vanilla | lsgan]
 class GANLoss(nn.Module):
     def __init__(self, gan_type, real_label_val=1.0, fake_label_val=0.0):
@@ -30,6 +38,8 @@ class GANLoss(nn.Module):
             self.loss = nn.BCEWithLogitsLoss()
         elif self.gan_type == 'lsgan':
             self.loss = nn.MSELoss()
+        elif self.gan_type == 'max_spread':
+            self.loss = ZeroSpreadLoss()
         else:
             raise NotImplementedError('GAN type [{:s}] is not found'.format(self.gan_type))
 
