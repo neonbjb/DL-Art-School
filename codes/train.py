@@ -170,6 +170,8 @@ def main():
     else:
         current_step = -1 if 'start_step' not in opt.keys() else opt['start_step']
         start_epoch = 0
+    if 'force_start_step' in opt.keys():
+        current_step = opt['force_start_step']
 
     #### training
     logger.info('Start training from epoch: {:d}, iter: {:d}'.format(start_epoch, current_step))
