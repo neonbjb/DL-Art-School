@@ -21,8 +21,8 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
     if mode == 'single':
         full_multiplier = .25
-        opt['input_folder'] = 'F:\\4k6k\\datasets\\images\\goodeats\\hq\\new_season\\lr_hr_enc\\lr\\images'
-        opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\goodeats\\hq\\new_season\\lr_hr_enc\\lr\\images_tiled'
+        opt['input_folder'] = 'F:\\4k6k\\datasets\\images\\fullvideo\\full_images'
+        opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\fullvideo\\256_tiled'
         opt['crop_sz'] = int(256 * full_multiplier) # the size of each sub-image
         opt['step'] = int(128 * full_multiplier)  # step of the sliding crop window
         opt['thres_sz'] = int(64 * full_multiplier)  # size threshold
