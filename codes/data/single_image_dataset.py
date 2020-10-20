@@ -1,3 +1,4 @@
+import random
 from bisect import bisect_left
 import numpy as np
 import torch
@@ -43,14 +44,14 @@ class SingleImageDataset(BaseUnsupervisedImageDataset):
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\images\\flickr\\testbed'],
+        'paths': ['F:\\4k6k\\datasets\\images\\mi1_256'],
         'weights': [1],
         'target_size': 128,
         'force_multiple': 32,
         'scale': 2,
         'eval': False,
-        'fixed_corruptions': ['jpeg'],
-        'random_corruptions': ['color_quantization', 'gaussian_blur', 'motion_blur', 'smooth_blur', 'noise', 'saturation'],
+        'fixed_corruptions': ['jpeg-broad'],
+        'random_corruptions': ['noise-5', 'none'],
         'num_corrupts_per_image': 1
     }
 
@@ -58,9 +59,9 @@ if __name__ == '__main__':
     import os
     os.makedirs("debug", exist_ok=True)
     for i in range(0, len(ds)):
-        o = ds[i]
+        o = ds[random.randint(0, len(ds))]
         for k, v in o.items():
-            if 'path' not in k and 'center' not in k:
+            if 'LQ' in k and 'path' not in k and 'center' not in k:
                 #if 'full' in k:
                     #masked = v[:3, :, :] * v[3]
                     #torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_%s_masked.png" % (i, k))

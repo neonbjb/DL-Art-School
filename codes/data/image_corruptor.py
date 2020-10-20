@@ -29,16 +29,17 @@ class ImageCorruptor:
         rand_int_a = random.randint(1, 999999)
 
         corrupted_imgs = []
+        applied_augs = augmentations + self.fixed_corruptions
         for img in imgs:
             for aug in augmentations:
-                img = self.apply_corruption(img, aug, rand_int_a)
+                img = self.apply_corruption(img, aug, rand_int_a, applied_augs)
             for aug in self.fixed_corruptions:
-                img = self.apply_corruption(img, aug, rand_int_f)
+                img = self.apply_corruption(img, aug, rand_int_f, applied_augs)
             corrupted_imgs.append(img)
 
         return corrupted_imgs
 
-    def apply_corruption(self, img, aug, rand_int):
+    def apply_corruption(self, img, aug, rand_int, applied_augmentations):
         if 'color_quantization' in aug:
             # Color quantization
             quant_div = 2 ** ((rand_int % 3) + 2)
@@ -89,28 +90,31 @@ class ImageCorruptor:
                 noise_intensity = (rand_int % 4 + 2) / 255.0  # Between 1-4
             img += np.random.randn(*img.shape) * noise_intensity
         elif 'jpeg' in aug:
-            if aug == 'jpeg':
-                lo=10
-                range=20
-            elif aug == 'jpeg-medium':
-                lo=23
-                range=25
-            elif aug == 'jpeg-broad':
-                lo=15
-                range=60
-            # JPEG compression
-            qf = (rand_int % range + lo)
-            # cv2's jpeg compression is "odd". It introduces artifacts. Use PIL instead.
-            img = (img * 255).astype(np.uint8)
-            img = Image.fromarray(img)
-            buffer = BytesIO()
-            img.save(buffer, "JPEG", quality=qf, optimice=True)
-            buffer.seek(0)
-            jpeg_img_bytes = np.asarray(bytearray(buffer.read()), dtype="uint8")
-            img = read_img("buffer", jpeg_img_bytes, rgb=True)
+            if 'noise' not in applied_augmentations and 'noise-5' not in applied_augmentations:
+                if aug == 'jpeg':
+                    lo=10
+                    range=20
+                elif aug == 'jpeg-medium':
+                    lo=23
+                    range=25
+                elif aug == 'jpeg-broad':
+                    lo=15
+                    range=60
+                # JPEG compression
+                qf = (rand_int % range + lo)
+                # cv2's jpeg compression is "odd". It introduces artifacts. Use PIL instead.
+                img = (img * 255).astype(np.uint8)
+                img = Image.fromarray(img)
+                buffer = BytesIO()
+                img.save(buffer, "JPEG", quality=qf, optimize=True)
+                buffer.seek(0)
+                jpeg_img_bytes = np.asarray(bytearray(buffer.read()), dtype="uint8")
+                img = read_img("buffer", jpeg_img_bytes, rgb=True)
         elif 'saturation' in aug:
             # Lightening / saturation
             saturation = float(rand_int % 10) * .03
             img = np.clip(img + saturation, a_max=1, a_min=0)
+        elif 'none' not in aug:
+            raise NotImplementedError("Augmentation doesn't exist")
 
         return img
