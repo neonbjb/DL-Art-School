@@ -242,7 +242,7 @@ class TiledDataset(data.Dataset):
 
         h, w, c = img.shape
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < 512:
+        if min(h,w) < 1024:
             return None
         left = 0
         right = w
