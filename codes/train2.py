@@ -204,7 +204,7 @@ def main():
                 _t = time()
 
             #### log
-            if current_step % opt['logger']['print_freq'] == 0:
+            if current_step % opt['logger']['print_freq'] == 0 and rank <= 0:
                 logs = model.get_current_log(current_step)
                 message = '[epoch:{:3d}, iter:{:8,d}, lr:('.format(epoch, current_step)
                 for v in model.get_current_learning_rate():
@@ -212,16 +212,15 @@ def main():
                 message += ')] '
                 for k, v in logs.items():
                     if 'histogram' in k:
-                        if rank <= 0:
-                            tb_logger.add_histogram(k, v, current_step)
+                        tb_logger.add_histogram(k, v, current_step)
+                    elif isinstance(v,  dict):
+                        tb_logger.add_scalars(k, v, current_step)
                     else:
                         message += '{:s}: {:.4e} '.format(k, v)
                         # tensorboard logger
                         if opt['use_tb_logger'] and 'debug' not in opt['name']:
-                            if rank <= 0:
                                 tb_logger.add_scalar(k, v, current_step)
-                if rank <= 0:
-                    logger.info(message)
+                logger.info(message)
 
             #### save models and training states
             if current_step % opt['logger']['save_checkpoint_freq'] == 0:
