@@ -1,3 +1,5 @@
+from torch.cuda.amp import autocast
+
 from models.steps.losses import ConfigurableLoss, GANLoss, extract_params_from_state, get_basic_criterion_for_name
 from models.flownet2.networks.resample2d_package.resample2d import Resample2d
 from models.steps.injectors import Injector
@@ -24,10 +26,10 @@ def create_teco_injector(opt, env):
         return FlowAdjustment(opt, env)
     return None
 
-def create_teco_discriminator_sextuplet(input_list, lr_imgs, scale, index, flow_gen, resampler, margin):
+def create_teco_discriminator_sextuplet(input_list, lr_imgs, scale, index, flow_gen, resampler, margin, fp16):
     triplet = input_list[:, index:index+3]
     # Flow is interpreted from the LR images so that the generator cannot learn to manipulate it.
-    with torch.no_grad():
+    with torch.no_grad() and autocast(enabled=fp16):
         first_flow = flow_gen(torch.stack([triplet[:,1], triplet[:,0]], dim=2).float())
         #first_flow = F.interpolate(first_flow, scale_factor=scale, mode='bicubic')
         last_flow = flow_gen(torch.stack([triplet[:,1], triplet[:,2]], dim=2).float())
@@ -99,14 +101,18 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                 with torch.no_grad():
                     reduced_recurrent = F.interpolate(recurrent_input, scale_factor=1/self.scale, mode='bicubic')
                     flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2)
-                    flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
+                    with autocast(enabled=self.env['opt']['fp16']):
+                        flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
                     # Resample does not work in FP16.
                     recurrent_input = self.resample(recurrent_input.float(), flowfield.float())
             input[self.recurrent_index] = recurrent_input
             if self.env['step'] % 50 == 0:
                 self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
                 debug_index += 1
-            gen_out = gen(*input)
+
+            with autocast(enabled=self.env['opt']['fp16']):
+                gen_out = gen(*input)
+
             if isinstance(gen_out, torch.Tensor):
                 gen_out = [gen_out]
             for i, out_key in enumerate(self.output):
@@ -121,14 +127,18 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                 with torch.no_grad():
                     reduced_recurrent = F.interpolate(recurrent_input, scale_factor=1 / self.scale, mode='bicubic')
                     flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2)
-                    flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
+                    with autocast(enabled=self.env['opt']['fp16']):
+                        flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
                     recurrent_input = self.resample(recurrent_input.float(), flowfield.float())
                 input[self.recurrent_index
                 ] = recurrent_input
                 if self.env['step'] % 50 == 0:
                     self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
                     debug_index += 1
-                gen_out = gen(*input)
+
+                with autocast(enabled=self.env['opt']['fp16']):
+                    gen_out = gen(*input)
+
                 if isinstance(gen_out, torch.Tensor):
                     gen_out = [gen_out]
                 for i, out_key in enumerate(self.output):
@@ -192,6 +202,7 @@ class TecoGanLoss(ConfigurableLoss):
         self.margin = opt['margin']  # Per the tecogan paper, the GAN loss only pays attention to an inner part of the image with the margin removed, to get rid of artifacts resulting from flow errors.
 
     def forward(self, _, state):
+        fp16 = self.env['opt']['fp16']
         net = self.env['discriminators'][self.opt['discriminator']]
         flow_gen = self.env['generators'][self.image_flow_generator]
         real = state[self.opt['real']]
@@ -200,10 +211,11 @@ class TecoGanLoss(ConfigurableLoss):
         lr = state[self.opt['lr_inputs']]
         l_total = 0
         for i in range(sequence_len - 2):
-            real_sext = create_teco_discriminator_sextuplet(real, lr, self.scale, i, flow_gen, self.resampler, self.margin)
-            fake_sext = create_teco_discriminator_sextuplet(fake, lr, self.scale, i, flow_gen, self.resampler, self.margin)
-            d_fake = net(fake_sext)
-            d_real = net(real_sext)
+            real_sext = create_teco_discriminator_sextuplet(real, lr, self.scale, i, flow_gen, self.resampler, self.margin, fp16)
+            fake_sext = create_teco_discriminator_sextuplet(fake, lr, self.scale, i, flow_gen, self.resampler, self.margin, fp16)
+            with autocast(enabled=fp16):
+                d_fake = net(fake_sext)
+                d_real = net(real_sext)
             self.metrics.append(("d_fake", torch.mean(d_fake)))
             self.metrics.append(("d_real", torch.mean(d_real)))
 

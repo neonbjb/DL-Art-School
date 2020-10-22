@@ -1,4 +1,6 @@
 import torch.nn
+from torch.cuda.amp import autocast
+
 from models.archs.SPSR_arch import ImageGradientNoPadding
 from utils.weight_scheduler import get_scheduler_for_opt
 from models.steps.losses import extract_params_from_state
@@ -65,11 +67,12 @@ class ImageGeneratorInjector(Injector):
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
-        if isinstance(self.input, list):
-            params = extract_params_from_state(self.input, state)
-            results = gen(*params)
-        else:
-            results = gen(state[self.input])
+        with autocast(enabled=self.env['opt']['fp16']):
+            if isinstance(self.input, list):
+                params = extract_params_from_state(self.input, state)
+                results = gen(*params)
+            else:
+                results = gen(state[self.input])
         new_state = {}
         if isinstance(self.output, list):
             # Only dereference tuples or lists, not tensors.

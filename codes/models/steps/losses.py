@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch.cuda.amp import autocast
+
 from models.networks import define_F
 from models.loss import GANLoss
 import random
@@ -164,20 +166,21 @@ class GeneratorGanLoss(ConfigurableLoss):
                     nfake.append(fake[i])
             real = nreal
             fake = nfake
-        if self.opt['gan_type'] in ['gan', 'pixgan', 'pixgan_fea']:
-            pred_g_fake = netD(*fake)
-            loss = self.criterion(pred_g_fake, True)
-        elif self.opt['gan_type'] == 'ragan':
-            pred_d_real = netD(*real)
-            if self.detach_real:
-                pred_d_real = pred_d_real.detach()
-            pred_g_fake = netD(*fake)
-            d_fake_diff = self.criterion(pred_g_fake - torch.mean(pred_d_real), True)
-            self.metrics.append(("d_fake_diff", torch.mean(d_fake_diff)))
-            loss = (self.criterion(pred_d_real - torch.mean(pred_g_fake), False) +
-                    d_fake_diff) / 2
-        else:
-            raise NotImplementedError
+        with autocast(enabled=self.env['opt']['fp16']):
+            if self.opt['gan_type'] in ['gan', 'pixgan', 'pixgan_fea']:
+                pred_g_fake = netD(*fake)
+                loss = self.criterion(pred_g_fake, True)
+            elif self.opt['gan_type'] == 'ragan':
+                pred_d_real = netD(*real)
+                if self.detach_real:
+                    pred_d_real = pred_d_real.detach()
+                pred_g_fake = netD(*fake)
+                d_fake_diff = self.criterion(pred_g_fake - torch.mean(pred_d_real), True)
+                self.metrics.append(("d_fake_diff", torch.mean(d_fake_diff)))
+                loss = (self.criterion(pred_d_real - torch.mean(pred_g_fake), False) +
+                        d_fake_diff) / 2
+            else:
+                raise NotImplementedError
         if self.min_loss != 0:
             self.loss_rotating_buffer[self.rb_ptr] = loss.item()
             self.rb_ptr = (self.rb_ptr + 1) % self.loss_rotating_buffer.shape[0]
@@ -219,8 +222,9 @@ class DiscriminatorGanLoss(ConfigurableLoss):
                     nfake.append(fake[i])
             real = nreal
             fake = nfake
-        d_real = net(*real)
-        d_fake = net(*fake)
+        with autocast(enabled=self.env['opt']['fp16']):
+            d_real = net(*real)
+            d_fake = net(*fake)
 
         if self.opt['gan_type'] in ['gan', 'pixgan']:
             self.metrics.append(("d_fake", torch.mean(d_fake)))
@@ -279,11 +283,13 @@ class GeometricSimilarityGeneratorLoss(ConfigurableLoss):
                 altered.append(alteration(t))
             else:
                 altered.append(t)
-        if self.detach_fake:
-            with torch.no_grad():
+
+        with autocast(enabled=self.env['opt']['fp16']):
+            if self.detach_fake:
+                with torch.no_grad():
+                    upsampled_altered = net(*altered)
+            else:
                 upsampled_altered = net(*altered)
-        else:
-            upsampled_altered = net(*altered)
 
         if self.gen_output_to_use is not None:
             upsampled_altered = upsampled_altered[self.gen_output_to_use]
@@ -327,11 +333,14 @@ class TranslationInvarianceLoss(ConfigurableLoss):
         fake = self.opt['fake'].copy()
         fake[self.gen_input_for_alteration] = "%s_%s" % (fake[self.gen_input_for_alteration], trans_name)
         input = extract_params_from_state(fake, state)
-        if self.detach_fake:
-            with torch.no_grad():
+
+        with autocast(enabled=self.env['opt']['fp16']):
+            if self.detach_fake:
+                with torch.no_grad():
+                    trans_output = net(*input)
+            else:
                 trans_output = net(*input)
-        else:
-            trans_output = net(*input)
+
         if self.gen_output_to_use is not None:
             fake_shared_output = trans_output[self.gen_output_to_use][:, :, hl:hh, wl:wh]
         else:
@@ -375,7 +384,8 @@ class RecursiveInvarianceLoss(ConfigurableLoss):
         input = extract_params_from_state(fake, state)
         for i in range(self.recursive_depth):
             input[self.gen_input_for_alteration] = torch.nn.functional.interpolate(recurrent_gen_output, scale_factor=self.downsample_factor, mode="nearest")
-            recurrent_gen_output = net(*input)[self.gen_output_to_use]
+            with autocast(enabled=self.env['opt']['fp16']):
+                recurrent_gen_output = net(*input)[self.gen_output_to_use]
 
         compare_real = gen_output
         compare_fake = recurrent_gen_output

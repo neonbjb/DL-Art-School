@@ -25,6 +25,7 @@ class ConfigurableStep(Module):
         self.loss_accumulator = LossAccumulator()
         self.optimizers = None
         self.scaler = GradScaler(enabled=self.opt['fp16'])
+        self.grads_generated = False
 
         self.injectors = []
         if 'injectors' in self.step_opt.keys():
@@ -126,21 +127,20 @@ class ConfigurableStep(Module):
         self.env['training'] = train
 
         # Inject in any extra dependencies.
-        with autocast(enabled=self.opt['fp16']):
-            for inj in self.injectors:
-                # Don't do injections tagged with eval unless we are not in train mode.
-                if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
-                    continue
-                # Likewise, don't do injections tagged with train unless we are not in eval.
-                if not train and 'train' in inj.opt.keys() and inj.opt['train']:
-                    continue
-                # Don't do injections tagged with 'after' or 'before' when we are out of spec.
-                if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
-                    'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
-                    continue
-                injected = inj(local_state)
-                local_state.update(injected)
-                new_state.update(injected)
+        for inj in self.injectors:
+            # Don't do injections tagged with eval unless we are not in train mode.
+            if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
+                continue
+            # Likewise, don't do injections tagged with train unless we are not in eval.
+            if not train and 'train' in inj.opt.keys() and inj.opt['train']:
+                continue
+            # Don't do injections tagged with 'after' or 'before' when we are out of spec.
+            if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
+                'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
+                continue
+            injected = inj(local_state)
+            local_state.update(injected)
+            new_state.update(injected)
 
         if train and len(self.losses) > 0:
             # Finally, compute the losses.
@@ -150,7 +150,6 @@ class ConfigurableStep(Module):
                 # be very disruptive to a generator.
                 if 'after' in loss.opt.keys() and loss.opt['after'] > self.env['step']:
                     continue
-
                 l = loss(self.training_net, local_state)
                 total_loss += l * self.weights[loss_name]
                 # Record metrics.
@@ -167,9 +166,8 @@ class ConfigurableStep(Module):
                 total_loss = total_loss / self.env['mega_batch_factor']
 
                 # Get dem grads!
-                # Workaround for https://github.com/pytorch/pytorch/issues/37730
-                with autocast():
-                    self.scaler.scale(total_loss).backward()
+                self.scaler.scale(total_loss).backward()
+                self.grads_generated = True
 
         # Detach all state variables. Within the step, gradients can flow. Once these variables leave the step
         # we must release the gradients.
@@ -179,6 +177,9 @@ class ConfigurableStep(Module):
     # Performs the optimizer step after all gradient accumulation is completed. Default implementation simply steps()
     # all self.optimizers.
     def do_step(self):
+        if not self.grads_generated:
+            return
+        self.grads_generated = False
         for opt in self.optimizers:
             # Optimizers can be opted out in the early stages of training.
             after = opt._config['after'] if 'after' in opt._config.keys() else 0

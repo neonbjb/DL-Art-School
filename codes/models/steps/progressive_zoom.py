@@ -3,6 +3,7 @@ import random
 
 import torch
 import torchvision
+from torch.cuda.amp import autocast
 
 from data.multiscale_dataset import build_multiscale_patch_index_map
 from models.steps.injectors import Injector
@@ -52,7 +53,10 @@ class ProgressiveGeneratorInjector(Injector):
         ff_input = inputs.copy()
         ff_input[self.input_lq_index] = lq_input
         ff_input[self.recurrent_index] = recurrent_input
-        gen_out = gen(*ff_input)
+
+        with autocast(enabled=self.env['opt']['fp16']):
+            gen_out = gen(*ff_input)
+
         if isinstance(gen_out, torch.Tensor):
             gen_out = [gen_out]
         for i, out_key in enumerate(self.output):
