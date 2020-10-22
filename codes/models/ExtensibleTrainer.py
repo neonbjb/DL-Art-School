@@ -2,7 +2,6 @@ import logging
 import os
 
 import torch
-from apex import amp
 from torch.nn.parallel import DataParallel
 import torch.nn as nn
 from torch.nn.parallel.distributed import DistributedDataParallel
@@ -94,27 +93,11 @@ class ExtensibleTrainer(BaseModel):
         else:
             self.schedulers = []
 
-        # Initialize amp.
-        total_nets = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
-        if 'amp_opt_level' in opt.keys():
-            self.env['amp'] = True
-            amp_nets, amp_opts = amp.initialize(total_nets + [self.netF] + self.steps,
-                                                self.optimizers, opt_level=opt['amp_opt_level'], num_losses=len(opt['steps']))
-        else:
-            amp_nets = total_nets + [self.netF] + self.steps
-            amp_opts = self.optimizers
-            self.env['amp'] = False
 
-        # Unwrap steps & netF & optimizers
-        self.netF = amp_nets[len(total_nets)]
-        assert(len(self.steps) == len(amp_nets[len(total_nets)+1:]))
-        self.steps = amp_nets[len(total_nets)+1:]
-        amp_nets = amp_nets[:len(total_nets)]
-        self.optimizers = amp_opts
-
-        # DataParallel
+        # Wrap networks in distributed shells.
         dnets = []
-        for anet in amp_nets:
+        all_networks = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
+        for anet in all_networks:
             if opt['dist']:
                 dnet = DistributedDataParallel(anet,
                                                device_ids=[torch.cuda.current_device()],
@@ -256,12 +239,12 @@ class ExtensibleTrainer(BaseModel):
                             if rdbgv.shape[1] > 3:
                                 rdbgv = rdbgv[:, :3, :, :]
                             os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
-                            utils.save_image(rdbgv, os.path.join(sample_save_path, v, "%05i_%02i_%02i.png" % (step, rvi, i)))
+                            utils.save_image(rdbgv.float(), os.path.join(sample_save_path, v, "%05i_%02i_%02i.png" % (step, rvi, i)))
                     else:
                         if dbgv.shape[1] > 3:
                             dbgv = dbgv[:,:3,:,:]
                         os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
-                        utils.save_image(dbgv, os.path.join(sample_save_path, v, "%05i_%02i.png" % (step, i)))
+                        utils.save_image(dbgv.float(), os.path.join(sample_save_path, v, "%05i_%02i.png" % (step, i)))
             # Some models have their own specific visual debug routines.
             for net_name, net in self.networks.items():
                 if hasattr(net.module, "visual_dbg"):

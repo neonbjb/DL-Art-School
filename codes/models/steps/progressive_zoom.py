@@ -121,6 +121,6 @@ class ProgressiveGeneratorInjector(Injector):
         os.makedirs(base_path, exist_ok=True)
         ind = 1
         for i, o in zip(chain_inputs, chain_outputs):
-            torchvision.utils.save_image(i, osp.join(base_path, "%s_%i_input.png" % (it, ind)))
-            torchvision.utils.save_image(o, osp.join(base_path, "%s_%i_output.png" % (it, ind)))
+            torchvision.utils.save_image(i.float(), osp.join(base_path, "%s_%i_input.png" % (it, ind)))
+            torchvision.utils.save_image(o.float(), osp.join(base_path, "%s_%i_output.png" % (it, ind)))
             ind += 1

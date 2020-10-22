@@ -144,8 +144,8 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
             return
         base_path = osp.join(self.env['base_path'], "..", "visual_dbg", "teco_geninput", str(self.env['step']))
         os.makedirs(base_path, exist_ok=True)
-        torchvision.utils.save_image(gen_input, osp.join(base_path, "%s_img.png" % (it,)))
-        torchvision.utils.save_image(gen_recurrent, osp.join(base_path, "%s_recurrent.png" % (it,)))
+        torchvision.utils.save_image(gen_input.float(), osp.join(base_path, "%s_img.png" % (it,)))
+        torchvision.utils.save_image(gen_recurrent.float(), osp.join(base_path, "%s_recurrent.png" % (it,)))
 
 
 class FlowAdjustment(Injector):
@@ -237,7 +237,7 @@ class TecoGanLoss(ConfigurableLoss):
         os.makedirs(base_path, exist_ok=True)
         lbls = ['img_a', 'img_b', 'img_c', 'flow_a', 'flow_b', 'flow_c']
         for i in range(6):
-            torchvision.utils.save_image(sext[:, i*3:(i+1)*3, :, :], osp.join(base_path, "%s_%s.png" % (it, lbls[i])))
+            torchvision.utils.save_image(sext[:, i*3:(i+1)*3, :, :].float(), osp.join(base_path, "%s_%s.png" % (it, lbls[i])))
 
 
 # This loss doesn't have a real entry - only fakes are used.
@@ -269,6 +269,6 @@ class PingPongLoss(ConfigurableLoss):
         cnt = imglist.shape[1]
         for i in range(cnt):
             img = imglist[:, i]
-            torchvision.utils.save_image(img, osp.join(base_path, "%s.png" % (i, )))
+            torchvision.utils.save_image(img.float(), osp.join(base_path, "%s.png" % (i, )))
 
             

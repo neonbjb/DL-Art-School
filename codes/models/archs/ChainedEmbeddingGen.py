@@ -184,7 +184,7 @@ class StructuredChainedEmbeddingGenWithBypass(nn.Module):
 
     def visual_dbg(self, step, path):
         for i, bm in enumerate(self.bypass_maps):
-            torchvision.utils.save_image(bm.cpu(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
+            torchvision.utils.save_image(bm.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
 
     def get_debug_values(self, step, net_name):
         biases = [b.bias.item() for b in self.bypasses]
@@ -252,7 +252,7 @@ class MultifacetedChainedEmbeddingGen(nn.Module):
 
     def visual_dbg(self, step, path):
         for i, bm in enumerate(self.bypass_maps):
-            torchvision.utils.save_image(bm.cpu(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
+            torchvision.utils.save_image(bm.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
 
     def get_debug_values(self, step, net_name):
         biases = [b.bias.item() for b in self.bypasses]

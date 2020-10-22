@@ -1,9 +1,10 @@
+from torch.cuda.amp import GradScaler, autocast
+
 from utils.loss_accumulator import LossAccumulator
 from torch.nn import Module
 import logging
 from models.steps.losses import create_loss
 import torch
-from apex import amp
 from collections import OrderedDict
 from .injectors import create_injector
 from utils.util import recursively_detach
@@ -23,6 +24,7 @@ class ConfigurableStep(Module):
         self.gen_outputs = opt_step['generator_outputs']
         self.loss_accumulator = LossAccumulator()
         self.optimizers = None
+        self.scaler = GradScaler(enabled=self.opt['fp16'])
 
         self.injectors = []
         if 'injectors' in self.step_opt.keys():
@@ -118,26 +120,27 @@ class ConfigurableStep(Module):
         local_state.update(new_state)
         local_state['train_nets'] = str(self.get_networks_trained())
 
-        # Some losses compute backward() internally. Accomodate this by stashing the amp_loss_id in env.
+        # Some losses compute backward() internally. Accommodate this by stashing the amp_loss_id in env.
         self.env['amp_loss_id'] = amp_loss_id
         self.env['current_step_optimizers'] = self.optimizers
         self.env['training'] = train
 
         # Inject in any extra dependencies.
-        for inj in self.injectors:
-            # Don't do injections tagged with eval unless we are not in train mode.
-            if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
-                continue
-            # Likewise, don't do injections tagged with train unless we are not in eval.
-            if not train and 'train' in inj.opt.keys() and inj.opt['train']:
-                continue
-            # Don't do injections tagged with 'after' or 'before' when we are out of spec.
-            if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
-                'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
-                continue
-            injected = inj(local_state)
-            local_state.update(injected)
-            new_state.update(injected)
+        with autocast(enabled=self.opt['fp16']):
+            for inj in self.injectors:
+                # Don't do injections tagged with eval unless we are not in train mode.
+                if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
+                    continue
+                # Likewise, don't do injections tagged with train unless we are not in eval.
+                if not train and 'train' in inj.opt.keys() and inj.opt['train']:
+                    continue
+                # Don't do injections tagged with 'after' or 'before' when we are out of spec.
+                if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
+                    'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
+                    continue
+                injected = inj(local_state)
+                local_state.update(injected)
+                new_state.update(injected)
 
         if train and len(self.losses) > 0:
             # Finally, compute the losses.
@@ -164,11 +167,9 @@ class ConfigurableStep(Module):
                 total_loss = total_loss / self.env['mega_batch_factor']
 
                 # Get dem grads!
-                if self.env['amp']:
-                    with amp.scale_loss(total_loss, self.optimizers, amp_loss_id) as scaled_loss:
-                        scaled_loss.backward()
-                else:
-                    total_loss.backward()
+                # Workaround for https://github.com/pytorch/pytorch/issues/37730
+                with autocast():
+                    self.scaler.scale(total_loss).backward()
 
         # Detach all state variables. Within the step, gradients can flow. Once these variables leave the step
         # we must release the gradients.
@@ -186,7 +187,8 @@ class ConfigurableStep(Module):
             before = opt._config['before'] if 'before' in opt._config.keys() else -1
             if before != -1 and self.env['step'] > before:
                 continue
-            opt.step()
+            self.scaler.step(opt)
+            self.scaler.update()
 
     def get_metrics(self):
         return self.loss_accumulator.as_dict()
