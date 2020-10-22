@@ -25,7 +25,7 @@ def main(master_opt, launcher):
         for k, v in model.networks.items():
             if k in all_networks.keys() and k not in shared_networks:
                 shared_networks.append(k)
-            all_networks[k] = v
+            all_networks[k] = v.module
         trainers.append(train_gen)
     print("Networks being shared by trainers: ", shared_networks)
 

@@ -207,8 +207,8 @@ class TecoGanLoss(ConfigurableLoss):
         lr = state[self.opt['lr_inputs']]
         l_total = 0
         for i in range(sequence_len - 2):
-            real_sext = create_teco_discriminator_sextuplet(real, lr, self.scale, i, flow_gen, self.resampler, self.margin, fp16)
-            fake_sext = create_teco_discriminator_sextuplet(fake, lr, self.scale, i, flow_gen, self.resampler, self.margin, fp16)
+            real_sext = create_teco_discriminator_sextuplet(real, lr, self.scale, i, flow_gen, self.resampler, self.margin)
+            fake_sext = create_teco_discriminator_sextuplet(fake, lr, self.scale, i, flow_gen, self.resampler, self.margin)
             with autocast(enabled=fp16):
                 d_fake = net(fake_sext)
                 d_real = net(real_sext)

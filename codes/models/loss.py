@@ -54,7 +54,7 @@ class GANLoss(nn.Module):
             target_label = target_is_real
         else:
             target_label = self.get_target_label(input, target_is_real)
-        loss = self.loss(input, target_label)
+        loss = self.loss(input.float(), target_label.float())
         return loss
 
 

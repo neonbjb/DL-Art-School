@@ -91,7 +91,7 @@ class PixLoss(ConfigurableLoss):
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
 
     def forward(self, _, state):
-        return self.criterion(state[self.opt['fake']], state[self.opt['real']])
+        return self.criterion(state[self.opt['fake']].float(), state[self.opt['real']].float())
 
 
 class FeatureLoss(ConfigurableLoss):
@@ -105,13 +105,14 @@ class FeatureLoss(ConfigurableLoss):
             self.netF = torch.nn.parallel.DataParallel(self.netF)
 
     def forward(self, _, state):
-        with torch.no_grad():
-            logits_real = self.netF(state[self.opt['real']])
-        logits_fake = self.netF(state[self.opt['fake']])
+        with autocast(enabled=self.env['opt']['fp16']):
+            with torch.no_grad():
+                logits_real = self.netF(state[self.opt['real']])
+            logits_fake = self.netF(state[self.opt['fake']])
         if self.opt['criterion'] == 'cosine':
-            return self.criterion(logits_fake, logits_real, torch.ones(1, device=logits_fake.device))
+            return self.criterion(logits_fake.float(), logits_real.float(), torch.ones(1, device=logits_fake.device))
         else:
-            return self.criterion(logits_fake, logits_real)
+            return self.criterion(logits_fake.float(), logits_real.float())
 
 
 # Special form of feature loss which first computes the feature embedding for the truth space, then uses a second
@@ -132,7 +133,7 @@ class InterpretedFeatureLoss(ConfigurableLoss):
     def forward(self, _, state):
         logits_real = self.netF_real(state[self.opt['real']])
         logits_fake = self.netF_gen(state[self.opt['fake']])
-        return self.criterion(logits_fake, logits_real)
+        return self.criterion(logits_fake.float(), logits_real.float())
 
 
 class GeneratorGanLoss(ConfigurableLoss):
@@ -300,7 +301,7 @@ class GeometricSimilarityGeneratorLoss(ConfigurableLoss):
         if self.opt['criterion'] == 'cosine':
             return self.criterion(state[self.opt['real']], upsampled_altered, torch.ones(1, device=upsampled_altered.device))
         else:
-            return self.criterion(state[self.opt['real']], upsampled_altered)
+            return self.criterion(state[self.opt['real']].float(), upsampled_altered.float())
 
 
 # Computes a loss created by comparing the output of a generator to the output from the same generator when fed an
@@ -353,7 +354,7 @@ class TranslationInvarianceLoss(ConfigurableLoss):
         if self.opt['criterion'] == 'cosine':
             return self.criterion(fake_shared_output, real_shared_output, torch.ones(1, device=real_shared_output.device))
         else:
-            return self.criterion(fake_shared_output, real_shared_output)
+            return self.criterion(fake_shared_output.float(), real_shared_output.float())
 
 
 # Computes a loss repeatedly feeding the generator downsampled inputs created from its outputs. The expectation is
@@ -392,7 +393,7 @@ class RecursiveInvarianceLoss(ConfigurableLoss):
         if self.opt['criterion'] == 'cosine':
             return self.criterion(compare_real, compare_fake, torch.ones(1, device=compare_real.device))
         else:
-            return self.criterion(compare_real, compare_fake)
+            return self.criterion(compare_real.float(), compare_fake.float())
 
 
 # Loss that pulls tensors from dim 1 of the input and repeatedly feeds them into the

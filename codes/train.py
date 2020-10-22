@@ -175,7 +175,7 @@ class Trainer:
         #### log
         if self.current_step % opt['logger']['print_freq'] == 0 and self.rank <= 0:
             logs = self.model.get_current_log(self.current_step)
-            message = '[epoch:{:3d}, iter:{:8,d}, lr:('.format(epoch, self.current_step)
+            message = '[epoch:{:3d}, iter:{:8,d}, lr:('.format(self.epoch, self.current_step)
             for v in self.model.get_current_learning_rate():
                 message += '{:.3e},'.format(v)
             message += ')] '
@@ -196,7 +196,7 @@ class Trainer:
             if self.rank <= 0:
                 self.logger.info('Saving models and training states.')
                 self.model.save(self.current_step)
-                self.model.save_training_state(epoch, self.current_step)
+                self.model.save_training_state(self.epoch, self.current_step)
             if 'alt_path' in opt['path'].keys():
                 import shutil
                 print("Synchronizing tb_logger to alt_path..")
@@ -253,6 +253,7 @@ class Trainer:
     def do_training(self):
         self.logger.info('Start training from epoch: {:d}, iter: {:d}'.format(self.start_epoch, self.current_step))
         for epoch in range(self.start_epoch, self.total_epochs + 1):
+            self.epoch = epoch
             if opt['dist']:
                 self.train_sampler.set_epoch(epoch)
             tq_ldr = tqdm(self.train_loader)
@@ -264,6 +265,7 @@ class Trainer:
     def create_training_generator(self, index):
         self.logger.info('Start training from epoch: {:d}, iter: {:d}'.format(self.start_epoch, self.current_step))
         for epoch in range(self.start_epoch, self.total_epochs + 1):
+            self.epoch = epoch
             if self.opt['dist']:
                 self.train_sampler.set_epoch(epoch)
             tq_ldr = tqdm(self.train_loader, position=index)
