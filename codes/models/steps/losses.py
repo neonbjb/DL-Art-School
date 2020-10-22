@@ -41,7 +41,10 @@ def extract_params_from_state(params: object, state: object, root: object = True
     if isinstance(params, list) or isinstance(params, tuple):
         p = [extract_params_from_state(r, state, False) for r in params]
     elif isinstance(params, str):
-        p = state[params]
+        if params == 'None':
+            p = None
+        else:
+            p = state[params]
     else:
         p = params
     # The root return must always be a list.

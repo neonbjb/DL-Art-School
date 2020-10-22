@@ -19,7 +19,7 @@ logger = logging.getLogger('base')
 
 
 class ExtensibleTrainer(BaseModel):
-    def __init__(self, opt):
+    def __init__(self, opt, cached_networks={}):
         super(ExtensibleTrainer, self).__init__(opt)
         if opt['dist']:
             self.rank = torch.distributed.get_rank()
@@ -49,11 +49,17 @@ class ExtensibleTrainer(BaseModel):
             if 'trainable' not in net.keys():
                 net['trainable'] = True
 
+            if name in cached_networks.keys():
+                new_net = cached_networks[name]
+            else:
+                new_net = None
             if net['type'] == 'generator':
-                new_net = networks.define_G(net, None, opt['scale']).to(self.device)
+                if new_net is None:
+                    new_net = networks.define_G(net, None, opt['scale']).to(self.device)
                 self.netsG[name] = new_net
             elif net['type'] == 'discriminator':
-                new_net = networks.define_D_net(net, opt['datasets']['train']['target_size']).to(self.device)
+                if new_net is None:
+                    new_net = networks.define_D_net(net, opt['datasets']['train']['target_size']).to(self.device)
                 self.netsD[name] = new_net
             else:
                 raise NotImplementedError("Can only handle generators and discriminators")
