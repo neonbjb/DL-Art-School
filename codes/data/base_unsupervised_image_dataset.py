@@ -31,6 +31,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
             if os.path.exists(cache_path):
                 chunks = torch.load(cache_path)
             else:
+                print("Building chunk cache, this can take some time for large datasets..")
                 chunks = [ChunkWithReference(opt, d) for d in sorted(os.scandir(path), key=lambda e: e.name) if d.is_dir()]
                 # Prune out chunks that have no images
                 res = []
