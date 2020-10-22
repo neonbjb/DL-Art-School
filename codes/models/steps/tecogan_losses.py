@@ -26,21 +26,19 @@ def create_teco_injector(opt, env):
         return FlowAdjustment(opt, env)
     return None
 
-def create_teco_discriminator_sextuplet(input_list, lr_imgs, scale, index, flow_gen, resampler, margin, fp16):
-    triplet = input_list[:, index:index+3]
+def create_teco_discriminator_sextuplet(input_list, lr_imgs, scale, index, flow_gen, resampler, margin):
     # Flow is interpreted from the LR images so that the generator cannot learn to manipulate it.
-    with torch.no_grad() and autocast(enabled=fp16):
-        first_flow = flow_gen(torch.stack([triplet[:,1], triplet[:,0]], dim=2).float())
-        #first_flow = F.interpolate(first_flow, scale_factor=scale, mode='bicubic')
-        last_flow = flow_gen(torch.stack([triplet[:,1], triplet[:,2]], dim=2).float())
-        #last_flow = F.interpolate(last_flow, scale_factor=scale, mode='bicubic')
-    flow_triplet = [resampler(triplet[:,0].float(), first_flow.float()),
-                    triplet[:,1],
-                    resampler(triplet[:,2].float(), last_flow.float())]
-    flow_triplet = torch.stack(flow_triplet, dim=1)
-    combined = torch.cat([triplet, flow_triplet], dim=1)
-    b, f, c, h, w = combined.shape
-    combined = combined.view(b, 3*6, h, w)  # 3*6 is essentially an assertion here.
+    with autocast(enabled=False):
+        triplet = input_list[:, index:index+3].float()
+        first_flow = flow_gen(torch.stack([triplet[:,1], triplet[:,0]], dim=2))
+        last_flow = flow_gen(torch.stack([triplet[:,1], triplet[:,2]], dim=2))
+        flow_triplet = [resampler(triplet[:,0], first_flow),
+                        triplet[:,1],
+                        resampler(triplet[:,2], last_flow)]
+        flow_triplet = torch.stack(flow_triplet, dim=1)
+        combined = torch.cat([triplet, flow_triplet], dim=1)
+        b, f, c, h, w = combined.shape
+        combined = combined.view(b, 3*6, h, w)  # 3*6 is essentially an assertion here.
     # Apply margin
     return combined[:, :, margin:-margin, margin:-margin]
 
@@ -98,13 +96,11 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                 first_step = False
             else:
                 input = extract_inputs_index(inputs, i)
-                with torch.no_grad():
+                with torch.no_grad() and autocast(enabled=False):
                     reduced_recurrent = F.interpolate(recurrent_input, scale_factor=1/self.scale, mode='bicubic')
-                    flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2)
-                    with autocast(enabled=self.env['opt']['fp16']):
-                        flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
-                    # Resample does not work in FP16.
-                    recurrent_input = self.resample(recurrent_input.float(), flowfield.float())
+                    flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2).float()
+                    flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
+                    recurrent_input = self.resample(recurrent_input.float(), flowfield)
             input[self.recurrent_index] = recurrent_input
             if self.env['step'] % 50 == 0:
                 self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
@@ -125,13 +121,12 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
             for i in it:
                 input = extract_inputs_index(inputs, i)
                 with torch.no_grad():
-                    reduced_recurrent = F.interpolate(recurrent_input, scale_factor=1 / self.scale, mode='bicubic')
-                    flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2)
-                    with autocast(enabled=self.env['opt']['fp16']):
+                    with autocast(enabled=False):
+                        reduced_recurrent = F.interpolate(recurrent_input, scale_factor=1 / self.scale, mode='bicubic')
+                        flow_input = torch.stack([input[self.input_lq_index], reduced_recurrent], dim=2).float()
                         flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
-                    recurrent_input = self.resample(recurrent_input.float(), flowfield.float())
-                input[self.recurrent_index
-                ] = recurrent_input
+                        recurrent_input = self.resample(recurrent_input.float(), flowfield)
+                input[self.recurrent_index] = recurrent_input
                 if self.env['step'] % 50 == 0:
                     self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
                     debug_index += 1
@@ -167,12 +162,13 @@ class FlowAdjustment(Injector):
         self.flowed = opt['flowed']
 
     def forward(self, state):
-        flow = self.env['generators'][self.flow]
-        flow_target = state[self.flow_target]
-        flowed = F.interpolate(state[self.flowed], size=flow_target.shape[2:], mode='bicubic')
-        flow_input = torch.stack([flow_target, flowed], dim=2)
-        flowfield = F.interpolate(flow(flow_input), size=state[self.flowed].shape[2:], mode='bicubic')
-        return {self.output: self.resample(state[self.flowed].float(), flowfield.float())}
+        with autocast(enabled=False):
+            flow = self.env['generators'][self.flow]
+            flow_target = state[self.flow_target]
+            flowed = F.interpolate(state[self.flowed], size=flow_target.shape[2:], mode='bicubic')
+            flow_input = torch.stack([flow_target, flowed], dim=2).float()
+            flowfield = F.interpolate(flow(flow_input), size=state[self.flowed].shape[2:], mode='bicubic')
+            return {self.output: self.resample(state[self.flowed], flowfield)}
 
 
 # This is the temporal discriminator loss from TecoGAN.

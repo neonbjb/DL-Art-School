@@ -18,8 +18,9 @@ def main(master_opt, launcher):
     shared_networks = []
     for i, sub_opt in enumerate(master_opt['trainer_options']):
         sub_opt_parsed = option.parse(sub_opt, is_train=True)
-        # This creates trainers() as a list of generators.
-        train_gen = train.yielding_main(sub_opt_parsed, launcher, i, all_networks)
+        trainer = train.Trainer()
+        trainer.init(sub_opt_parsed, launcher, all_networks)
+        train_gen = trainer.create_training_generator(i)
         model = next(train_gen)
         for k, v in model.networks.items():
             if k in all_networks.keys() and k not in shared_networks:
