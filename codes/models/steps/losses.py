@@ -405,7 +405,7 @@ class RecurrentLoss(ConfigurableLoss):
             st['_real'] = real[:, i]
             st['_fake'] = state[self.opt['fake']][:, i]
             subloss = self.loss(net, st)
-            if isinstance(self.recurrent_weights, list);
+            if isinstance(self.recurrent_weights, list):
                 subloss = subloss * self.recurrent_weights[i]
             total_loss += subloss
         return total_loss
