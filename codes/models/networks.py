@@ -12,14 +12,12 @@ import models.archs.DiscriminatorResnet_arch_passthrough as DiscriminatorResnet_
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.SPSR_arch as spsr
 import models.archs.SRResNet_arch as SRResNet_arch
-import models.archs.StructuredSwitchedGenerator as ssg
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.feature_arch as feature_arch
 import models.archs.panet.panet as panet
 import models.archs.rcan as rcan
-from models.archs.ChainedEmbeddingGen import ChainedEmbeddingGen, ChainedEmbeddingGenWithStructure, \
-    StructuredChainedEmbeddingGenWithBypass, MultifacetedChainedEmbeddingGen
+import models.archs.ChainedEmbeddingGen as chained
 
 logger = logging.getLogger('base')
 
@@ -72,76 +70,15 @@ def define_G(opt, net_key='network_G', scale=None):
                             nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == "spsr_switched":
         netG = spsr.SwitchedSpsr(in_nc=3, nf=opt_net['nf'], upscale=opt_net['scale'], init_temperature=opt_net['temperature'])
-    elif which_model == "spsr5":
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.Spsr5(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 2,
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == "spsr6":
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.Spsr6(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
     elif which_model == "spsr7":
         recurrent = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
         xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
         netG = spsr.Spsr7(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10, recurrent=recurrent)
-    elif which_model == "spsr9":
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.Spsr9(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == "ssgr1":
-        recurrent = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = ssg.SSGr1(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10, recurrent=recurrent)
-    elif which_model == 'stacked_switches':
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
-        netG = ssg.StackedSwitchGenerator(in_nc=in_nc, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == 'stacked_switches_5lyr':
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
-        netG = ssg.StackedSwitchGenerator5Layer(in_nc=in_nc, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == 'ssg_deep':
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = ssg.SSGDeep(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == 'ssg_simpler':
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = ssg.SsgSimpler(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms,
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == 'ssg_teco':
-        netG = ssg.StackedSwitchGenerator2xTeco(nf=opt_net['nf'], xforms=opt_net['num_transforms'], init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10)
-    elif which_model == 'big_switch':
-        netG = SwitchedGen_arch.TheBigSwitch(opt_net['in_nc'], nf=opt_net['nf'], xforms=opt_net['num_transforms'], upscale=opt_net['scale'],
-                                             init_temperature=opt_net['temperature'])
-    elif which_model == 'artist':
-        netG = SwitchedGen_arch.ArtistGen(opt_net['in_nc'], nf=opt_net['nf'], xforms=opt_net['num_transforms'], upscale=opt_net['scale'],
-                                             init_temperature=opt_net['temperature'])
-    elif which_model == 'chained_gen':
-        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
-        netG = ChainedEmbeddingGen(depth=opt_net['depth'], in_nc=in_nc)
-    elif which_model == 'chained_gen_structured':
-        rec = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
-        recnf = opt_net['recurrent_nf'] if 'recurrent_nf' in opt_net.keys() else 3
-        recstd = opt_net['recurrent_stride'] if 'recurrent_stride' in opt_net.keys() else 2
-        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
-        netG = ChainedEmbeddingGenWithStructure(depth=opt_net['depth'], recurrent=rec, recurrent_nf=recnf, recurrent_stride=recstd, in_nc=in_nc)
-    elif which_model == 'chained_gen_structured_with_bypass':
-        rec = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
-        recnf = opt_net['recurrent_nf'] if 'recurrent_nf' in opt_net.keys() else 3
-        recstd = opt_net['recurrent_stride'] if 'recurrent_stride' in opt_net.keys() else 2
-        bypass_bias = opt_net['bypass_bias'] if 'bypass_bias' in opt_net.keys() else 0
-        netG = StructuredChainedEmbeddingGenWithBypass(depth=opt_net['depth'], recurrent=rec, recurrent_nf=recnf, recurrent_stride=recstd, bypass_bias=bypass_bias)
     elif which_model == 'multifaceted_chained':
         scale = opt_net['scale'] if 'scale' in opt_net.keys() else 2
-        netG = MultifacetedChainedEmbeddingGen(depth=opt_net['depth'], scale=scale)
+        netG = chained.MultifacetedChainedEmbeddingGen(depth=opt_net['depth'], scale=scale)
     elif which_model == "flownet2":
         from models.flownet2.models import FlowNet2
         ld = torch.load(opt_net['load_path'])
