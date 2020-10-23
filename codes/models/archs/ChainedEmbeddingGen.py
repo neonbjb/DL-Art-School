@@ -197,14 +197,16 @@ class StructuredChainedEmbeddingGenWithBypass(nn.Module):
 
 
 class MultifacetedChainedEmbeddingGen(nn.Module):
-    def __init__(self, depth=10):
+    def __init__(self, depth=10, scale=2):
         super(MultifacetedChainedEmbeddingGen, self).__init__()
+        assert scale == 2 or scale == 4
+
         self.initial_conv = ConvGnLelu(3, 64, kernel_size=7, bias=True, norm=False, activation=False)
 
         self.teco_recurrent_process = ConvGnLelu(3, 64, kernel_size=3, stride=2, norm=False, bias=True, activation=False)
         self.teco_recurrent_join = ReferenceJoinBlock(64, residual_weight_init_factor=.01, final_norm=False, kernel_size=1, depth=3, join=False)
 
-        self.prog_recurrent_process = ConvGnLelu(3, 64, kernel_size=3, stride=1, norm=False, bias=True, activation=False)
+        self.prog_recurrent_process = ConvGnLelu(64, 64, kernel_size=3, stride=1, norm=False, bias=True, activation=False)
         self.prog_recurrent_join = ReferenceJoinBlock(64, residual_weight_init_factor=.01, final_norm=False, kernel_size=1, depth=3, join=False)
 
         self.spine = SpineNet(arch='49', output_level=[3, 4], double_reduce_early=False)
@@ -212,9 +214,10 @@ class MultifacetedChainedEmbeddingGen(nn.Module):
         self.bypasses = nn.ModuleList([OptionalPassthroughBlock(64, initial_bias=0) for i in range(depth)])
         self.structure_joins = nn.ModuleList([ConjoinBlock(64) for i in range(3)])
         self.structure_blocks = nn.ModuleList([ConvGnLelu(64, 64, kernel_size=3, bias=False, norm=False, activation=False, weight_init_factor=.1) for i in range(3)])
-        self.structure_upsample = FinalUpsampleBlock2x(64)
+        self.structure_upsample = FinalUpsampleBlock2x(64, scale=scale)
         self.grad_extract = ImageGradientNoPadding()
-        self.upsample = FinalUpsampleBlock2x(64)
+        self.upsample = FinalUpsampleBlock2x(64, scale=scale)
+
         self.teco_ref_std = 0
         self.prog_ref_std = 0
         self.block_residual_means = [0 for _ in range(depth)]

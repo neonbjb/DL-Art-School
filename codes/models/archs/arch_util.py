@@ -488,12 +488,20 @@ class UpconvBlock(nn.Module):
 
 # Scales an image up 2x and performs intermediary processing. Designed to be the final block in an SR network.
 class FinalUpsampleBlock2x(nn.Module):
-    def __init__(self, nf, block=ConvGnLelu, out_nc=3):
+    def __init__(self, nf, block=ConvGnLelu, out_nc=3, scale=2):
         super(FinalUpsampleBlock2x, self).__init__()
-        self.chain = nn.Sequential(block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
-                                   UpconvBlock(nf, nf // 2, block=block, norm=False, activation=True, bias=True),
-                                   block(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True),
-                                   block(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False))
+        if scale == 2:
+            self.chain = nn.Sequential(block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
+                                       UpconvBlock(nf, nf // 2, block=block, norm=False, activation=True, bias=True),
+                                       block(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True),
+                                       block(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False))
+        else:
+            self.chain = nn.Sequential(block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
+                                       UpconvBlock(nf, nf, block=block, norm=False, activation=True, bias=True),
+                                       block(nf, nf, kernel_size=3, norm=False, activation=False, bias=True),
+                                       UpconvBlock(nf, nf // 2, block=block, norm=False, activation=True, bias=True),
+                                       block(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True),
+                                       block(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False))
 
     def forward(self, x):
         return self.chain(x)

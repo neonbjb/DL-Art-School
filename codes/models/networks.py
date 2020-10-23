@@ -140,7 +140,8 @@ def define_G(opt, net_key='network_G', scale=None):
         bypass_bias = opt_net['bypass_bias'] if 'bypass_bias' in opt_net.keys() else 0
         netG = StructuredChainedEmbeddingGenWithBypass(depth=opt_net['depth'], recurrent=rec, recurrent_nf=recnf, recurrent_stride=recstd, bypass_bias=bypass_bias)
     elif which_model == 'multifaceted_chained':
-        netG = MultifacetedChainedEmbeddingGen(depth=opt_net['depth'])
+        scale = opt_net['scale'] if 'scale' in opt_net.keys() else 2
+        netG = MultifacetedChainedEmbeddingGen(depth=opt_net['depth'], scale=scale)
     elif which_model == "flownet2":
         from models.flownet2.models import FlowNet2
         ld = torch.load(opt_net['load_path'])
