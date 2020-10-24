@@ -155,6 +155,13 @@ if __name__ == "__main__":
         if recurrent_mode and first_frame:
             b, c, h, w = data['LQ'].shape
             recurrent_entry = torch.zeros((b,c,h*scale,w*scale), device=data['LQ'].device)
+            # Optionally swap out the 'generator' for the first frame to create a better image that the recurrent generator works off of.
+            if 'recurrent_hr_generator' in opt.keys():
+                recurrent_gen = model.env['generators']['generator']
+                model.env['generators']['generator'] = model.env['generators'][opt['recurrent_hr_generator']]
+            else:
+                model.env['generators']['generator'] = recurrent_gen
+
         first_frame = False
         if recurrent_mode:
             data['recurrent'] = recurrent_entry
