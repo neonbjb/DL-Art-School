@@ -76,6 +76,12 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = spsr.Spsr7(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10, recurrent=recurrent)
+    elif which_model == 'chained_gen_structured':
+        rec = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
+        recnf = opt_net['recurrent_nf'] if 'recurrent_nf' in opt_net.keys() else 3
+        recstd = opt_net['recurrent_stride'] if 'recurrent_stride' in opt_net.keys() else 2
+        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
+        netG = chained.ChainedEmbeddingGenWithStructure(depth=opt_net['depth'], recurrent=rec, recurrent_nf=recnf, recurrent_stride=recstd, in_nc=in_nc)
     elif which_model == 'multifaceted_chained':
         scale = opt_net['scale'] if 'scale' in opt_net.keys() else 2
         netG = chained.MultifacetedChainedEmbeddingGen(depth=opt_net['depth'], scale=scale)
