@@ -51,6 +51,14 @@ def checkpoint(fn, *args):
     else:
         return fn(*args)
 
+# A fancy alternative to if <flag> checkpoint() else <call>
+def possible_checkpoint(enabled, fn, *args):
+    opt_en = loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in loaded_options.keys() else True
+    if enabled and opt_en:
+        return torch.utils.checkpoint.checkpoint(fn, *args)
+    else:
+        return fn(*args)
+
 def get_timestamp():
     return datetime.now().strftime('%y%m%d-%H%M%S')
 

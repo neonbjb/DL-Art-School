@@ -87,10 +87,12 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = chained.MultifacetedChainedEmbeddingGen(depth=opt_net['depth'], scale=scale)
     elif which_model == "flownet2":
         from models.flownet2.models import FlowNet2
-        ld = torch.load(opt_net['load_path'])
-        args = munch.Munch({'fp16': False, 'rgb_max': 1.0})
+        ld = 'load_path' in opt_net.keys()
+        args = munch.Munch({'fp16': False, 'rgb_max': 1.0, 'checkpoint': not ld})
         netG = FlowNet2(args)
-        netG.load_state_dict(ld['state_dict'])
+        if ld:
+            sd = torch.load(opt_net['load_path'])
+            netG.load_state_dict(sd['state_dict'])
     elif which_model == "backbone_encoder":
         netG = SwitchedGen_arch.BackboneEncoder(pretrained_backbone=opt_net['pretrained_spinenet'])
     elif which_model == "backbone_encoder_no_ref":

@@ -101,6 +101,11 @@ class BaseModel():
         if isinstance(network, nn.DataParallel) or isinstance(network, DistributedDataParallel):
             network = network.module
         load_net = torch.load(load_path)
+
+        # Support loading torch.save()s for whole models as well as just state_dicts.
+        if 'state_dict' in load_net:
+            load_net = load_net['state_dict']
+
         load_net_clean = OrderedDict()  # remove unnecessary 'module.'
         for k, v in load_net.items():
             if k.startswith('module.'):

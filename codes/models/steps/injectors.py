@@ -14,6 +14,9 @@ def create_injector(opt_inject, env):
     elif 'progressive_' in type:
         from models.steps.progressive_zoom import create_progressive_zoom_injector
         return create_progressive_zoom_injector(opt_inject, env)
+    elif 'stereoscopic_' in type:
+        from models.steps.stereoscopic import create_stereoscopic_injector
+        return create_stereoscopic_injector(opt_inject, env)
     elif type == 'generator':
         return ImageGeneratorInjector(opt_inject, env)
     elif type == 'discriminator':
@@ -42,6 +45,8 @@ def create_injector(opt_inject, env):
         return ConstantInjector(opt_inject, env)
     elif type == 'fft':
         return ImageFftInjector(opt_inject, env)
+    elif type == 'extract_indices':
+        return IndicesExtractor(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -298,4 +303,18 @@ class ImageFftInjector(Injector):
             fftim = fftim.reshape(b, f // 2, 2, h, w).permute(0,1,3,4,2)
             im = torch.irfft(fftim, signal_ndim=2, normalized=True)
             return {self.output: im}
+
+
+class IndicesExtractor(Injector):
+    def __init__(self, opt, env):
+        super(IndicesExtractor, self).__init__(opt, env)
+        self.dim = opt['dim']
+        assert self.dim == 1  # Honestly not sure how to support an abstract dim here, so just add yours when needed.
+
+    def forward(self, state):
+        results = {}
+        for i, o in enumerate(self.output):
+            if self.dim == 1:
+                results[o] = state[self.input][:, i]
+        return results
 
