@@ -39,6 +39,8 @@ def create_dataset(dataset_opt):
         from data.combined_dataset import CombinedDataset as D
     elif mode == 'multiscale':
         from data.multiscale_dataset import MultiScaleDataset as D
+    elif mode == 'paired_frame':
+        from data.paired_frame_dataset import PairedFrameDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)
