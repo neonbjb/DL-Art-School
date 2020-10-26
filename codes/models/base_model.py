@@ -108,9 +108,7 @@ class BaseModel():
 
         load_net_clean = OrderedDict()  # remove unnecessary 'module.'
         for k, v in load_net.items():
-            if 'teco_recurrent_process' in k:
-                continue
-            elif k.startswith('module.'):
+            if k.startswith('module.'):
                 load_net_clean[k[7:]] = v
             else:
                 load_net_clean[k] = v
