@@ -42,14 +42,11 @@ def main(master_opt, launcher):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    #parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_chained_structured_trans_invariance.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_chained_structured_trans_invariance.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     args = parser.parse_args()
 
     Loader, Dumper = OrderedYaml()
     with open(args.opt, mode='r') as f:
         opt = yaml.load(f, Loader=Loader)
-        opt = {
-            'trainer_options': ['../options/teco.yml', '../options/exd.yml']
-        }
         main(opt, args.launcher)
