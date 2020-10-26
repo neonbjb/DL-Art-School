@@ -23,19 +23,24 @@ class ChunkWithReference:
         return img
 
     def __getitem__(self, item):
-        centers = torch.load(osp.join(self.path, "centers.pt"))
-        ref = self.read_image_or_get_zero(osp.join(self.path, "ref.jpg"))
         tile = self.read_image_or_get_zero(self.tiles[item])
-        tile_id = int(osp.splitext(osp.basename(self.tiles[item]))[0])
-        if tile_id in centers.keys():
-            center, tile_width = centers[tile_id]
-        elif self.strict:
-            raise FileNotFoundError(tile_id, self.tiles[item])
+        if osp.exists(osp.join(self.path, "ref.jpg")):
+            tile_id = int(osp.splitext(osp.basename(self.tiles[item]))[0])
+            centers = torch.load(osp.join(self.path, "centers.pt"))
+            ref = self.read_image_or_get_zero(osp.join(self.path, "ref.jpg"))
+            if tile_id in centers.keys():
+                center, tile_width = centers[tile_id]
+            elif self.strict:
+                raise FileNotFoundError(tile_id, self.tiles[item])
+            else:
+                center = torch.tensor([128, 128], dtype=torch.long)
+                tile_width = 256
+            mask = np.full(tile.shape[:2] + (1,), fill_value=.1, dtype=tile.dtype)
+            mask[center[0] - tile_width // 2:center[0] + tile_width // 2, center[1] - tile_width // 2:center[1] + tile_width // 2] = 1
         else:
-            center = torch.tensor([128, 128], dtype=torch.long)
-            tile_width = 256
-        mask = np.full(tile.shape[:2] + (1,), fill_value=.1, dtype=tile.dtype)
-        mask[center[0] - tile_width // 2:center[0] + tile_width // 2, center[1] - tile_width // 2:center[1] + tile_width // 2] = 1
+            ref = np.zeros_like(tile)
+            mask = np.zeros(tile.shape[:2] + (1,))
+            center = (0,0)
 
         return tile, ref, center, mask, self.tiles[item]
 

@@ -87,7 +87,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
             hqs_conformed, hq_refs_conformed, hq_masks_conformed, hq_centers_conformed = [], [], [], []
             for hq, hq_ref, hq_mask, hq_center in zip(hqs_adjusted, hq_refs_adjusted, hq_masks_adjusted, hq_centers_adjusted):
                 h, w = (h - h % hq_multiple), (w - w % hq_multiple)
-                hq_centers_conformed.append(self.resize_point(hq_center, hq.shape[:1], (h, w)))
+                hq_centers_conformed.append(self.resize_point(hq_center, hq.shape[:2], (h, w)))
                 hqs_conformed.append(hq[:h, :w, :])
                 hq_refs_conformed.append(hq_ref[:h, :w, :])
                 hq_masks_conformed.append(hq_mask[:h, :w, :])

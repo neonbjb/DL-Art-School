@@ -29,6 +29,8 @@ class Trainer:
 
     def init(self, opt, launcher, all_networks={}):
         self._profile = False
+        self.val_compute_psnr = opt['eval']['compute_psnr'] if 'compute_psnr' in opt['eval'] else True
+        self.val_compute_fea = opt['eval']['compute_fea'] if 'compute_fea' in opt['eval'] else True
 
         #### distributed training settings
         if len(opt['gpu_ids']) == 1 and torch.cuda.device_count() > 1:
@@ -214,8 +216,8 @@ class Trainer:
                 val_tqdm = tqdm(self.val_loader)
                 for val_data in val_tqdm:
                     idx += 1
-                    for b in range(len(val_data['LQ_path'])):
-                        img_name = os.path.splitext(os.path.basename(val_data['LQ_path'][b]))[0]
+                    for b in range(len(val_data['GT_path'])):
+                        img_name = os.path.splitext(os.path.basename(val_data['GT_path'][b]))[0]
                         img_dir = os.path.join(opt['path']['val_images'], img_name)
                         util.mkdir(img_dir)
 
@@ -226,14 +228,16 @@ class Trainer:
                         if visuals is None:
                             continue
 
-                        # calculate PSNR
                         sr_img = util.tensor2img(visuals['rlt'][b])  # uint8
-                        gt_img = util.tensor2img(visuals['GT'][b])  # uint8
-                        sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
-                        avg_psnr += util.calculate_psnr(sr_img, gt_img)
+                        # calculate PSNR
+                        if self.val_compute_psnr:
+                            gt_img = util.tensor2img(visuals['GT'][b])  # uint8
+                            sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
+                            avg_psnr += util.calculate_psnr(sr_img, gt_img)
 
                         # calculate fea loss
-                        avg_fea_loss += self.model.compute_fea_loss(visuals['rlt'][b], visuals['GT'][b])
+                        if self.val_compute_fea:
+                            avg_fea_loss += self.model.compute_fea_loss(visuals['rlt'][b], visuals['GT'][b])
 
                         # Save SR images for reference
                         img_base_name = '{:s}_{:d}.png'.format(img_name, self.current_step)
@@ -278,7 +282,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_3dflow_vr_flownet.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_prog_imgset_multifaceted_chained.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)

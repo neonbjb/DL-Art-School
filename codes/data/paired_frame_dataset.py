@@ -39,7 +39,7 @@ class PairedFrameDataset(BaseUnsupervisedImageDataset):
         hq_ref = torch.cat([hq_ref, hq_mask], dim=1)
         lq = torch.from_numpy(np.ascontiguousarray(np.transpose(np.stack(ls), (0, 3, 1, 2)))).float()
         lq_ref = torch.from_numpy(np.ascontiguousarray(np.transpose(np.stack(lrs), (0, 3, 1, 2)))).float()
-        lq_mask = torch.from_numpy(np.ascontiguousarray(np.stack(lms))).unsqueeze(dim=1)
+        lq_mask = torch.from_numpy(np.ascontiguousarray(np.stack(lms))).squeeze().unsqueeze(dim=1)
         lq_ref = torch.cat([lq_ref, lq_mask], dim=1)
 
         return {'GT_path': path, 'LQ': lq, 'GT': hq, 'gt_fullsize_ref': hq_ref, 'lq_fullsize_ref': lq_ref,
@@ -49,9 +49,9 @@ class PairedFrameDataset(BaseUnsupervisedImageDataset):
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\vr\\paired_images'],
+        'paths': ['F:\\4k6k\\datasets\\ns_images\\vr\\validation'],
         'weights': [1],
-        'target_size': 128,
+        #'target_size': 128,
         'force_multiple': 32,
         'scale': 2,
         'eval': False,
@@ -72,7 +72,7 @@ if __name__ == '__main__':
         element = ds[random.randint(0,len(ds))]
         base_file = osp.basename(element["GT_path"])
         o = element[k].unsqueeze(0)
-        if bs < 32:
+        if bs < 2:
             if batch is None:
                 batch = o
             else:
