@@ -46,7 +46,7 @@ class Trainer:
 
         else:
             opt['dist'] = True
-            self.init_dist()
+            self.init_dist('nccl')
             world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
@@ -117,11 +117,11 @@ class Trainer:
                 total_iters = int(opt['train']['niter'])
                 self.total_epochs = int(math.ceil(total_iters / train_size))
                 if opt['dist']:
-                    train_sampler = DistIterSampler(self.train_set, world_size, self.rank, dataset_ratio)
+                    self.train_sampler = DistIterSampler(self.train_set, world_size, self.rank, dataset_ratio)
                     self.total_epochs = int(math.ceil(total_iters / (train_size * dataset_ratio)))
                 else:
-                    train_sampler = None
-                self.train_loader = create_dataloader(self.train_set, dataset_opt, opt, train_sampler)
+                    self.train_sampler = None
+                self.train_loader = create_dataloader(self.train_set, dataset_opt, opt, self.train_sampler)
                 if self.rank <= 0:
                     self.logger.info('Number of train images: {:,d}, iters: {:,d}'.format(
                         len(self.train_set), train_size))
@@ -284,6 +284,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_prog_imgset_multifaceted_chained.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
+    parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
     trainer = Trainer()
