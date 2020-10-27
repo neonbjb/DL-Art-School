@@ -65,6 +65,7 @@ def forward_pass(model, output_dir, alteration_suffix=''):
 
     visuals = model.get_current_visuals(need_GT)['rlt'].cpu()
     fea_loss = 0
+    psnr_loss = 0
     for i in range(visuals.shape[0]):
         img_path = data['GT_path'][i] if need_GT else data['LQ_path'][i]
         img_name = osp.splitext(osp.basename(img_path))[0]
@@ -80,9 +81,12 @@ def forward_pass(model, output_dir, alteration_suffix=''):
 
         if need_GT:
             fea_loss += model.compute_fea_loss(visuals[i], data['GT'][i])
+            psnr_sr = util.tensor2img(visuals[i])
+            psnr_gt = util.tensor2img(data['GT'][i])
+            psnr_loss += util.calculate_psnr(psnr_sr, psnr_gt)
 
         util.save_img(sr_img, save_img_path)
-    return fea_loss
+    return fea_loss, psnr_loss
 
 
 if __name__ == "__main__":
@@ -90,7 +94,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     srg_analyze = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/srgan_compute_feature.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_4x_psnr.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
@@ -113,6 +117,7 @@ if __name__ == "__main__":
 
     model = ExtensibleTrainer(opt)
     fea_loss = 0
+    psnr_loss = 0
     for test_loader in test_loaders:
         test_set_name = test_loader.dataset.opt['name']
         logger.info('\nTesting [{:s}]...'.format(test_set_name))
@@ -148,7 +153,9 @@ if __name__ == "__main__":
                 model_copy.load_state_dict(orig_model.state_dict())
                 model.netG = model_copy
             else:
-                fea_loss += forward_pass(model, dataset_dir, opt['name'])
+                fea_loss, psnr_loss = forward_pass(model, dataset_dir, opt['name'])
+                fea_loss += fea_loss
+                psnr_loss += psnr_loss
 
         # log
-        logger.info('# Validation # Fea: {:.4e}'.format(fea_loss / len(test_loader)))
+        logger.info('# Validation # Fea: {:.4e}, PSNR: {:.4e}'.format(fea_loss / len(test_loader), psnr_loss / len(test_loader)))
