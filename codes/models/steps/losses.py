@@ -202,6 +202,7 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         # generators and discriminators by essentially having them skip steps while their counterparts "catch up".
         self.min_loss = opt['min_loss'] if 'min_loss' in opt.keys() else 0
         if self.min_loss != 0:
+            assert self.env['rank'] == 0   # distributed training does not support 'min_loss' - it can result in backward() desync by design.
             self.loss_rotating_buffer = torch.zeros(10, requires_grad=False)
             self.rb_ptr = 0
             self.losses_computed = 0

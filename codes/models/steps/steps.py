@@ -126,48 +126,49 @@ class ConfigurableStep(Module):
         self.env['current_step_optimizers'] = self.optimizers
         self.env['training'] = train
 
-        # Inject in any extra dependencies.
-        for inj in self.injectors:
-            # Don't do injections tagged with eval unless we are not in train mode.
-            if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
-                continue
-            # Likewise, don't do injections tagged with train unless we are not in eval.
-            if not train and 'train' in inj.opt.keys() and inj.opt['train']:
-                continue
-            # Don't do injections tagged with 'after' or 'before' when we are out of spec.
-            if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
-                'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
-                continue
-            injected = inj(local_state)
-            local_state.update(injected)
-            new_state.update(injected)
-
-        if train and len(self.losses) > 0:
-            # Finally, compute the losses.
-            total_loss = 0
-            for loss_name, loss in self.losses.items():
-                # Some losses only activate after a set number of steps. For example, proto-discriminator losses can
-                # be very disruptive to a generator.
-                if 'after' in loss.opt.keys() and loss.opt['after'] > self.env['step']:
+        with self.get_network_for_name(self.get_networks_trained()[0]).join():
+            # Inject in any extra dependencies.
+            for inj in self.injectors:
+                # Don't do injections tagged with eval unless we are not in train mode.
+                if train and 'eval' in inj.opt.keys() and inj.opt['eval']:
                     continue
-                l = loss(self.training_net, local_state)
-                total_loss += l * self.weights[loss_name]
-                # Record metrics.
-                if isinstance(l, torch.Tensor):
-                    self.loss_accumulator.add_loss(loss_name, l)
-                for n, v in loss.extra_metrics():
-                    self.loss_accumulator.add_loss("%s_%s" % (loss_name, n), v)
-                loss.clear_metrics()
+                # Likewise, don't do injections tagged with train unless we are not in eval.
+                if not train and 'train' in inj.opt.keys() and inj.opt['train']:
+                    continue
+                # Don't do injections tagged with 'after' or 'before' when we are out of spec.
+                if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
+                   'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
+                    continue
+                injected = inj(local_state)
+                local_state.update(injected)
+                new_state.update(injected)
 
-            # In some cases, the loss could not be set (e.g. all losses have 'after'
-            if isinstance(total_loss, torch.Tensor):
-                self.loss_accumulator.add_loss("%s_total" % (self.get_training_network_name(),), total_loss)
-                # Scale the loss down by the accumulation factor.
-                total_loss = total_loss / self.env['mega_batch_factor']
+            if train and len(self.losses) > 0:
+                # Finally, compute the losses.
+                total_loss = 0
+                for loss_name, loss in self.losses.items():
+                    # Some losses only activate after a set number of steps. For example, proto-discriminator losses can
+                    # be very disruptive to a generator.
+                    if 'after' in loss.opt.keys() and loss.opt['after'] > self.env['step']:
+                        continue
+                    l = loss(self.training_net, local_state)
+                    total_loss += l * self.weights[loss_name]
+                    # Record metrics.
+                    if isinstance(l, torch.Tensor):
+                        self.loss_accumulator.add_loss(loss_name, l)
+                    for n, v in loss.extra_metrics():
+                        self.loss_accumulator.add_loss("%s_%s" % (loss_name, n), v)
+                        loss.clear_metrics()
 
-                # Get dem grads!
-                self.scaler.scale(total_loss).backward()
-                self.grads_generated = True
+                # In some cases, the loss could not be set (e.g. all losses have 'after')
+                if isinstance(total_loss, torch.Tensor):
+                    self.loss_accumulator.add_loss("%s_total" % (self.get_training_network_name(),), total_loss)
+                    # Scale the loss down by the accumulation factor.
+                    total_loss = total_loss / self.env['mega_batch_factor']
+
+                    # Get dem grads!
+                    self.scaler.scale(total_loss).backward()
+                    self.grads_generated = True
 
         # Detach all state variables. Within the step, gradients can flow. Once these variables leave the step
         # we must release the gradients.
