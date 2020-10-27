@@ -303,9 +303,9 @@ class FullImageDataset(data.Dataset):
             gt_fullsize_ref = cv2.cvtColor(gt_fullsize_ref, cv2.COLOR_BGR2RGB)
 
         # LQ needs to go to a PIL image to perform the compression-artifact transformation.
-        if self.opt['phase'] == 'train':
-            img_LQ = self.pil_augment(img_LQ)
-            lq_fullsize_ref = self.pil_augment(lq_fullsize_ref, strength=.2)
+        #if self.opt['phase'] == 'train':
+            #img_LQ = self.pil_augment(img_LQ)
+            #lq_fullsize_ref = self.pil_augment(lq_fullsize_ref, strength=.2)
 
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         gt_fullsize_ref = torch.from_numpy(np.ascontiguousarray(np.transpose(gt_fullsize_ref, (2, 0, 1)))).float()
