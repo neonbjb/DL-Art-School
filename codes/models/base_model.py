@@ -110,6 +110,8 @@ class BaseModel():
         for k, v in load_net.items():
             if k.startswith('module.'):
                 load_net_clean[k[7:]] = v
+            if k.startswith('generator'):   # Hack to fix ESRGAN pretrained model.
+                load_net_clean[k[10:]] = v
             else:
                 load_net_clean[k] = v
         network.load_state_dict(load_net_clean, strict=strict)

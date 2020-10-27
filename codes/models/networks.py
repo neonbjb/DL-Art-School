@@ -36,14 +36,8 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = SRResNet_arch.MSRResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                        nf=opt_net['nf'], nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == 'RRDBNet':
-        # RRDB does scaling in two steps, so take the sqrt of the scale we actually want to achieve and feed it to RRDB.
-        initial_stride = 1 if 'initial_stride' not in opt_net else opt_net['initial_stride']
-        assert initial_stride == 1 or initial_stride == 2
-        # Need to adjust the scale the generator sees by the stride since the stride causes a down-sample.
-        gen_scale = scale * initial_stride
-        netG = RRDBNet_arch.RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'] if 'scale' in opt_net.keys() else gen_scale,
-                                    initial_stride=initial_stride)
+        netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'])
     elif which_model == 'rcan':
         #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
         opt_net['rgb_range'] = 255

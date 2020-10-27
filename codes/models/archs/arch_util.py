@@ -5,6 +5,22 @@ import torch.nn.functional as F
 import torch.nn.utils.spectral_norm as SpectralNorm
 from math import sqrt
 
+def kaiming_init(module,
+                 a=0,
+                 mode='fan_out',
+                 nonlinearity='relu',
+                 bias=0,
+                 distribution='normal'):
+    assert distribution in ['uniform', 'normal']
+    if distribution == 'uniform':
+        nn.init.kaiming_uniform_(
+            module.weight, a=a, mode=mode, nonlinearity=nonlinearity)
+    else:
+        nn.init.kaiming_normal_(
+            module.weight, a=a, mode=mode, nonlinearity=nonlinearity)
+    if hasattr(module, 'bias') and module.bias is not None:
+        nn.init.constant_(module.bias, bias)
+
 def pixel_norm(x, epsilon=1e-8):
     return x * torch.rsqrt(torch.mean(torch.pow(x, 2), dim=1, keepdims=True) + epsilon)
 
@@ -28,14 +44,34 @@ def initialize_weights(net_l, scale=1):
                 init.constant_(m.bias.data, 0.0)
 
 
-def make_layer(block, n_layers, return_layers=False):
+def make_layer(block, num_blocks, **kwarg):
+    """Make layers by stacking the same blocks.
+    Args:
+        block (nn.module): nn.module class for basic block.
+        num_blocks (int): number of blocks.
+    Returns:
+        nn.Sequential: Stacked blocks in nn.Sequential.
+    """
     layers = []
-    for _ in range(n_layers):
-        layers.append(block())
-    if return_layers:
-        return nn.Sequential(*layers), layers
-    else:
-        return nn.Sequential(*layers)
+    for _ in range(num_blocks):
+        layers.append(block(**kwarg))
+    return nn.Sequential(*layers)
+
+
+def default_init_weights(module, scale=1):
+    """Initialize network weights.
+    Args:
+        modules (nn.Module): Modules to be initialized.
+        scale (float): Scale initialized weights, especially for residual
+            blocks.
+    """
+    for m in module.modules():
+        if isinstance(m, nn.Conv2d):
+            kaiming_init(m, a=0, mode='fan_in', bias=0)
+            m.weight.data *= scale
+        elif isinstance(m, nn.Linear):
+            kaiming_init(m, a=0, mode='fan_in', bias=0)
+            m.weight.data *= scale
 
 
 class ResidualBlock(nn.Module):
