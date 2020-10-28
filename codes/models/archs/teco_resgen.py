@@ -6,6 +6,7 @@ from models.archs.arch_util import ConvGnSilu, make_layer
 
 class TecoResblock(nn.Module):
     def __init__(self, nf):
+        super(TecoResblock, self).__init__()
         self.nf = nf
         self.conv1 = ConvGnSilu(nf, nf, kernel_size=3, norm=False, activation=True, bias=False, weight_init_factor=.1)
         self.conv2 = ConvGnSilu(nf, nf, kernel_size=3, norm=False, activation=False, bias=False, weight_init_factor=.1)
@@ -19,6 +20,7 @@ class TecoResblock(nn.Module):
 
 class TecoUpconv(nn.Module):
     def __init__(self, nf, scale):
+        super(TecoUpconv, self).__init__()
         self.nf = nf
         self.scale = scale
         self.conv1 = ConvGnSilu(nf, nf, kernel_size=3, norm=False, activation=True, bias=True)
@@ -32,7 +34,7 @@ class TecoUpconv(nn.Module):
         x = self.conv2(x)
         x = nn.functional.interpolate(x, scale_factor=self.scale, mode="nearest")
         x = self.conv3(x)
-        return identity + self.final_conv(x)
+        return self.final_conv(x)
 
 
 # Extremely simple resnet based generator that is very similar to the one used in the tecogan paper.
@@ -43,12 +45,13 @@ class TecoUpconv(nn.Module):
 # - Upsample block is slightly more complicated.
 class TecoGen(nn.Module):
     def __init__(self, nf, scale):
+        super(TecoGen, self).__init__()
         self.nf = nf
         self.scale = scale
         fea_conv = ConvGnSilu(6, nf, kernel_size=7, stride=self.scale, bias=True, norm=False, activation=True)
         res_layers = [TecoResblock(nf) for i in range(15)]
-        upsample = TecoUpconv(nf)
-        everything = [fea_conv] + res_layers + upsample
+        upsample = TecoUpconv(nf, scale)
+        everything = [fea_conv] + res_layers + [upsample]
         self.core = nn.Sequential(*everything)
 
     def forward(self, x, ref=None):
@@ -56,5 +59,5 @@ class TecoGen(nn.Module):
         if ref is None:
             ref = torch.zeros_like(x)
         join = torch.cat([x, ref], dim=1)
-        return sequential_checkpoint(self.core, 6, join)
+        return x + sequential_checkpoint(self.core, 6, join)
 
