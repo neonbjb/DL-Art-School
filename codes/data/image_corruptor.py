@@ -100,6 +100,9 @@ class ImageCorruptor:
                 elif aug == 'jpeg-broad':
                     lo=15
                     range=60
+                elif aug == 'jpeg-normal':
+                    lo=35
+                    range=60
                 # JPEG compression
                 qf = (rand_int % range + lo)
                 # cv2's jpeg compression is "odd". It introduces artifacts. Use PIL instead.
