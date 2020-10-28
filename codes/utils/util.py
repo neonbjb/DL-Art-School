@@ -51,6 +51,13 @@ def checkpoint(fn, *args):
     else:
         return fn(*args)
 
+def sequential_checkpoint(fn, partitions, *args):
+    enabled = loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in loaded_options.keys() else True
+    if enabled:
+        return torch.utils.checkpoint.checkpoint_sequential(fn, partitions, *args)
+    else:
+        return fn(*args)
+
 # A fancy alternative to if <flag> checkpoint() else <call>
 def possible_checkpoint(enabled, fn, *args):
     opt_en = loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in loaded_options.keys() else True

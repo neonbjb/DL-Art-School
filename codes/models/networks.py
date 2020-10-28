@@ -18,6 +18,7 @@ import models.archs.feature_arch as feature_arch
 import models.archs.panet.panet as panet
 import models.archs.rcan as rcan
 import models.archs.ChainedEmbeddingGen as chained
+from models.archs.teco_resgen import TecoGen
 
 logger = logging.getLogger('base')
 
@@ -98,6 +99,8 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = SwitchedGen_arch.BackboneSpinenetNoHead()
     elif which_model == "backbone_resnet":
         netG = SwitchedGen_arch.BackboneResnet()
+    elif which_model == "tecogen":
+        netG = TecoGen(opt_net['nf'], opt_net['scale'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
 
