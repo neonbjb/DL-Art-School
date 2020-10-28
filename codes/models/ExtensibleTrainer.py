@@ -30,7 +30,9 @@ class ExtensibleTrainer(BaseModel):
         self.env = {'device': self.device,
                'rank': self.rank,
                'opt': opt,
-               'step': 0}
+               'step': 0,
+               'dist': opt['dist']
+        }
         if opt['path']['models'] is not None:
                self.env['base_path'] = os.path.join(opt['path']['models'])
 
