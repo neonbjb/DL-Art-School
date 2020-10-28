@@ -101,8 +101,10 @@ class ImageCorruptor:
                     lo=15
                     range=60
                 elif aug == 'jpeg-normal':
-                    lo=35
-                    range=60
+                    lo=55
+                    range=35
+                else:
+                    raise NotImplementedError("specified jpeg corruption doesn't exist")
                 # JPEG compression
                 qf = (rand_int % range + lo)
                 # cv2's jpeg compression is "odd". It introduces artifacts. Use PIL instead.
