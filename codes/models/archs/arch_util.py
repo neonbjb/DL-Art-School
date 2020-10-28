@@ -367,6 +367,7 @@ class ConvGnLelu(nn.Module):
         else:
             return x
 
+
 ''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvGnSilu(nn.Module):

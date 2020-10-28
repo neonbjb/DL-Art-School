@@ -5,7 +5,6 @@ import torch.nn as nn
 from torch.nn.parallel.distributed import DistributedDataParallel
 
 import utils.util
-from apex import amp
 
 
 class BaseModel():
