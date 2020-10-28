@@ -5,6 +5,7 @@ class LossAccumulator:
     def __init__(self, buffer_sz=50):
         self.buffer_sz = buffer_sz
         self.buffers = {}
+        self.counters = {}
 
     def add_loss(self, name, tensor):
         if name not in self.buffers.keys():
@@ -18,6 +19,12 @@ class LossAccumulator:
         filled = i+1 >= self.buffer_sz or filled
         self.buffers[name] = ((i+1) % self.buffer_sz, buf, filled)
 
+    def increment_metric(self, name):
+        if name not in self.counters.keys():
+            self.counters[name] = 1
+        else:
+            self.counters[name] += 1
+
     def as_dict(self):
         result = {}
         for k, v in self.buffers.items():
@@ -26,4 +33,6 @@ class LossAccumulator:
                 result["loss_" + k] = torch.mean(buf)
             else:
                 result["loss_" + k] = torch.mean(buf[:i])
+        for k, v in self.counters.items():
+            result[k] = v
         return result

@@ -26,6 +26,7 @@ class ConfigurableStep(Module):
         self.optimizers = None
         self.scaler = GradScaler(enabled=self.opt['fp16'])
         self.grads_generated = False
+        self.min_total_loss = opt_step['min_total_loss'] if 'min_total_loss' in opt_step.keys() else 0
 
         self.injectors = []
         if 'injectors' in self.step_opt.keys():
@@ -162,11 +163,22 @@ class ConfigurableStep(Module):
             # In some cases, the loss could not be set (e.g. all losses have 'after')
             if isinstance(total_loss, torch.Tensor):
                 self.loss_accumulator.add_loss("%s_total" % (self.get_training_network_name(),), total_loss)
+                reset_required = total_loss < self.min_total_loss
+
                 # Scale the loss down by the accumulation factor.
                 total_loss = total_loss / self.env['mega_batch_factor']
 
                 # Get dem grads!
                 self.scaler.scale(total_loss).backward()
+
+                if reset_required:
+                    # You might be scratching your head at this. Why would you zero grad as opposed to not doing a
+                    # backwards? Because DDP uses the backward() pass as a synchronization point and there is not a good
+                    # way to simply bypass backward. If you want a more efficient way to specify a min_loss, use or
+                    # implement it at the loss level.
+                    self.training_net.zero_grad()
+                    self.loss_accumulator.increment_metric("%s_skipped_steps" % (self.get_training_network_name(),))
+
                 self.grads_generated = True
 
         # Detach all state variables. Within the step, gradients can flow. Once these variables leave the step
