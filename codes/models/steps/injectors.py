@@ -31,8 +31,6 @@ def create_injector(opt_inject, env):
         return GreyInjector(opt_inject, env)
     elif type == 'interpolate':
         return InterpolateInjector(opt_inject, env)
-    elif type == 'imageflow':
-        return ImageFlowInjector(opt_inject, env)
     elif type == 'image_patch':
         return ImagePatchInjector(opt_inject, env)
     elif type == 'concatenate':
