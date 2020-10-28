@@ -13,42 +13,25 @@ from data import create_dataloader, create_dataset
 from models.ExtensibleTrainer import ExtensibleTrainer
 from time import time
 
-class Trainer:
-    def init_dist(self, backend, **kwargs):
-        # These packages have globals that screw with Windows, so only import them if needed.
-        import torch.distributed as dist
-        import torch.multiprocessing as mp
+def init_dist(backend, **kwargs):
+    # These packages have globals that screw with Windows, so only import them if needed.
+    import torch.distributed as dist
+    import torch.multiprocessing as mp
 
-        """initialization for distributed training"""
-        if mp.get_start_method(allow_none=True) != 'spawn':
-            mp.set_start_method('spawn')
-        self.rank = int(os.environ['RANK'])
-        num_gpus = torch.cuda.device_count()
-        torch.cuda.set_device(self.rank % num_gpus)
-        dist.init_process_group(backend=backend, **kwargs)
+    """initialization for distributed training"""
+    if mp.get_start_method(allow_none=True) != 'spawn':
+        mp.set_start_method('spawn')
+    rank = int(os.environ['RANK'])
+    num_gpus = torch.cuda.device_count()
+    torch.cuda.set_device(rank % num_gpus)
+    dist.init_process_group(backend=backend, **kwargs)
+
+class Trainer:
 
     def init(self, opt, launcher, all_networks={}):
         self._profile = False
         self.val_compute_psnr = opt['eval']['compute_psnr'] if 'compute_psnr' in opt['eval'] else True
         self.val_compute_fea = opt['eval']['compute_fea'] if 'compute_fea' in opt['eval'] else True
-
-        #### distributed training settings
-        if len(opt['gpu_ids']) == 1 and torch.cuda.device_count() > 1:
-            gpu = input(
-                'I noticed you have multiple GPUs. Starting two jobs on the same GPU sucks. Please confirm which GPU'
-                'you want to use. Press enter to use the specified one [%s]' % (opt['gpu_ids']))
-            if gpu:
-                opt['gpu_ids'] = [int(gpu)]
-        if launcher == 'none':  # disabled distributed training
-            opt['dist'] = False
-            self.rank = -1
-            print('Disabled distributed training.')
-
-        else:
-            opt['dist'] = True
-            self.init_dist('nccl')
-            world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
 
         #### loading resume state if exists
         if opt['path'].get('resume_state', None):
@@ -117,7 +100,7 @@ class Trainer:
                 total_iters = int(opt['train']['niter'])
                 self.total_epochs = int(math.ceil(total_iters / train_size))
                 if opt['dist']:
-                    self.train_sampler = DistIterSampler(self.train_set, world_size, self.rank, dataset_ratio)
+                    self.train_sampler = DistIterSampler(self.train_set, self.world_size, self.rank, dataset_ratio)
                     self.total_epochs = int(math.ceil(total_iters / (train_size * dataset_ratio)))
                 else:
                     self.train_sampler = None
@@ -288,5 +271,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
     trainer = Trainer()
+
+    #### distributed training settings
+    if args.launcher == 'none':  # disabled distributed training
+        opt['dist'] = False
+        trainer.rank = -1
+        print('Disabled distributed training.')
+
+    else:
+        opt['dist'] = True
+        init_dist('nccl')
+        trainer.world_size = torch.distributed.get_world_size()
+        trainer.rank = torch.distributed.get_rank()
+
     trainer.init(opt, args.launcher)
     trainer.do_training()

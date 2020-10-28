@@ -94,12 +94,12 @@ class SPSRNet(nn.Module):
 
         n_upscale = int(math.log(upscale, 2))
 
-        self.scale=n_upscale
+        self.scale=upscale
         if upscale == 3:
             n_upscale = 1
 
         fea_conv = ConvGnLelu(in_nc, nf//2, kernel_size=7, norm=False, activation=False)
-        self.ref_conv = ConvGnLelu(in_nc, nf//2, stride=n_upscale, kernel_size=7, norm=False, activation=False)
+        self.ref_conv = ConvGnLelu(in_nc, nf//2, stride=upscale, kernel_size=7, norm=False, activation=False)
         self.join_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False)
         rb_blocks = [RRDB(nf) for _ in range(nb)]
 
@@ -118,7 +118,7 @@ class SPSRNet(nn.Module):
                                   *upsampler, self.HR_conv0_new)
 
         self.b_fea_conv = ConvGnLelu(in_nc, nf//2, kernel_size=3, norm=False, activation=False)
-        self.b_ref_conv = ConvGnLelu(in_nc, nf//2, stride=n_upscale, kernel_size=3, norm=False, activation=False)
+        self.b_ref_conv = ConvGnLelu(in_nc, nf//2, stride=upscale, kernel_size=3, norm=False, activation=False)
         self.b_join_conv = ConvGnLelu(nf, nf, kernel_size=3, norm=False, activation=False)
 
         self.b_concat_1 = ConvGnLelu(2 * nf, nf, kernel_size=3, norm=False, activation=False)

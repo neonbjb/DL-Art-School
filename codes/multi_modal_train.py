@@ -15,15 +15,29 @@ import yaml
 import train
 import utils.options as option
 from utils.util import OrderedYaml
+import torch
 
 
 def main(master_opt, launcher):
     trainers = []
     all_networks = {}
     shared_networks = []
+    if launcher != 'none':
+        train.init_dist('nccl')
     for i, sub_opt in enumerate(master_opt['trainer_options']):
         sub_opt_parsed = option.parse(sub_opt, is_train=True)
         trainer = train.Trainer()
+
+        #### distributed training settings
+        if launcher == 'none':  # disabled distributed training
+            sub_opt_parsed['dist'] = False
+            trainer.rank = -1
+            print('Disabled distributed training.')
+        else:
+            sub_opt_parsed['dist'] = True
+            trainer.world_size = torch.distributed.get_world_size()
+            trainer.rank = torch.distributed.get_rank()
+
         trainer.init(sub_opt_parsed, launcher, all_networks)
         train_gen = trainer.create_training_generator(i)
         model = next(train_gen)
@@ -44,6 +58,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgset_chained_structured_trans_invariance.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
+    parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
 
     Loader, Dumper = OrderedYaml()
