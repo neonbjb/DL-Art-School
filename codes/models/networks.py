@@ -39,6 +39,10 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == 'RRDBNet':
         netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
                                     mid_channels=opt_net['nf'], num_blocks=opt_net['nb'])
+    elif which_model == 'RRDBNetBypass':
+        netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], body_block=RRDBNet_arch.RRDBWithBypass,
+                                    blocks_per_checkpoint=opt_net['blocks_per_checkpoint'])
     elif which_model == 'rcan':
         #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
         opt_net['rgb_range'] = 255

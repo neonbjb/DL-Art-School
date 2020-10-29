@@ -1,9 +1,12 @@
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
 from torch.utils.checkpoint import checkpoint_sequential
 
-from models.archs.arch_util import make_layer, default_init_weights
+from models.archs.arch_util import make_layer, default_init_weights, ConvGnSilu
 
 
 class ResidualDenseBlock(nn.Module):
@@ -79,6 +82,44 @@ class RRDB(nn.Module):
         return out * 0.2 + x
 
 
+class RRDBWithBypass(nn.Module):
+    """Residual in Residual Dense Block.
+
+    Used in RRDB-Net in ESRGAN.
+
+    Args:
+        mid_channels (int): Channel number of intermediate features.
+        growth_channels (int): Channels for each growth.
+    """
+
+    def __init__(self, mid_channels, growth_channels=32):
+        super(RRDBWithBypass, self).__init__()
+        self.rdb1 = ResidualDenseBlock(mid_channels, growth_channels)
+        self.rdb2 = ResidualDenseBlock(mid_channels, growth_channels)
+        self.rdb3 = ResidualDenseBlock(mid_channels, growth_channels)
+        self.bypass = nn.Sequential(ConvGnSilu(mid_channels*2, mid_channels, kernel_size=3, bias=True, activation=True, norm=True),
+                                    ConvGnSilu(mid_channels, mid_channels//2, kernel_size=3, bias=False, activation=True, norm=False),
+                                    ConvGnSilu(mid_channels//2, 1, kernel_size=3, bias=False, activation=False, norm=False),
+                                    nn.Sigmoid())
+
+    def forward(self, x):
+        """Forward function.
+
+        Args:
+            x (Tensor): Input tensor with shape (n, c, h, w).
+
+        Returns:
+            Tensor: Forward results.
+        """
+        out = self.rdb1(x)
+        out = self.rdb2(out)
+        out = self.rdb3(out)
+        bypass = self.bypass(torch.cat([x, out], dim=1))
+        self.bypass_map = bypass.detach().clone()
+        # Emperically, we use 0.2 to scale the residual for better performance
+        return out * 0.2 * bypass + x
+
+
 class RRDBNet(nn.Module):
     """Networks consisting of Residual in Residual Dense Block, which is used
     in ESRGAN.
@@ -100,11 +141,15 @@ class RRDBNet(nn.Module):
                  out_channels,
                  mid_channels=64,
                  num_blocks=23,
-                 growth_channels=32):
+                 growth_channels=32,
+                 body_block=RRDB,
+                 blocks_per_checkpoint=4):
         super(RRDBNet, self).__init__()
+        self.num_blocks = num_blocks
+        self.blocks_per_checkpoint = blocks_per_checkpoint
         self.conv_first = nn.Conv2d(in_channels, mid_channels, 3, 1, 1)
         self.body = make_layer(
-            RRDB,
+            body_block,
             num_blocks,
             mid_channels=mid_channels,
             growth_channels=growth_channels)
@@ -134,7 +179,7 @@ class RRDBNet(nn.Module):
         """
 
         feat = self.conv_first(x)
-        body_feat = self.conv_body(checkpoint_sequential(self.body, 5, feat))
+        body_feat = self.conv_body(checkpoint_sequential(self.body, self.num_blocks // self.blocks_per_checkpoint, feat))
         feat = feat + body_feat
         # upsample
         feat = self.lrelu(
@@ -143,3 +188,8 @@ class RRDBNet(nn.Module):
             self.conv_up2(F.interpolate(feat, scale_factor=2, mode='nearest')))
         out = self.conv_last(self.lrelu(self.conv_hr(feat)))
         return out
+
+    def visual_dbg(self, step, path):
+        for i, bm in enumerate(self.body):
+            torchvision.utils.save_image(bm.bypass_map.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
+
