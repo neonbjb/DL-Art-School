@@ -143,10 +143,12 @@ class RRDBNet(nn.Module):
                  num_blocks=23,
                  growth_channels=32,
                  body_block=RRDB,
-                 blocks_per_checkpoint=4):
+                 blocks_per_checkpoint=4,
+                 scale=4):
         super(RRDBNet, self).__init__()
         self.num_blocks = num_blocks
         self.blocks_per_checkpoint = blocks_per_checkpoint
+        self.scale = scale
         self.conv_first = nn.Conv2d(in_channels, mid_channels, 3, 1, 1)
         self.body = make_layer(
             body_block,
@@ -184,8 +186,11 @@ class RRDBNet(nn.Module):
         # upsample
         feat = self.lrelu(
             self.conv_up1(F.interpolate(feat, scale_factor=2, mode='nearest')))
-        feat = self.lrelu(
-            self.conv_up2(F.interpolate(feat, scale_factor=2, mode='nearest')))
+        if self.scale == 4:
+            feat = self.lrelu(
+                self.conv_up2(F.interpolate(feat, scale_factor=2, mode='nearest')))
+        else:
+            feat = self.lrelu(self.conv_up2(feat))
         out = self.conv_last(self.lrelu(self.conv_hr(feat)))
         return out
 
