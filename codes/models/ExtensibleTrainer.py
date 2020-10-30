@@ -235,7 +235,7 @@ class ExtensibleTrainer(BaseModel):
                 if v not in state.keys():
                     continue   # This can happen for several reasons (ex: 'after' defs), just ignore it.
                 for i, dbgv in enumerate(state[v]):
-                    if 'recurrent_visual_indices' in self.opt['logger'].keys():
+                    if 'recurrent_visual_indices' in self.opt['logger'].keys() and len(dbgv.shape)==5:
                         for rvi in self.opt['logger']['recurrent_visual_indices']:
                             rdbgv = dbgv[:, rvi]
                             if rdbgv.shape[1] > 3:

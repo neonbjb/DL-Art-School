@@ -138,7 +138,7 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
         final_results = {}
         # Include 'hq_batched' here - because why not... Don't really need a separate injector for this.
         b, s, c, h, w = state['hq'].shape
-        final_results['hq_batched'] = state['hq'].view(b*s, c, h, w)
+        final_results['hq_batched'] = state['hq'].clone().permute(1,0,2,3,4).reshape(b*s, c, h, w)
         for k, v in results.items():
             final_results[k] = torch.stack(v, dim=1)
             final_results[k + "_batched"] = torch.cat(v[:s], dim=0)  # Only include the original sequence - this output is generally used to compare against HQ.
@@ -345,8 +345,10 @@ class PingPongLoss(ConfigurableLoss):
         img_count = fake.shape[1]
         for i in range((img_count - 1) // 2):
             early = fake[:, i]
-            late = fake[:, -i]
+            late = fake[:, -(i+1)]
             l_total += self.criterion(early, late)
+            if self.env['step'] % 50 == 0:
+                self.produce_teco_visual_debugs2(early, late, i)
 
         if self.env['step'] % 50 == 0:
             self.produce_teco_visual_debugs(fake)
@@ -362,4 +364,12 @@ class PingPongLoss(ConfigurableLoss):
         for i in range(cnt):
             img = imglist[:, i]
             torchvision.utils.save_image(img.float(), osp.join(base_path, "%s.png" % (i, )))
+
+    def produce_teco_visual_debugs2(self, imga, imgb, i):
+        if self.env['rank'] > 0:
+            return
+        base_path = osp.join(self.env['base_path'], "..", "visual_dbg", "teco_pingpong", str(self.env['step']))
+        os.makedirs(base_path, exist_ok=True)
+        torchvision.utils.save_image(imga.float(), osp.join(base_path, "%s_a.png" % (i, )))
+        torchvision.utils.save_image(imgb.float(), osp.join(base_path, "%s_b.png" % (i, )))
 
