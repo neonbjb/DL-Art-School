@@ -267,13 +267,14 @@ class ExtensibleTrainer(BaseModel):
         with torch.no_grad():
             # This can happen one of two ways: Either a 'validation injector' is provided, in which case we run that.
             # Or, we run the entire chain of steps in "train" mode and use eval.output_state.
-            if 'injector' in self.opt['eval'].keys():
-                # Need to move from mega_batch mode to batch mode (remove chunks)
+            if 'injectors' in self.opt['eval'].keys():
                 state = {}
-                for k, v in self.dstate.items():
-                    state[k] = v[0]
-                inj = create_injector(self.opt['eval']['injector'], self.env)
-                state.update(inj(state))
+                for inj in self.opt['eval']['injectors'].values():
+                    # Need to move from mega_batch mode to batch mode (remove chunks)
+                    for k, v in self.dstate.items():
+                        state[k] = v[0]
+                    inj = create_injector(inj, self.env)
+                    state.update(inj(state))
             else:
                 # Iterate through the steps, performing them one at a time.
                 state = self.dstate

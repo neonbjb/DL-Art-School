@@ -23,8 +23,6 @@ def parse(opt_path, is_train=True):
         for phase, dataset in opt['datasets'].items():
             phase = phase.split('_')[0]
             dataset['phase'] = phase
-            if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
-                dataset['scale'] = scale
             is_lmdb = False
             ''' LMDB is not supported at this point with the mods I've been making.
             if dataset.get('dataroot_GT', None) is not None:
@@ -66,11 +64,6 @@ def parse(opt_path, is_train=True):
         results_root = osp.join(opt['path']['root'], 'results', opt['name'])
         opt['path']['results_root'] = results_root
         opt['path']['log'] = results_root
-
-    # network
-    if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
-        if 'network_G' in opt.keys():
-            opt['network_G']['scale'] = scale
 
     return opt
 

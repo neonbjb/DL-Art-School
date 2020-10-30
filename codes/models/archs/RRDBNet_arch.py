@@ -188,6 +188,8 @@ class RRDBNet(nn.Module):
             if ref is None:
                 ref = torch.zeros_like(x_lg)
             x_lg = torch.cat([x_lg, ref], dim=1)
+        else:
+            x_lg = x
         feat = self.conv_first(x_lg)
         body_feat = self.conv_body(checkpoint_sequential(self.body, self.num_blocks // self.blocks_per_checkpoint, feat))
         feat = feat + body_feat

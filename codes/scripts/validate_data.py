@@ -13,7 +13,7 @@ from skimage import io
 def main():
     #### options
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../../options/train_imgset_spsr_switched2_xlbatch.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../../options/train_prog_mi1_rrdb_6bypass.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none',
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -50,6 +50,7 @@ def main():
                     len(train_set), train_size))
     assert train_loader is not None
 
+    '''
     tq_ldr = tqdm(train_set.get_paths())
     for path in tq_ldr:
         try:
@@ -58,6 +59,10 @@ def main():
         except Exception as e:
             print("Error with %s" % (path,))
             print(e)
+    '''
+    tq_ldr = tqdm(train_set)
+    for ds in tq_ldr:
+        pass
 
 
 if __name__ == '__main__':

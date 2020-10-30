@@ -27,8 +27,12 @@ class ProgressiveGeneratorInjector(Injector):
         self.hq_output_key = opt['hq_output']  # The key where HQ images corresponding with generated images are stored.
         self.input_lq_index = opt['input_lq_index'] if 'input_lq_index' in opt.keys() else 0
         self.output_hq_index = opt['output_hq_index']
-        self.recurrent_output_index = opt['recurrent_output_index']
-        self.recurrent_index = opt['recurrent_index']
+        if 'recurrent_output_index' in opt.keys():
+            self.recurrent_output_index = opt['recurrent_output_index']
+            self.recurrent_index = opt['recurrent_index']
+            self.recurrence = True
+        else:
+            self.recurrence = False
         self.depth = opt['depth']
         self.number_branches = opt['num_branches']  # Number of input branches to randomly choose for generation. This defines the output shape.
         self.multiscale_leaves = build_multiscale_patch_index_map(self.depth)
@@ -52,7 +56,8 @@ class ProgressiveGeneratorInjector(Injector):
     def feed_forward(self, gen, inputs, results, lq_input, recurrent_input):
         ff_input = inputs.copy()
         ff_input[self.input_lq_index] = lq_input
-        ff_input[self.recurrent_index] = recurrent_input
+        if self.recurrence:
+            ff_input[self.recurrent_index] = recurrent_input
 
         with autocast(enabled=self.env['opt']['fp16']):
             gen_out = gen(*ff_input)
@@ -61,7 +66,10 @@ class ProgressiveGeneratorInjector(Injector):
             gen_out = [gen_out]
         for i, out_key in enumerate(self.output):
             results[out_key].append(gen_out[i])
-        return gen_out[self.output_hq_index], gen_out[self.recurrent_output_index]
+        recurrent = None
+        if self.recurrence:
+            recurrent = gen_out[self.recurrent_output_index]
+        return gen_out[self.output_hq_index], recurrent
 
     def forward(self, state):
         gen = self.env['generators'][self.gen_key]
@@ -73,6 +81,7 @@ class ProgressiveGeneratorInjector(Injector):
             inputs = [inputs]
         if not isinstance(self.output, list):
             output = [self.output]
+            self.output = output
         results = {}   # A list of outputs produced by feeding each progressive lq input into the generator.
         results_hq = []
         for out_key in output:
@@ -91,7 +100,8 @@ class ProgressiveGeneratorInjector(Injector):
             for link in chain:  # Remember, `link` is a MultiscaleTreeNode.
                 top = int(link.top * h)
                 left = int(link.left * w)
-                recurrent = torch.nn.functional.interpolate(recurrent[:, :, top:top+h//2, left:left+w//2], scale_factor=2, mode="nearest")
+                if recurrent is not None:
+                    recurrent = torch.nn.functional.interpolate(recurrent[:, :, top:top+h//2, left:left+w//2], scale_factor=2, mode="nearest")
                 if self.feed_gen_output_into_input:
                     top *= 2
                     left *= 2
