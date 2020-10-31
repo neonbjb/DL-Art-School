@@ -347,8 +347,8 @@ class PingPongLoss(ConfigurableLoss):
             early = fake[:, i]
             late = fake[:, -(i+1)]
             l_total += self.criterion(early, late)
-            if self.env['step'] % 50 == 0:
-                self.produce_teco_visual_debugs2(early, late, i)
+            #if self.env['step'] % 50 == 0:
+            #    self.produce_teco_visual_debugs2(early, late, i)
 
         if self.env['step'] % 50 == 0:
             self.produce_teco_visual_debugs(fake)
