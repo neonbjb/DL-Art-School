@@ -71,8 +71,15 @@ class ImageCorruptor:
             # Large distortion blocks in part of an img, such as is used to mask out a face.
             pass
         elif 'lq_resampling' in aug:
-            # Bicubic LR->HR
-            pass
+            # Random mode interpolation HR->LR->HR
+            scale = 2
+            if 'lq_resampling4x' == aug:
+                scale = 4
+            interpolation_modes = [cv2.INTER_AREA, cv2.INTER_NEAREST, cv2.INTER_CUBIC, cv2.INTER_LINEAR, cv2.INTER_LANCZOS4]
+            mode = rand_int % len(interpolation_modes)
+            # Downsample first, then upsample using the random mode.
+            img = cv2.resize(img, dsize=(img.shape[1]//scale, img.shape[0]//scale), interpolation=cv2.INTER_NEAREST)
+            img = cv2.resize(img, dsize=(img.shape[1]*scale, img.shape[0]*scale), interpolation=mode)
         elif 'color_shift' in aug:
             # Color shift
             pass
