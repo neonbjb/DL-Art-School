@@ -101,7 +101,7 @@ class ImageCorruptor:
                     lo=15
                     range=60
                 elif aug == 'jpeg-normal':
-                    lo=55
+                    lo=47
                     range=35
                 else:
                     raise NotImplementedError("specified jpeg corruption doesn't exist")
