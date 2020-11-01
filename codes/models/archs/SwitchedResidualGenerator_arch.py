@@ -706,13 +706,3 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
-    def get_debug_values(self, step, net_name):
-        temp = self.switches[0].switch.temperature
-        mean_hists = [compute_attention_specificity(att, 2) for att in self.attentions]
-        means = [i[0] for i in mean_hists]
-        hists = [i[1].clone().detach().cpu().flatten() for i in mean_hists]
-        val = {"switch_temperature": temp}
-        for i in range(len(means)):
-            val["switch_%i_specificity" % (i,)] = means[i]
-            val["switch_%i_histogram" % (i,)] = hists[i]
-        return val
