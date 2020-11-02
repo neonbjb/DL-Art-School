@@ -159,8 +159,6 @@ if __name__ == "__main__":
             if 'recurrent_hr_generator' in opt.keys():
                 recurrent_gen = model.env['generators']['generator']
                 model.env['generators']['generator'] = model.env['generators'][opt['recurrent_hr_generator']]
-            else:
-                model.env['generators']['generator'] = recurrent_gen
 
         first_frame = False
         if recurrent_mode:

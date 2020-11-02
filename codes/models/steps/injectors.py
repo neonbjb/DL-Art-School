@@ -1,3 +1,5 @@
+import random
+
 import torch.nn
 from torch.cuda.amp import autocast
 
@@ -45,6 +47,12 @@ def create_injector(opt_inject, env):
         return ImageFftInjector(opt_inject, env)
     elif type == 'extract_indices':
         return IndicesExtractor(opt_inject, env)
+    elif type == 'random_shift':
+        return RandomShiftInjector(opt_inject, env)
+    elif type == 'psnr':
+        return PsnrInjector(opt_inject, env)
+    elif type == 'batch_rotate':
+        return BatchRotateInjector(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -94,12 +102,13 @@ class DiscriminatorInjector(Injector):
         super(DiscriminatorInjector, self).__init__(opt, env)
 
     def forward(self, state):
-        d = self.env['discriminators'][self.opt['discriminator']]
-        if isinstance(self.input, list):
-            params = [state[i] for i in self.input]
-            results = d(*params)
-        else:
-            results = d(state[self.input])
+        with autocast(enabled=self.env['opt']['fp16']):
+            d = self.env['discriminators'][self.opt['discriminator']]
+            if isinstance(self.input, list):
+                params = [state[i] for i in self.input]
+                results = d(*params)
+            else:
+                results = d(state[self.input])
         new_state = {}
         if isinstance(self.output, list):
             # Only dereference tuples or lists, not tensors.
@@ -232,10 +241,25 @@ class MarginRemoval(Injector):
     def __init__(self, opt, env):
         super(MarginRemoval, self).__init__(opt, env)
         self.margin = opt['margin']
+        self.random_shift_max = opt['random_shift_max'] if 'random_shift_max' in opt.keys() else 0
 
     def forward(self, state):
         input = state[self.input]
-        return {self.opt['out']: input[:, :, self.margin:-self.margin, self.margin:-self.margin]}
+        if self.random_shift_max > 0:
+            output = []
+            # This is a really shitty way of doing this. If it works at all, I should reconsider using Resample2D, for example.
+            for b in range(input.shape[0]):
+                shiftleft = random.randint(-self.random_shift_max, self.random_shift_max)
+                shifttop = random.randint(-self.random_shift_max, self.random_shift_max)
+                output.append(input[b, :, self.margin+shiftleft:-(self.margin-shiftleft),
+                                 self.margin+shifttop:-(self.margin-shifttop)])
+            output = torch.stack(output, dim=0)
+        else:
+            output = input[:, :, self.margin:-self.margin,
+                                 self.margin:-self.margin]
+
+        return {self.opt['out']: output}
+
 
 # Produces an injection which is composed of applying a single injector multiple times across a single dimension.
 class ForEachInjector(Injector):
@@ -254,7 +278,7 @@ class ForEachInjector(Injector):
         for i in range(inputs.shape[1]):
             st['_in'] = inputs[:, i]
             injs.append(self.injector(st)['_out'])
-        return {self.output: torch.stack(injs, dim=1)}        
+        return {self.output: torch.stack(injs, dim=1)}
 
     
 class ConstantInjector(Injector):
@@ -315,4 +339,32 @@ class IndicesExtractor(Injector):
             if self.dim == 1:
                 results[o] = state[self.input][:, i]
         return results
+
+
+class RandomShiftInjector(Injector):
+    def __init__(self, opt, env):
+        super(RandomShiftInjector, self).__init__(opt, env)
+
+    def forward(self, state):
+        img = state[self.input]
+        return {self.output: img}
+
+
+class PsnrInjector(Injector):
+    def __init__(self, opt, env):
+        super(PsnrInjector, self).__init__(opt, env)
+
+    def forward(self, state):
+        img1, img2 = state[self.input[0]], state[self.input[1]]
+        mse = torch.mean((img1 - img2) ** 2, dim=[1,2,3])
+        return {self.output: mse}
+
+
+class BatchRotateInjector(Injector):
+    def __init__(self, opt, env):
+        super(BatchRotateInjector, self).__init__(opt, env)
+
+    def forward(self, state):
+        img = state[self.input]
+        return {self.output: torch.roll(img, 1, 0)}
 

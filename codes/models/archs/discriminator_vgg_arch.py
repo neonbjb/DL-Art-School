@@ -513,3 +513,93 @@ class RefDiscriminatorVgg128(nn.Module):
 
         out = self.output_linears(torch.cat([fea, ref_vector], dim=1))
         return out
+
+
+class PsnrApproximator(nn.Module):
+    # input_img_factor = multiplier to support images over 128x128. Only certain factors are supported.
+    def __init__(self, nf, input_img_factor=1):
+        super(PsnrApproximator, self).__init__()
+
+        # [64, 128, 128]
+        self.fake_conv0_0 = nn.Conv2d(3, nf, 3, 1, 1, bias=True)
+        self.fake_conv0_1 = nn.Conv2d(nf, nf, 4, 2, 1, bias=False)
+        self.fake_bn0_1 = nn.BatchNorm2d(nf, affine=True)
+        # [64, 64, 64]
+        self.fake_conv1_0 = nn.Conv2d(nf, nf * 2, 3, 1, 1, bias=False)
+        self.fake_bn1_0 = nn.BatchNorm2d(nf * 2, affine=True)
+        self.fake_conv1_1 = nn.Conv2d(nf * 2, nf * 2, 4, 2, 1, bias=False)
+        self.fake_bn1_1 = nn.BatchNorm2d(nf * 2, affine=True)
+        # [128, 32, 32]
+        self.fake_conv2_0 = nn.Conv2d(nf * 2, nf * 4, 3, 1, 1, bias=False)
+        self.fake_bn2_0 = nn.BatchNorm2d(nf * 4, affine=True)
+        self.fake_conv2_1 = nn.Conv2d(nf * 4, nf * 4, 4, 2, 1, bias=False)
+        self.fake_bn2_1 = nn.BatchNorm2d(nf * 4, affine=True)
+
+        # [64, 128, 128]
+        self.real_conv0_0 = nn.Conv2d(3, nf, 3, 1, 1, bias=True)
+        self.real_conv0_1 = nn.Conv2d(nf, nf, 4, 2, 1, bias=False)
+        self.real_bn0_1 = nn.BatchNorm2d(nf, affine=True)
+        # [64, 64, 64]
+        self.real_conv1_0 = nn.Conv2d(nf, nf * 2, 3, 1, 1, bias=False)
+        self.real_bn1_0 = nn.BatchNorm2d(nf * 2, affine=True)
+        self.real_conv1_1 = nn.Conv2d(nf * 2, nf * 2, 4, 2, 1, bias=False)
+        self.real_bn1_1 = nn.BatchNorm2d(nf * 2, affine=True)
+        # [128, 32, 32]
+        self.real_conv2_0 = nn.Conv2d(nf * 2, nf * 4, 3, 1, 1, bias=False)
+        self.real_bn2_0 = nn.BatchNorm2d(nf * 4, affine=True)
+        self.real_conv2_1 = nn.Conv2d(nf * 4, nf * 4, 4, 2, 1, bias=False)
+        self.real_bn2_1 = nn.BatchNorm2d(nf * 4, affine=True)
+
+        # [512, 16, 16]
+        self.conv3_0 = nn.Conv2d(nf * 8, nf * 8, 3, 1, 1, bias=False)
+        self.bn3_0 = nn.BatchNorm2d(nf * 8, affine=True)
+        self.conv3_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
+        self.bn3_1 = nn.BatchNorm2d(nf * 8, affine=True)
+        # [512, 8, 8]
+        self.conv4_0 = nn.Conv2d(nf * 8, nf * 8, 3, 1, 1, bias=False)
+        self.bn4_0 = nn.BatchNorm2d(nf * 8, affine=True)
+        self.conv4_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
+        self.bn4_1 = nn.BatchNorm2d(nf * 8, affine=True)
+        final_nf = nf * 8
+
+        # activation function
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        self.linear1 = nn.Linear(int(final_nf * 4 * input_img_factor * 4 * input_img_factor), 1024)
+        self.linear2 = nn.Linear(1024, 512)
+        self.linear3 = nn.Linear(512, 128)
+        self.linear4 = nn.Linear(128, 1)
+
+    def compute_body1(self, real):
+        fea = self.lrelu(self.real_conv0_0(real))
+        fea = self.lrelu(self.real_bn0_1(self.real_conv0_1(fea)))
+        fea = self.lrelu(self.real_bn1_0(self.real_conv1_0(fea)))
+        fea = self.lrelu(self.real_bn1_1(self.real_conv1_1(fea)))
+        fea = self.lrelu(self.real_bn2_0(self.real_conv2_0(fea)))
+        fea = self.lrelu(self.real_bn2_1(self.real_conv2_1(fea)))
+        return fea
+
+    def compute_body2(self, fake):
+        fea = self.lrelu(self.fake_conv0_0(fake))
+        fea = self.lrelu(self.fake_bn0_1(self.fake_conv0_1(fea)))
+        fea = self.lrelu(self.fake_bn1_0(self.fake_conv1_0(fea)))
+        fea = self.lrelu(self.fake_bn1_1(self.fake_conv1_1(fea)))
+        fea = self.lrelu(self.fake_bn2_0(self.fake_conv2_0(fea)))
+        fea = self.lrelu(self.fake_bn2_1(self.fake_conv2_1(fea)))
+        return fea
+
+    def forward(self, real, fake):
+        real_fea = checkpoint(self.compute_body1, real)
+        fake_fea = checkpoint(self.compute_body2, fake)
+        fea = torch.cat([real_fea, fake_fea], dim=1)
+
+        fea = self.lrelu(self.bn3_0(self.conv3_0(fea)))
+        fea = self.lrelu(self.bn3_1(self.conv3_1(fea)))
+        fea = self.lrelu(self.bn4_0(self.conv4_0(fea)))
+        fea = self.lrelu(self.bn4_1(self.conv4_1(fea)))
+
+        fea = fea.contiguous().view(fea.size(0), -1)
+        fea = self.lrelu(self.linear1(fea))
+        fea = self.lrelu(self.linear2(fea))
+        fea = self.lrelu(self.linear3(fea))
+        out = self.linear4(fea)
+        return out.squeeze()
