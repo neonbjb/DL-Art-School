@@ -29,6 +29,9 @@ class MultiFrameDataset(BaseUnsupervisedImageDataset):
         # Now build num_frames starting from search_idx.
         hqs, refs, masks, centers = [], [], [], []
         for i in range(self.num_frames):
+            idx = search_idx + i
+            if idx < 0 or idx >= len(self.chunks) or chunk_offset < 0 or chunk_offset >= len(self.chunks[idx]):
+                print("Chunk reference indexing failed for %s." % (im_name,), search_idx, i, chunk_offset, self.num_frames)
             h, r, c, m, p = self.chunks[search_idx + i][chunk_offset]
             hqs.append(h)
             refs.append(r)
