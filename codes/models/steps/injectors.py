@@ -4,6 +4,7 @@ import torch.nn
 from torch.cuda.amp import autocast
 
 from models.archs.SPSR_arch import ImageGradientNoPadding
+from models.archs.pytorch_ssim import SSIM
 from utils.weight_scheduler import get_scheduler_for_opt
 from models.steps.losses import extract_params_from_state
 
@@ -353,11 +354,16 @@ class RandomShiftInjector(Injector):
 class PsnrInjector(Injector):
     def __init__(self, opt, env):
         super(PsnrInjector, self).__init__(opt, env)
+        self.ssim = SSIM(size_average=False, raw=True)
+        self.scale = opt['output_scale_divisor']
+        self.exp = opt['exponent'] if 'exponent' in opt.keys() else 1
 
     def forward(self, state):
         img1, img2 = state[self.input[0]], state[self.input[1]]
-        mse = torch.mean((img1 - img2) ** 2, dim=[1,2,3])
-        return {self.output: mse}
+        ssim = self.ssim(img1, img2)
+        areal_se = torch.nn.functional.interpolate(ssim, scale_factor=1/self.scale,
+                                                   mode="area")
+        return {self.output: areal_se}
 
 
 class BatchRotateInjector(Injector):

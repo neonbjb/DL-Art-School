@@ -16,6 +16,8 @@ def create_loss(opt_loss, env):
         return create_teco_loss(opt_loss, env)
     elif type == 'pix':
         return PixLoss(opt_loss, env)
+    elif type == 'direct':
+        return DirectLoss(opt_loss, env)
     elif type == 'feature':
         return FeatureLoss(opt_loss, env)
     elif type == 'interpreted_feature':
@@ -89,9 +91,34 @@ class PixLoss(ConfigurableLoss):
         super(PixLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
+        self.real_scale = opt['real_scale'] if 'real_scale' in opt.keys() else 1
+        self.real_offset = opt['real_offset'] if 'real_offset' in opt.keys() else 0
+        self.report_metrics = opt['report_metrics'] if 'report_metrics' in opt.keys() else False
 
     def forward(self, _, state):
-        return self.criterion(state[self.opt['fake']].float(), state[self.opt['real']].float())
+        real = state[self.opt['real']] * self.real_scale + float(self.real_offset)
+        fake = state[self.opt['fake']]
+        if self.report_metrics:
+            self.metrics.append(("real_pix_mean_histogram", torch.mean(real, dim=[1,2,3]).detach()))
+            self.metrics.append(("fake_pix_mean_histogram", torch.mean(fake, dim=[1,2,3]).detach()))
+            self.metrics.append(("real_pix_std", torch.std(real).detach()))
+            self.metrics.append(("fake_pix_std", torch.std(fake).detach()))
+        return self.criterion(fake.float(), real.float())
+
+
+# Loss defined by averaging the input tensor across all dimensions an optionally inverting it.
+class DirectLoss(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super(DirectLoss, self).__init__(opt, env)
+        self.opt = opt
+        self.inverted = opt['inverted'] if 'inverted' in opt.keys() else False
+        self.key = opt['key']
+
+    def forward(self, _, state):
+        if self.inverted:
+            return -torch.mean(state[self.key])
+        else:
+            return torch.mean(state[self.key])
 
 
 class FeatureLoss(ConfigurableLoss):

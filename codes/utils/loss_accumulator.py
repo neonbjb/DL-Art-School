@@ -9,10 +9,16 @@ class LossAccumulator:
 
     def add_loss(self, name, tensor):
         if name not in self.buffers.keys():
-            self.buffers[name] = (0, torch.zeros(self.buffer_sz), False)
+            if "_histogram" in name:
+                tensor = torch.flatten(tensor.detach().cpu())
+                self.buffers[name] = (0, torch.zeros((self.buffer_sz, tensor.shape[0])), False)
+            else:
+                self.buffers[name] = (0, torch.zeros(self.buffer_sz), False)
         i, buf, filled = self.buffers[name]
         # Can take tensors or just plain python numbers.
-        if isinstance(tensor, torch.Tensor):
+        if '_histogram' in name:
+            buf[i] = torch.flatten(tensor.detach().cpu())
+        elif isinstance(tensor, torch.Tensor):
             buf[i] = tensor.detach().cpu()
         else:
             buf[i] = tensor
@@ -29,6 +35,8 @@ class LossAccumulator:
         result = {}
         for k, v in self.buffers.items():
             i, buf, filled = v
+            if '_histogram' in k:
+                result["loss_" + k] = torch.flatten(buf)
             if filled:
                 result["loss_" + k] = torch.mean(buf)
             else:
