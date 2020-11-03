@@ -15,9 +15,9 @@ class MultiFrameDataset(BaseUnsupervisedImageDataset):
     def get_sequential_image_paths_from(self, chunk_index, chunk_offset):
         im_name = self.chunk_name(chunk_index)
         source_name = im_name[:-12]
-        frames_needed = self.num_frames - 1
         # Search backwards for the frames needed. We are assuming that every video in the dataset has at least frames_needed frames.
-        search_idx = chunk_index-1
+        frames_needed = self.num_frames
+        search_idx = chunk_index
         while frames_needed > 0:
             if source_name in self.chunk_name(search_idx):
                 frames_needed -= 1
