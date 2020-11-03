@@ -10,10 +10,7 @@ class ChunkWithReference:
         self.tiles, _ = util.get_image_paths('img', self.path)
         self.strict = opt['strict'] if 'strict' in opt.keys() else True
         if 'ignore_first' in opt.keys():
-            self.ignore = opt['ignore_first']
-            self.tiles = self.tiles[self.ignore:]
-        else:
-            self.ignore = 0
+            self.tiles = self.tiles[opt['ignore_first']:]
 
     # Odd failures occur at times. Rather than crashing, report the error and just return zeros.
     def read_image_or_get_zero(self, img_path):
