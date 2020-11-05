@@ -73,15 +73,21 @@ class FfmpegBackedVideoDataset(data.Dataset):
 
         if self.force_multiple > 1:
             assert self.vertical_splits <= 1   # This is not compatible with vertical splits for now.
-            _, h, w = img_LQ.shape
+            c, h, w = img_LQ.shape
+            h_, w_ = h, w
             height_removed = h % self.force_multiple
             width_removed = w % self.force_multiple
             if height_removed != 0:
-                img_LQ = img_LQ[:, :-height_removed, :]
-                ref = ref[:, :-height_removed, :]
+                h_ = self.force_multiple * ((h // self.force_multiple) + 1)
             if width_removed != 0:
-                img_LQ = img_LQ[:, :, :-width_removed]
-                ref = ref[:, :, :-width_removed]
+                w_ = self.force_multiple * ((w // self.force_multiple) + 1)
+            lq_template = torch.zeros(c,h_,w_)
+            lq_template[:,:h,:w] = img_LQ
+            ref_template = torch.zeros(c,h_,w_)
+            ref_template[:,:h,:w] = img_LQ
+            img_LQ = lq_template
+            ref = ref_template
+
         return {'LQ': img_LQ, 'lq_fullsize_ref': ref,
                 'lq_center': torch.tensor([img_LQ.shape[1] // 2, img_LQ.shape[2] // 2], dtype=torch.long) }
 

@@ -66,8 +66,9 @@ class ConfigurableStep(Module):
             else:
                 opt_configs = [self.step_opt['optimizer_params']]
             nets = [self.training_net]
+            training = [training]
         self.optimizers = []
-        for net, opt_config in zip(nets, opt_configs):
+        for net_name, net, opt_config in zip(training, nets, opt_configs):
             optim_params = []
             for k, v in net.named_parameters():  # can optimize for a part of the model
                 if v.requires_grad:
@@ -84,6 +85,7 @@ class ConfigurableStep(Module):
                 opt = NovoGrad(optim_params, lr=opt_config['lr'], weight_decay=opt_config['weight_decay'],
                                        betas=(opt_config['beta1'], opt_config['beta2']))
             opt._config = opt_config  # This is a bit seedy, but we will need these configs later.
+            opt._config['network'] = net_name
             self.optimizers.append(opt)
 
     # Returns all optimizers used in this step.
@@ -189,13 +191,15 @@ class ConfigurableStep(Module):
 
     # Performs the optimizer step after all gradient accumulation is completed. Default implementation simply steps()
     # all self.optimizers.
-    def do_step(self):
+    def do_step(self, step):
         if not self.grads_generated:
             return
         self.grads_generated = False
         for opt in self.optimizers:
             # Optimizers can be opted out in the early stages of training.
             after = opt._config['after'] if 'after' in opt._config.keys() else 0
+            after_network = self.opt['networks'][opt._config['network']]['after'] if 'after' in self.opt['networks'][opt._config['network']].keys() else 0
+            after = max(after, after_network)
             if self.env['step'] < after:
                 continue
             before = opt._config['before'] if 'before' in opt._config.keys() else -1

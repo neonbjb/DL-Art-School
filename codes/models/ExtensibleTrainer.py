@@ -194,6 +194,9 @@ class ExtensibleTrainer(BaseModel):
                 net_enabled = name in nets_to_train
                 if net_enabled:
                     enabled += 1
+                # Networks can opt out of training before a certain iteration by declaring 'after' in their definition.
+                if 'after' in self.opt['networks'][name].keys() and step < self.opt['networks'][name]['after']:
+                    net_enabled = False
                 for p in net.parameters():
                     if p.dtype != torch.int64 and p.dtype != torch.bool and not hasattr(p, "DO_NOT_TRAIN"):
                         p.requires_grad = net_enabled
@@ -225,7 +228,7 @@ class ExtensibleTrainer(BaseModel):
 
             # And finally perform optimization.
             [e.before_optimize(state) for e in self.experiments]
-            s.do_step()
+            s.do_step(step)
             [e.after_optimize(state) for e in self.experiments]
 
         # Record visual outputs for usage in debugging and testing.

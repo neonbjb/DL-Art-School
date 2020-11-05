@@ -19,6 +19,7 @@ import models.archs.panet.panet as panet
 import models.archs.rcan as rcan
 import models.archs.ChainedEmbeddingGen as chained
 from models.archs import srg2_classic
+from models.archs.pyramid_arch import BasicResamplingFlowNet
 from models.archs.teco_resgen import TecoGen
 
 logger = logging.getLogger('base')
@@ -115,9 +116,10 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = SwitchedGen_arch.BackboneResnet()
     elif which_model == "tecogen":
         netG = TecoGen(opt_net['nf'], opt_net['scale'])
+    elif which_model == "basic_resampling_flow_predictor":
+        netG = BasicResamplingFlowNet(opt_net['nf'], resample_scale=opt_net['resample_scale'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
-
     return netG
 
 
