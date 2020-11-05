@@ -26,7 +26,7 @@ class ConfigurableStep(Module):
         self.optimizers = None
         self.scaler = GradScaler(enabled=self.opt['fp16'])
         self.grads_generated = False
-        self.min_total_loss = opt_step['min_total_loss'] if 'min_total_loss' in opt_step.keys() else 0
+        self.min_total_loss = opt_step['min_total_loss'] if 'min_total_loss' in opt_step.keys() else -999999999
 
         self.injectors = []
         if 'injectors' in self.step_opt.keys():
