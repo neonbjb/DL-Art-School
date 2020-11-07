@@ -19,10 +19,9 @@ class MultiFrameDataset(BaseUnsupervisedImageDataset):
         frames_needed = self.num_frames
         search_idx = chunk_index
         while frames_needed > 0:
-            if source_name in self.chunk_name(search_idx):
-                frames_needed -= 1
-                search_idx -= 1
-            else:
+            frames_needed -= 1
+            search_idx -= 1
+            if source_name not in self.chunk_name(search_idx):
                 search_idx += 1
                 break
 
