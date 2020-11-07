@@ -224,8 +224,9 @@ class RRDBNetWithLatent(nn.Module):
 # Based heavily on the same VGG arch used for the discriminator.
 class LatentEstimator(nn.Module):
     # input_img_factor = multiplier to support images over 128x128. Only certain factors are supported.
-    def __init__(self, in_nc, nf):
+    def __init__(self, in_nc, nf, overwrite_levels=[]):
         super(LatentEstimator, self).__init__()
+        self.overwrite_levels = overwrite_levels
         # [64, 128, 128]
         self.conv0_0 = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
         self.conv0_1 = nn.Conv2d(nf, nf, 4, 2, 1, bias=False)
@@ -276,6 +277,8 @@ class LatentEstimator(nn.Module):
         fea = self.lrelu(self.conv0_0(x))
         fea = self.lrelu(self.bn0_1(self.conv0_1(fea)))
         out = list(checkpoint(self.compute_body, fea))
+        for lvl in self.overwrite_levels:
+            out[lvl] = torch.zeros_like(out[lvl])
         self.latent_mean = torch.mean(out[-1])
         self.latent_std = torch.std(out[-1])
         self.latent_var = torch.var(out[-1])

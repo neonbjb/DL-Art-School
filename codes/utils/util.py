@@ -382,3 +382,13 @@ def recursively_detach(v):
         for k, t in v.items():
             out[k] = recursively_detach(t)
         return out
+
+def opt_get(opt, keys, default=None):
+    if opt is None:
+        return default
+    ret = opt
+    for k in keys:
+        ret = ret.get(k, None)
+        if ret is None:
+            return default
+    return ret

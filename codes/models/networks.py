@@ -124,7 +124,8 @@ def define_G(opt, net_key='network_G', scale=None):
                                   mid_channels=opt_net['nf'], num_blocks=opt_net['nb'],
                                   blocks_per_checkpoint=opt_net['blocks_per_checkpoint'], scale=opt_net['scale'])
     elif which_model == "latent_estimator":
-        netG = LatentEstimator(in_nc=3, nf=opt_net['nf'])
+        overwrite = [1,2] if opt_net['only_base_level'] else []
+        netG = LatentEstimator(in_nc=3, nf=opt_net['nf'], overwrite_levels=overwrite)
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
