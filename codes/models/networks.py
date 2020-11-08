@@ -20,7 +20,7 @@ import models.archs.rcan as rcan
 import models.archs.ChainedEmbeddingGen as chained
 from models.archs import srg2_classic
 from models.archs.pyramid_arch import BasicResamplingFlowNet
-from models.archs.rrdb_with_latent import LatentEstimator, RRDBNetWithLatent
+from models.archs.rrdb_with_latent import LatentEstimator, RRDBNetWithLatent, LatentEstimator2
 from models.archs.teco_resgen import TecoGen
 
 logger = logging.getLogger('base')
@@ -122,10 +122,15 @@ def define_G(opt, net_key='network_G', scale=None):
     elif which_model == "rrdb_with_latent":
         netG = RRDBNetWithLatent(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
                                   mid_channels=opt_net['nf'], num_blocks=opt_net['nb'],
-                                  blocks_per_checkpoint=opt_net['blocks_per_checkpoint'], scale=opt_net['scale'])
+                                  blocks_per_checkpoint=opt_net['blocks_per_checkpoint'],
+                                  scale=opt_net['scale'],
+                                  bottom_latent_only=opt_net['bottom_latent_only'])
     elif which_model == "latent_estimator":
-        overwrite = [1,2] if opt_net['only_base_level'] else []
-        netG = LatentEstimator(in_nc=3, nf=opt_net['nf'], overwrite_levels=overwrite)
+        if opt_net['version'] == 2:
+            netG = LatentEstimator2(in_nc=3, nf=opt_net['nf'])
+        else:
+            overwrite = [1,2] if opt_net['only_base_level'] else []
+            netG = LatentEstimator(in_nc=3, nf=opt_net['nf'], overwrite_levels=overwrite)
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
