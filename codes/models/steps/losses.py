@@ -204,6 +204,7 @@ class GeneratorGanLoss(ConfigurableLoss):
                     pred_d_real = pred_d_real.detach()
                 pred_g_fake = netD(*fake)
                 d_fake_diff = pred_g_fake - torch.mean(pred_d_real)
+                self.metrics.append(("d_fake", torch.mean(pred_g_fake)))
                 self.metrics.append(("d_fake_diff", torch.mean(d_fake_diff)))
                 loss = (self.criterion(pred_d_real - torch.mean(pred_g_fake), False) +
                         self.criterion(d_fake_diff, True)) / 2
