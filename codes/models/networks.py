@@ -67,7 +67,8 @@ def define_G(opt, net_key='network_G', scale=None):
                                                                       transformation_filters=opt_net['transformation_filters'], attention_norm=opt_net['attention_norm'],
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
+                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'],
+                                                                      for_video=opt_net['for_video'])
     elif which_model == "srg2classic":
         netG = srg2_classic.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
