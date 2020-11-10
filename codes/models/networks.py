@@ -7,8 +7,7 @@ import torch
 import torchvision
 from munch import munchify
 
-import models.archs.DiscriminatorResnet_arch as DiscriminatorResnet_arch
-import models.archs.DiscriminatorResnet_arch_passthrough as DiscriminatorResnet_arch_passthrough
+import models.archs.fixup_resnet.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
 import models.archs.SPSR_arch as spsr
 import models.archs.SRResNet_arch as SRResNet_arch
@@ -17,9 +16,11 @@ import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.feature_arch as feature_arch
 import models.archs.panet.panet as panet
 import models.archs.rcan as rcan
-import models.archs.ChainedEmbeddingGen as chained
 from models.archs import srg2_classic
+from models.archs.biggan.biggan_discriminator import BigGanDiscriminator
+from models.archs.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
 from models.archs.pyramid_arch import BasicResamplingFlowNet
+from models.archs.rrdb_with_adain_latent import AdaRRDBNet, LinearLatentEstimator
 from models.archs.rrdb_with_latent import LatentEstimator, RRDBNetWithLatent, LatentEstimator2
 from models.archs.teco_resgen import TecoGen
 
@@ -90,15 +91,6 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = spsr.Spsr7(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
                                  multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
                                  init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10, recurrent=recurrent)
-    elif which_model == 'chained_gen_structured':
-        rec = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
-        recnf = opt_net['recurrent_nf'] if 'recurrent_nf' in opt_net.keys() else 3
-        recstd = opt_net['recurrent_stride'] if 'recurrent_stride' in opt_net.keys() else 2
-        in_nc = opt_net['in_nc'] if 'in_nc' in opt_net.keys() else 3
-        netG = chained.ChainedEmbeddingGenWithStructure(depth=opt_net['depth'], recurrent=rec, recurrent_nf=recnf, recurrent_stride=recstd, in_nc=in_nc)
-    elif which_model == 'multifaceted_chained':
-        scale = opt_net['scale'] if 'scale' in opt_net.keys() else 2
-        netG = chained.MultifacetedChainedEmbeddingGen(depth=opt_net['depth'], scale=scale)
     elif which_model == "flownet2":
         from models.flownet2.models import FlowNet2
         ld = 'load_path' in opt_net.keys()
@@ -125,12 +117,19 @@ def define_G(opt, net_key='network_G', scale=None):
                                   blocks_per_checkpoint=opt_net['blocks_per_checkpoint'],
                                   scale=opt_net['scale'],
                                   bottom_latent_only=opt_net['bottom_latent_only'])
+    elif which_model == "adarrdb":
+        netG = AdaRRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                                  mid_channels=opt_net['nf'], num_blocks=opt_net['nb'],
+                                  blocks_per_checkpoint=opt_net['blocks_per_checkpoint'],
+                                  scale=opt_net['scale'])
     elif which_model == "latent_estimator":
         if opt_net['version'] == 2:
             netG = LatentEstimator2(in_nc=3, nf=opt_net['nf'])
         else:
             overwrite = [1,2] if opt_net['only_base_level'] else []
             netG = LatentEstimator(in_nc=3, nf=opt_net['nf'], overwrite_levels=overwrite)
+    elif which_model == "linear_latent_estimator":
+        netG = LinearLatentEstimator(in_nc=3, nf=opt_net['nf'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
@@ -159,19 +158,19 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
             netD = GradDiscWrapper(netD)
     elif which_model == 'discriminator_vgg_128_gn_checkpointed':
         netD = SRGAN_arch.Discriminator_VGG_128_GN(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128, do_checkpointing=True)
+    elif which_model == 'stylegan_vgg':
+        netD = StyleGanDiscriminator(128)
     elif which_model == 'discriminator_resnet':
         netD = DiscriminatorResnet_arch.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
     elif which_model == 'discriminator_resnet_50':
         netD = DiscriminatorResnet_arch.fixup_resnet50(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz)
-    elif which_model == 'discriminator_resnet_passthrough':
-        netD = DiscriminatorResnet_arch_passthrough.fixup_resnet34(num_filters=opt_net['nf'], num_classes=1, input_img_size=img_sz,
-                                                                   number_skips=opt_net['number_skips'], use_bn=True,
-                                                                   disable_passthrough=opt_net['disable_passthrough'])
     elif which_model == 'resnext':
         netD = torchvision.models.resnext50_32x4d(norm_layer=functools.partial(torch.nn.GroupNorm, 8))
-        state_dict = torch.hub.load_state_dict_from_url('https://download.pytorch.org/models/resnext50_32x4d-7cdf4587.pth', progress=True)
-        netD.load_state_dict(state_dict, strict=False)
+        #state_dict = torch.hub.load_state_dict_from_url('https://download.pytorch.org/models/resnext50_32x4d-7cdf4587.pth', progress=True)
+        #netD.load_state_dict(state_dict, strict=False)
         netD.fc = torch.nn.Linear(512 * 4, 1)
+    elif which_model == 'biggan_resnet':
+        netD = BigGanDiscriminator(D_activation=torch.nn.LeakyReLU(negative_slope=.2))
     elif which_model == 'discriminator_pix':
         netD = SRGAN_arch.Discriminator_VGG_PixLoss(in_nc=opt_net['in_nc'], nf=opt_net['nf'])
     elif which_model == "discriminator_unet":
