@@ -139,6 +139,30 @@ class ResidualBlock_noBN(nn.Module):
         return identity + out
 
 
+class ResidualBlockGN(nn.Module):
+    '''Residual block with GroupNorm
+    ---Conv-GN-ReLU-Conv-+-
+     |________________|
+    '''
+
+    def __init__(self, nf=64):
+        super(ResidualBlockGN, self).__init__()
+        self.lrelu = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+        self.conv1 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
+        self.BN1 = nn.GroupNorm(8, nf)
+        self.conv2 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
+        self.BN2 = nn.GroupNorm(8, nf)
+
+        # initialization
+        initialize_weights([self.conv1, self.conv2], 0.1)
+
+    def forward(self, x):
+        identity = x
+        out = self.lrelu(self.BN1(self.conv1(x)))
+        out = self.BN2(self.conv2(out))
+        return identity + out
+
+
 def flow_warp(x, flow, interp_mode='bilinear', padding_mode='zeros'):
     """Warp an image or feature map with optical flow
     Args:
