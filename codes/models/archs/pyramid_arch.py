@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from models.archs.arch_util import ConvGnLelu, UpconvBlock, ExpansionBlock
+from models.archs.arch_util import ConvGnLelu, ExpansionBlock
 from models.flownet2.networks.resample2d_package.resample2d import Resample2d
 from utils.util import checkpoint
 import torch.nn.functional as F

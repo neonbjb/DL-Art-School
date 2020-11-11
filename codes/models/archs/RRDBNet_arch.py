@@ -116,7 +116,7 @@ class RRDBWithBypass(nn.Module):
         out = self.rdb3(out)
         bypass = self.bypass(torch.cat([x, out], dim=1))
         self.bypass_map = bypass.detach().clone()
-        # Emperically, we use 0.2 to scale the residual for better performance
+        # Empirically, we use 0.2 to scale the residual for better performance
         return out * 0.2 * bypass + x
 
 
