@@ -22,6 +22,7 @@ from models.archs.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
 from models.archs.pyramid_arch import BasicResamplingFlowNet
 from models.archs.rrdb_with_adain_latent import AdaRRDBNet, LinearLatentEstimator
 from models.archs.rrdb_with_latent import LatentEstimator, RRDBNetWithLatent, LatentEstimator2
+from models.archs.stylegan2 import StyleGan2GeneratorWithLatent, StyleGan2Discriminator, StyleGan2Augmentor
 from models.archs.teco_resgen import TecoGen
 
 logger = logging.getLogger('base')
@@ -131,6 +132,9 @@ def define_G(opt, net_key='network_G', scale=None):
             netG = LatentEstimator(in_nc=3, nf=opt_net['nf'], overwrite_levels=overwrite)
     elif which_model == "linear_latent_estimator":
         netG = LinearLatentEstimator(in_nc=3, nf=opt_net['nf'])
+    elif which_model == 'stylegan2':
+        netG = StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
+                                            style_depth=opt_net['style_depth'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
@@ -189,6 +193,9 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
         netD = SRGAN_arch.PsnrApproximator(nf=opt_net['nf'], input_img_factor=img_sz / 128)
     elif which_model == "pyramid_disc":
         netD = SRGAN_arch.PyramidDiscriminator(in_nc=3, nf=opt_net['nf'])
+    elif which_model == "stylegan2_discriminator":
+        disc = StyleGan2Discriminator(image_size=opt_net['image_size'])
+        netD = StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD

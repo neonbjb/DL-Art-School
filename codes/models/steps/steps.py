@@ -152,7 +152,8 @@ class ConfigurableStep(Module):
                 # Some losses only activate after a set number of steps. For example, proto-discriminator losses can
                 # be very disruptive to a generator.
                 if 'after' in loss.opt.keys() and loss.opt['after'] > self.env['step'] or \
-                   'before' in loss.opt.keys() and self.env['step'] > loss.opt['before']:
+                   'before' in loss.opt.keys() and self.env['step'] > loss.opt['before'] or \
+                   'every' in loss.opt.keys() and self.env['step'] % loss.opt['every'] != 0:
                     continue
                 l = loss(self.training_net, local_state)
                 total_loss += l * self.weights[loss_name]

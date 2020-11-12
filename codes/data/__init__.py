@@ -41,6 +41,8 @@ def create_dataset(dataset_opt):
         from data.multiscale_dataset import MultiScaleDataset as D
     elif mode == 'paired_frame':
         from data.paired_frame_dataset import PairedFrameDataset as D
+    elif mode == 'stylegan2':
+        from data.stylegan2_dataset import Stylegan2Dataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)

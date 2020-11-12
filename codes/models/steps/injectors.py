@@ -147,6 +147,7 @@ class ScheduledScalarInjector(Injector):
 class AddNoiseInjector(Injector):
     def __init__(self, opt, env):
         super(AddNoiseInjector, self).__init__(opt, env)
+        self.mode = opt['mode'] if 'mode' in opt.keys() else 'normal'
 
     def forward(self, state):
         # Scale can be a fixed float, or a state key (e.g. from ScheduledScalarInjector).
@@ -155,7 +156,11 @@ class AddNoiseInjector(Injector):
         else:
             scale = self.opt['scale']
 
-        noise = torch.randn_like(state[self.opt['in']], device=self.env['device']) * scale
+        ref = state[self.opt['in']]
+        if self.mode == 'normal':
+            noise = torch.randn_like(ref) * scale
+        elif self.mode == 'uniform':
+            noise = torch.FloatTensor(ref.shape).uniform_(0.0, scale).to(ref.device)
         return {self.opt['out']: state[self.opt['in']] + noise}
 
 
