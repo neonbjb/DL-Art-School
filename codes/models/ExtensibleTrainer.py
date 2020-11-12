@@ -67,6 +67,9 @@ class ExtensibleTrainer(BaseModel):
 
             if not net['trainable']:
                 new_net.eval()
+            if net['wandb_debug']:
+                import wandb
+                wandb.watch(new_net, log='all', log_freq=3)
 
         # Initialize the train/eval steps
         self.step_names = []

@@ -4,6 +4,7 @@ tb_logger/*
 datasets/*
 options/*
 codes/*.txt
+codes/wandb/*
 .vscode
 
 *.html
