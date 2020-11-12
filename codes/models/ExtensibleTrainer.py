@@ -108,14 +108,14 @@ class ExtensibleTrainer(BaseModel):
                                                device_ids=[torch.cuda.current_device()],
                                                find_unused_parameters=False)
             else:
-                dnet = DataParallel(anet)
+                dnet = DataParallel(anet, device_ids=opt['gpu_ids'])
             if self.is_train:
                 dnet.train()
             else:
                 dnet.eval()
             dnets.append(dnet)
         if not opt['dist']:
-            self.netF = DataParallel(self.netF)
+            self.netF = DataParallel(self.netF, device_ids=opt['gpu_ids'])
 
         # Backpush the wrapped networks into the network dicts..
         self.networks = {}
