@@ -146,6 +146,11 @@ class AdaRRDBNet(nn.Module):
             self.conv_up2, self.conv_hr, self.conv_last
         ]:
             default_init_weights(m, 0.1)
+        self.latent_mean = 0
+        self.latent_std = 0
+        self.latent_var = 0
+        self.block_residual_means = []
+        self.block_residual_stds = []
 
     def forward(self, x, latent=None, ref=None):
         latent_was_none = latent

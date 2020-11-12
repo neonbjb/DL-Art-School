@@ -675,9 +675,9 @@ class PyramidDiscriminator(nn.Module):
                                        ResidualBlockGN(nf),
                                        ResidualBlockGN(nf),
                                        ResidualBlockGN(nf),
-                                       ConvGnLelu(nf, nf // 2, kernel_size=1, activation=True, norm=True, bias=True),
-                                       ConvGnLelu(nf // 2, nf // 4, kernel_size=1, activation=True, norm=True, bias=True),
-                                       ConvGnLelu(nf // 4, 1, activation=False, norm=False, bias=True)])
+                                       ConvGnLelu(nf, nf // 2, kernel_size=1, activation=True, norm=False, bias=True),
+                                       ConvGnLelu(nf // 2, nf // 4, kernel_size=1, activation=True, norm=False, bias=True),
+                                       ConvGnLelu(nf // 4, 1, kernel_size=1, activation=False, norm=False, bias=True)])
 
     def forward(self, x):
         fea = self.initial_conv(x)
