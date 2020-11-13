@@ -562,7 +562,7 @@ class StyleGan2GeneratorWithLatent(nn.Module):
     def forward(self, x):
         b, f, h, w = x.shape
 
-        full_random_latents = False
+        full_random_latents = True
         if full_random_latents:
             style = self.noise(b*2, self.gen.latent_dim, x.device)
             w = self.vectorizer(style)

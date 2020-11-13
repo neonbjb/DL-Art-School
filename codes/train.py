@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 import torch
 from data.data_sampler import DistIterSampler
+from models.eval import create_evaluator
 
 from utils import util, options as option
 from data import create_dataloader, create_dataset
@@ -129,6 +130,13 @@ class Trainer:
         #### create model
         self.model = ExtensibleTrainer(opt, cached_networks=all_networks)
 
+        ### Evaluators
+        self.evaluators = []
+        if 'evaluators' in opt['eval'].keys():
+            for ev_key, ev_opt in opt['eval']['evaluators'].items():
+                self.evaluators.append(create_evaluator(self.model.networks[ev_opt['for']],
+                                                        ev_opt, self.model.env))
+
         #### resume training
         if resume_state:
             self.logger.info('Resuming training from epoch: {}, iter: {}.'.format(
@@ -241,10 +249,19 @@ class Trainer:
 
                 # log
                 self.logger.info('# Validation # PSNR: {:.4e} Fea: {:.4e}'.format(avg_psnr, avg_fea_loss))
+
                 # tensorboard logger
                 if opt['use_tb_logger'] and 'debug' not in opt['name'] and self.rank <= 0:
                     self.tb_logger.add_scalar('val_psnr', avg_psnr, self.current_step)
                     self.tb_logger.add_scalar('val_fea', avg_fea_loss, self.current_step)
+
+        if len(self.evaluators) != 0 and self.current_step % opt['train']['val_freq'] == 0:
+            eval_dict = {}
+            for eval in self.evaluators:
+                eval_dict.update(eval.perform_eval())
+            print("Evaluator results: ", eval_dict)
+            for ek, ev in eval_dict.items():
+                self.tb_logger.add_scalar(ek, ev, self.current_step)
 
     def do_training(self):
         self.logger.info('Start training from epoch: {:d}, iter: {:d}'.format(self.start_epoch, self.current_step))
