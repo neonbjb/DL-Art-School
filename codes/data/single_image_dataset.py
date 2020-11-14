@@ -60,11 +60,13 @@ if __name__ == '__main__':
     os.makedirs("debug", exist_ok=True)
     for i in range(0, len(ds)):
         o = ds[random.randint(0, len(ds))]
-        for k, v in o.items():
-            if 'LQ' in k and 'path' not in k and 'center' not in k:
-                #if 'full' in k:
-                    #masked = v[:3, :, :] * v[3]
-                    #torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_%s_masked.png" % (i, k))
-                    #v = v[:3, :, :]
-                import torchvision
-                torchvision.utils.save_image(v.unsqueeze(0), "debug/%i_%s.png" % (i, k))
+        #for k, v in o.items():
+        k = 'GT'
+        v = o[k]
+        #if 'LQ' in k and 'path' not in k and 'center' not in k:
+        #if 'full' in k:
+            #masked = v[:3, :, :] * v[3]
+            #torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_%s_masked.png" % (i, k))
+            #v = v[:3, :, :]
+        import torchvision
+        torchvision.utils.save_image(v.unsqueeze(0), "debug/%i_%s.png" % (i, k))
