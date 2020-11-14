@@ -537,7 +537,7 @@ class Generator(nn.Module):
 
         for style, block, attn in zip(styles, self.blocks, self.attns):
             if exists(attn):
-                x = attn(x)
+                x = checkpoint(attn, x)
             x, rgb = checkpoint(block, x, rgb, style, input_noise, structure_input)
 
         return rgb
