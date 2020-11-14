@@ -497,14 +497,21 @@ class StyleGan2DivergenceLoss(ConfigurableLoss):
         self.discriminator = opt['discriminator']
         self.for_gen = opt['gen_loss']
         self.gp_frequency = opt['gradient_penalty_frequency']
+        self.noise = opt['noise'] if 'noise' in opt.keys() else 0
 
     def forward(self, net, state):
+        real_input = state[self.real]
+        fake_input = state[self.fake]
+        if self.noise != 0:
+            fake_input = fake_input + torch.rand_like(fake_input) * self.noise
+            real_input = real_input + torch.rand_like(real_input) * self.noise
+
         D = self.env['discriminators'][self.discriminator]
-        fake = D(state[self.fake])
+        fake = D(fake_input)
         if self.for_gen:
             return fake.mean()
         else:
-            real_input = state[self.real].requires_grad_()  # <-- Needed to compute gradients on the input.
+            real_input.requires_grad_()  # <-- Needed to compute gradients on the input.
             real = D(real_input)
             divergence_loss = (F.relu(1 + real) + F.relu(1 - fake)).mean()
 

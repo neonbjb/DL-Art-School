@@ -54,6 +54,8 @@ def create_injector(opt_inject, env):
         return PsnrInjector(opt_inject, env)
     elif type == 'batch_rotate':
         return BatchRotateInjector(opt_inject, env)
+    elif type == 'sr_diffs':
+        return SrDiffsInjector(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -379,3 +381,25 @@ class BatchRotateInjector(Injector):
         img = state[self.input]
         return {self.output: torch.roll(img, 1, 0)}
 
+
+# Injector used to work with image deltas used in diff-SR
+class SrDiffsInjector(Injector):
+    def __init__(self, opt, env):
+        super(SrDiffsInjector, self).__init__(opt, env)
+        self.mode = opt['mode']
+        assert self.mode in ['recombine', 'produce_diff']
+        self.lq = opt['lq']
+        self.hq = opt['hq']
+        if self.mode == 'produce_diff':
+            self.diff_key = opt['diff']
+
+    def forward(self, state):
+        resampled_lq = state[self.lq]
+        hq = state[self.hq]
+        if self.mode == 'produce_diff':
+            diff = hq - resampled_lq
+            return {self.output: torch.cat([resampled_lq, diff], dim=1),
+                    self.diff_key: diff}
+        elif self.mode == 'recombine':
+            combined = resampled_lq + hq
+            return {self.output: combined}
