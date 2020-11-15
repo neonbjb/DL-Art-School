@@ -6,9 +6,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from models.archs.stylegan.stylegan2 import attn_and_ff
-from models.steps.losses import ConfigurableLoss
+import models.archs.stylegan.stylegan2 as sg2
+import models.steps.losses as L
 
 
 def leaky_relu(p=0.2):
@@ -96,7 +95,7 @@ class StyleGan2UnetDiscriminator(nn.Module):
             block = DownBlock(in_chan, out_chan, downsample = is_not_last)
             down_blocks.append(block)
 
-            attn_fn = attn_and_ff(out_chan)
+            attn_fn = sg2.attn_and_ff(out_chan)
             attn_blocks.append(attn_fn)
 
         self.down_blocks = nn.ModuleList(down_blocks)
@@ -171,7 +170,7 @@ def cutmix_coordinates(height, width, alpha = 1.):
     return ((y0, y1), (x0, x1)), lam
 
 
-class StyleGan2UnetDivergenceLoss(ConfigurableLoss):
+class StyleGan2UnetDivergenceLoss(L.ConfigurableLoss):
     def __init__(self, opt, env):
         super().__init__(opt, env)
         self.real = opt['real']
@@ -181,6 +180,7 @@ class StyleGan2UnetDivergenceLoss(ConfigurableLoss):
         self.gp_frequency = opt['gradient_penalty_frequency']
         self.noise = opt['noise'] if 'noise' in opt.keys() else 0
         self.image_size = opt['image_size']
+        self.cr_weight = .2
 
     def forward(self, net, state):
         real_input = state[self.real]
@@ -191,7 +191,7 @@ class StyleGan2UnetDivergenceLoss(ConfigurableLoss):
 
         D = self.env['discriminators'][self.discriminator]
         fake_dec, fake_enc = D(fake_input)
-        fake_aug_images = D.aug_images
+        fake_aug_images = D.module.aug_images
         if self.for_gen:
             return fake_enc.mean() + F.relu(1 + fake_dec).mean()
         else:
@@ -201,10 +201,10 @@ class StyleGan2UnetDivergenceLoss(ConfigurableLoss):
 
             real_input.requires_grad_()  # <-- Needed to compute gradients on the input.
             real_dec, real_enc = D(real_input)
-            real_aug_images = D.aug_images
+            real_aug_images = D.module.aug_images
             enc_divergence = (F.relu(1 + real_enc) + F.relu(1 - fake_enc)).mean()
             dec_divergence = (F.relu(1 + real_dec) + F.relu(1 - fake_dec)).mean()
-            divergence_loss = enc_divergence + dec_divergence * dec_loss_coef
+            disc_loss = enc_divergence + dec_divergence * dec_loss_coef
 
             if apply_cutmix:
                 mask = cutmix(
@@ -217,11 +217,11 @@ class StyleGan2UnetDivergenceLoss(ConfigurableLoss):
                     mask = 1 - mask
 
                 cutmix_images = mask_src_tgt(real_aug_images, fake_aug_images, mask)
-                cutmix_enc_out, cutmix_dec_out = self.GAN.D(cutmix_images)
+                cutmix_dec_out, cutmix_enc_out = D.module.D(cutmix_images)  # Bypass implied augmentor - hence D.module.D
 
                 cutmix_enc_divergence = F.relu(1 - cutmix_enc_out).mean()
                 cutmix_dec_divergence = F.relu(1 + (mask * 2 - 1) * cutmix_dec_out).mean()
-                disc_loss = divergence_loss + cutmix_enc_divergence + cutmix_dec_divergence
+                disc_loss = disc_loss + cutmix_enc_divergence + cutmix_dec_divergence
 
                 cr_cutmix_dec_out = mask_src_tgt(real_dec, fake_dec, mask)
                 cr_loss = F.mse_loss(cutmix_dec_out, cr_cutmix_dec_out) * self.cr_weight
@@ -232,7 +232,10 @@ class StyleGan2UnetDivergenceLoss(ConfigurableLoss):
             # Apply gradient penalty. TODO: migrate this elsewhere.
             if self.env['step'] % self.gp_frequency == 0:
                 from models.archs.stylegan.stylegan2 import gradient_penalty
-                gp = gradient_penalty(real_input, real)
+                if random() < .5:
+                    gp = gradient_penalty(real_input, real_enc)
+                else:
+                    gp = gradient_penalty(real_input, real_dec) * dec_loss_coef
                 self.metrics.append(("gradient_penalty", gp.clone().detach()))
                 disc_loss = disc_loss + gp
 

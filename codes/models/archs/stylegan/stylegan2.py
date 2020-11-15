@@ -7,13 +7,14 @@ from random import random
 
 import torch
 import torch.nn.functional as F
+import models.steps.losses as L
+
 from kornia.filters import filter2D
 from linear_attention_transformer import ImageLinearAttention
 from torch import nn
 from torch.autograd import grad as torch_grad
 from vector_quantize_pytorch import VectorQuantize
 
-from models.steps.losses import ConfigurableLoss
 from utils.util import checkpoint
 
 try:
@@ -700,7 +701,7 @@ class StyleGan2Discriminator(nn.Module):
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
 
 
-class StyleGan2DivergenceLoss(ConfigurableLoss):
+class StyleGan2DivergenceLoss(L.ConfigurableLoss):
     def __init__(self, opt, env):
         super().__init__(opt, env)
         self.real = opt['real']
@@ -737,7 +738,7 @@ class StyleGan2DivergenceLoss(ConfigurableLoss):
             return divergence_loss
 
 
-class StyleGan2PathLengthLoss(ConfigurableLoss):
+class StyleGan2PathLengthLoss(L.ConfigurableLoss):
     def __init__(self, opt, env):
         super().__init__(opt, env)
         self.w_styles = opt['w_styles']

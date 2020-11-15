@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast
 
-from models.networks import define_F
 from models.loss import GANLoss
 import random
 import functools
@@ -130,7 +129,8 @@ class FeatureLoss(ConfigurableLoss):
         super(FeatureLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
-        self.netF = define_F(which_model=opt['which_model_F'],
+        import models.networks
+        self.netF = models.networks.define_F(which_model=opt['which_model_F'],
                              load_path=opt['load_path'] if 'load_path' in opt.keys() else None).to(self.env['device'])
         if not env['opt']['dist']:
             self.netF = torch.nn.parallel.DataParallel(self.netF, device_ids=env['opt']['gpu_ids'])
@@ -155,8 +155,9 @@ class InterpretedFeatureLoss(ConfigurableLoss):
         super(InterpretedFeatureLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
-        self.netF_real = define_F(which_model=opt['which_model_F']).to(self.env['device'])
-        self.netF_gen = define_F(which_model=opt['which_model_F'], load_path=opt['load_path']).to(self.env['device'])
+        import models.networks
+        self.netF_real = models.networks.define_F(which_model=opt['which_model_F']).to(self.env['device'])
+        self.netF_gen = models.networks.define_F(which_model=opt['which_model_F'], load_path=opt['load_path']).to(self.env['device'])
         if not env['opt']['dist']:
             self.netF_real = torch.nn.parallel.DataParallel(self.netF_real)
             self.netF_gen = torch.nn.parallel.DataParallel(self.netF_gen)

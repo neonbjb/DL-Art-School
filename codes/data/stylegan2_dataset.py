@@ -9,7 +9,7 @@ from torchvision import transforms
 import torch.nn as nn
 from pathlib import Path
 
-from models.archs.stylegan.stylegan2 import exists
+import models.archs.stylegan.stylegan2 as sg2
 
 
 def convert_transparent_to_rgb(image):
@@ -61,7 +61,7 @@ class expand_greyscale(object):
         else:
             raise Exception(f'image with invalid number of channels given {channels}')
 
-        if not exists(alpha) and self.transparent:
+        if not sg2.exists(alpha) and self.transparent:
             alpha = torch.ones(1, *tensor.shape[1:], device=tensor.device)
 
         return color if not self.transparent else torch.cat((color, alpha))
