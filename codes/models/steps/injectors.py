@@ -392,13 +392,18 @@ class SrDiffsInjector(Injector):
         self.hq = opt['hq']
         if self.mode == 'produce_diff':
             self.diff_key = opt['diff']
+            self.include_combined = opt['include_combined']
 
     def forward(self, state):
         resampled_lq = state[self.lq]
         hq = state[self.hq]
         if self.mode == 'produce_diff':
             diff = hq - resampled_lq
-            return {self.output: torch.cat([resampled_lq, diff], dim=1),
+            if self.include_combined:
+                res = torch.cat([resampled_lq, diff, hq], dim=1)
+            else:
+                res = torch.cat([resampled_lq, diff], dim=1)
+            return {self.output: res,
                     self.diff_key: diff}
         elif self.mode == 'recombine':
             combined = resampled_lq + hq
