@@ -9,7 +9,7 @@ from torchvision import transforms
 import torch.nn as nn
 from pathlib import Path
 
-from models.archs.stylegan2 import exists
+from models.archs.stylegan.stylegan2 import exists
 
 
 def convert_transparent_to_rgb(image):

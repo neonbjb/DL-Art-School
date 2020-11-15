@@ -22,7 +22,8 @@ from models.archs.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
 from models.archs.pyramid_arch import BasicResamplingFlowNet
 from models.archs.rrdb_with_adain_latent import AdaRRDBNet, LinearLatentEstimator
 from models.archs.rrdb_with_latent import LatentEstimator, RRDBNetWithLatent, LatentEstimator2
-from models.archs.stylegan2 import StyleGan2GeneratorWithLatent, StyleGan2Discriminator, StyleGan2Augmentor
+from models.archs.stylegan.stylegan2 import StyleGan2GeneratorWithLatent, StyleGan2Discriminator, StyleGan2Augmentor
+from models.archs.stylegan.stylegan2_unet_disc import StyleGan2UnetDiscriminator
 from models.archs.teco_resgen import TecoGen
 
 logger = logging.getLogger('base')
@@ -199,6 +200,9 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
     elif which_model == "stylegan2_discriminator":
         attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
         disc = StyleGan2Discriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'], attn_layers=attn)
+        netD = StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
+    elif which_model == "stylegan2_unet":
+        disc = StyleGan2UnetDiscriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'])
         netD = StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
