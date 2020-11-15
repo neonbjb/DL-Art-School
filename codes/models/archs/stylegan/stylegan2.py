@@ -13,6 +13,7 @@ from torch import nn
 from torch.autograd import grad as torch_grad
 from vector_quantize_pytorch import VectorQuantize
 
+from models.steps.losses import ConfigurableLoss
 from utils.util import checkpoint
 
 try:
@@ -303,6 +304,9 @@ class StyleGan2Augmentor(nn.Module):
 
         if detach:
             images = images.detach()
+
+        # Save away for use elsewhere (e.g. unet loss)
+        self.aug_images = images
 
         return self.D(images)
 
@@ -694,3 +698,68 @@ class StyleGan2Discriminator(nn.Module):
         for m in self.modules():
             if type(m) in {nn.Conv2d, nn.Linear}:
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
+
+
+class StyleGan2DivergenceLoss(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.real = opt['real']
+        self.fake = opt['fake']
+        self.discriminator = opt['discriminator']
+        self.for_gen = opt['gen_loss']
+        self.gp_frequency = opt['gradient_penalty_frequency']
+        self.noise = opt['noise'] if 'noise' in opt.keys() else 0
+
+    def forward(self, net, state):
+        real_input = state[self.real]
+        fake_input = state[self.fake]
+        if self.noise != 0:
+            fake_input = fake_input + torch.rand_like(fake_input) * self.noise
+            real_input = real_input + torch.rand_like(real_input) * self.noise
+
+        D = self.env['discriminators'][self.discriminator]
+        fake = D(fake_input)
+        if self.for_gen:
+            return fake.mean()
+        else:
+            real_input.requires_grad_()  # <-- Needed to compute gradients on the input.
+            real = D(real_input)
+            divergence_loss = (F.relu(1 + real) + F.relu(1 - fake)).mean()
+
+            # Apply gradient penalty. TODO: migrate this elsewhere.
+            if self.env['step'] % self.gp_frequency == 0:
+                from models.archs.stylegan.stylegan2 import gradient_penalty
+                gp = gradient_penalty(real_input, real)
+                self.metrics.append(("gradient_penalty", gp.clone().detach()))
+                divergence_loss = divergence_loss + gp
+
+            real_input.requires_grad_(requires_grad=False)
+            return divergence_loss
+
+
+class StyleGan2PathLengthLoss(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.w_styles = opt['w_styles']
+        self.gen = opt['gen']
+        self.pl_mean = None
+        from models.archs.stylegan.stylegan2 import EMA
+        self.pl_length_ma = EMA(.99)
+
+    def forward(self, net, state):
+        w_styles = state[self.w_styles]
+        gen = state[self.gen]
+        from models.archs.stylegan.stylegan2 import calc_pl_lengths
+        pl_lengths = calc_pl_lengths(w_styles, gen)
+        avg_pl_length = np.mean(pl_lengths.detach().cpu().numpy())
+
+        from models.archs.stylegan.stylegan2 import is_empty
+        if not is_empty(self.pl_mean):
+            pl_loss = ((pl_lengths - self.pl_mean) ** 2).mean()
+            if not torch.isnan(pl_loss):
+                return pl_loss
+            else:
+                print("Path length loss returned NaN!")
+
+        self.pl_mean = self.pl_length_ma.update_average(self.pl_mean, avg_pl_length)
+        return 0
