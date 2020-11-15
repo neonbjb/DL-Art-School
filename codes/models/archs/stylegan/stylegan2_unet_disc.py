@@ -4,6 +4,9 @@ from math import log2
 import torch
 import torch.nn as nn
 
+from models.archs.stylegan.stylegan2 import attn_and_ff
+
+
 def leaky_relu(p=0.2):
     return nn.LeakyReLU(p)
 
