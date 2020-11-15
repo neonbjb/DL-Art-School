@@ -13,14 +13,18 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 20
+    opt['n_thread'] = 5
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset2'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset_raw_2'
+    opt['input_folder'] = ['F:\\4k6k\\datasets\\images\\div2k\\DIV2K_train_HR',
+                           'F:\\4k6k\\datasets\\images\\flickr\\flickr2k\\Flickr2K_HR',
+                           'F:\\4k6k\\datasets\\images\\flickr\\flickr-scrape\\filtered',
+                           'F:\\4k6k\\datasets\\images\\goodeats\\hq\\new_season\\images',
+                           'F:\\4k6k\datasets\\images\\youtube\\images']
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\ge_full_1024'
     opt['imgsize'] = 1024
 
     save_folder = opt['save_folder']
@@ -35,7 +39,7 @@ class TiledDataset(data.Dataset):
     def __init__(self, opt):
         self.opt = opt
         input_folder = opt['input_folder']
-        self.images = data_util._get_paths_from_images(input_folder)
+        self.images = data_util.get_image_paths('img', input_folder)[0]
 
     def __getitem__(self, index):
         return self.get(index)
