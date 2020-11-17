@@ -291,14 +291,14 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_stylegan2_celebA_separated_disc.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_mi1_rrdb4x_6bl_corrected_disc.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
     trainer = Trainer()
 
-    #### distributed training settings
+#### distributed training settings
     if args.launcher == 'none':  # disabled distributed training
         opt['dist'] = False
         trainer.rank = -1

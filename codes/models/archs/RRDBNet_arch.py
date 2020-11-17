@@ -144,7 +144,9 @@ class RRDBNet(nn.Module):
                  growth_channels=32,
                  body_block=RRDB,
                  blocks_per_checkpoint=4,
-                 scale=4):
+                 scale=4,
+                 additive_mode="not_additive"  # Options: "not_additive", "additive", "additive_enforced"
+                 ):
         super(RRDBNet, self).__init__()
         self.num_blocks = num_blocks
         self.blocks_per_checkpoint = blocks_per_checkpoint
@@ -165,6 +167,10 @@ class RRDBNet(nn.Module):
         self.conv_up2 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
         self.conv_hr = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
         self.conv_last = nn.Conv2d(mid_channels, out_channels, 3, 1, 1)
+
+        self.additive_mode = additive_mode
+        if additive_mode == "additive_enforced":
+            self.add_enforced_pool = nn.AvgPool2d(kernel_size=scale, stride=scale)
 
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
@@ -202,6 +208,14 @@ class RRDBNet(nn.Module):
         else:
             feat = self.lrelu(self.conv_up2(feat))
         out = self.conv_last(self.lrelu(self.conv_hr(feat)))
+        if "additive" in self.additive_mode:
+            x_interp = F.interpolate(x, scale_factor=self.scale, mode='bilinear')
+        if self.additive_mode == 'additive':
+            out = out + x_interp
+        elif self.additive_mode == 'additive_enforced':
+            out_pooled = self.add_enforced_pool(out)
+            out = out - F.interpolate(out_pooled, scale_factor=self.scale, mode='nearest')
+            out = out + x_interp
         return out
 
     def visual_dbg(self, step, path):

@@ -19,11 +19,7 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\images\\div2k\\DIV2K_train_HR',
-                           'F:\\4k6k\\datasets\\images\\flickr\\flickr2k\\Flickr2K_HR',
-                           'F:\\4k6k\\datasets\\images\\flickr\\flickr-scrape\\filtered',
-                           'F:\\4k6k\\datasets\\images\\goodeats\\hq\\new_season\\images',
-                           'F:\\4k6k\datasets\\images\\youtube\\images']
+    opt['input_folder'] = ['F:\\4k6k\datasets\\images\\youtube\\videos\\4k_quote_unquote\\images']
     opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\ge_full_1024'
     opt['imgsize'] = 1024
 
