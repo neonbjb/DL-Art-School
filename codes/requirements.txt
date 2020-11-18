@@ -11,3 +11,7 @@ munch
 tqdm
 scp
 tensorboard
+pytorch_fid
+kornia
+linear_attention_transformer
+vector_quantize_pytorch
