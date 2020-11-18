@@ -221,7 +221,7 @@ class Trainer:
                         img_dir = os.path.join(opt['path']['val_images'], img_name)
                         util.mkdir(img_dir)
 
-                        self.model.feed_data(val_data)
+                        self.model.feed_data(val_data, self.current_step)
                         self.model.test()
 
                         visuals = self.model.get_current_visuals()
@@ -291,14 +291,14 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_stylegan2_for_sr_gen_real.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_mi1_rrdb4x_6bl_grad_penalty.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
     trainer = Trainer()
 
-    #### distributed training settings
+#### distributed training settings
     if args.launcher == 'none':  # disabled distributed training
         opt['dist'] = False
         trainer.rank = -1

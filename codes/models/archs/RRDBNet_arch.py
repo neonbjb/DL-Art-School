@@ -145,7 +145,7 @@ class RRDBNet(nn.Module):
                  body_block=RRDB,
                  blocks_per_checkpoint=4,
                  scale=4,
-                 additive_mode="not_additive"  # Options: "not_additive", "additive", "additive_enforced"
+                 additive_mode="not_additive"  # Options: "not", "additive", "additive_enforced"
                  ):
         super(RRDBNet, self).__init__()
         self.num_blocks = num_blocks

@@ -192,8 +192,8 @@ class GeneratorGanLoss(ConfigurableLoss):
             nfake = []
             for i, t in enumerate(real):
                 if isinstance(t, torch.Tensor):
-                    nreal.append(t + torch.randn_like(t) * self.noise)
-                    nfake.append(fake[i] + torch.randn_like(t) * self.noise)
+                    nreal.append(t + torch.rand_like(t) * self.noise)
+                    nfake.append(fake[i] + torch.rand_like(t) * self.noise)
                 else:
                     nreal.append(t)
                     nfake.append(fake[i])
@@ -234,6 +234,7 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         # This is a mechanism to prevent backpropagation for a GAN loss if it goes too low. This can be used to balance
         # generators and discriminators by essentially having them skip steps while their counterparts "catch up".
         self.min_loss = opt['min_loss'] if 'min_loss' in opt.keys() else 0
+        self.gradient_penalty = opt['gradient_penalty'] if 'gradient_penalty' in opt.keys() else False
         if self.min_loss != 0:
             assert not self.env['dist']  # distributed training does not support 'min_loss' - it can result in backward() desync by design.
             self.loss_rotating_buffer = torch.zeros(10, requires_grad=False)
@@ -243,6 +244,8 @@ class DiscriminatorGanLoss(ConfigurableLoss):
     def forward(self, net, state):
         real = extract_params_from_state(self.opt['real'], state)
         real = [r.detach() for r in real]
+        if self.gradient_penalty:
+            [r.requires_grad_() for r in real]
         fake = extract_params_from_state(self.opt['fake'], state)
         fake = [f.detach() for f in fake]
         if self.noise:
@@ -250,8 +253,8 @@ class DiscriminatorGanLoss(ConfigurableLoss):
             nfake = []
             for i, t in enumerate(real):
                 if isinstance(t, torch.Tensor):
-                    nreal.append(t + torch.randn_like(t) * self.noise)
-                    nfake.append(fake[i] + torch.randn_like(t) * self.noise)
+                    nreal.append(t + torch.rand_like(t) * self.noise)
+                    nfake.append(fake[i] + torch.rand_like(t) * self.noise)
                 else:
                     nreal.append(t)
                     nfake.append(fake[i])
@@ -282,6 +285,16 @@ class DiscriminatorGanLoss(ConfigurableLoss):
             if torch.mean(self.loss_rotating_buffer) < self.min_loss:
                 return 0
             self.losses_computed += 1
+
+        if self.gradient_penalty:
+            # Apply gradient penalty. TODO: migrate this elsewhere.
+            from models.archs.stylegan.stylegan2 import gradient_penalty
+            assert len(real) == 1   # Grad penalty doesn't currently support multi-input discriminators.
+            gp = gradient_penalty(real[0], d_real)
+            self.metrics.append(("gradient_penalty", gp.clone().detach()))
+            loss = loss + gp
+            self.metrics.append(("gradient_penalty", gp))
+
         return loss
 
 
