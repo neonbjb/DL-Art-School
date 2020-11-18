@@ -21,7 +21,6 @@ import models.archs.rcan as rcan
 from models.archs import srg2_classic
 from models.archs.biggan.biggan_discriminator import BigGanDiscriminator
 from models.archs.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
-from models.archs.pyramid_arch import BasicResamplingFlowNet
 from models.archs.rrdb_with_adain_latent import AdaRRDBNet, LinearLatentEstimator
 from models.archs.rrdb_with_latent import LatentEstimator, RRDBNetWithLatent, LatentEstimator2
 from models.archs.teco_resgen import TecoGen
@@ -198,8 +197,6 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
         netD = SRGAN_arch.RefDiscriminatorVgg128(in_nc=opt_net['in_nc'], nf=opt_net['nf'], input_img_factor=img_sz / 128)
     elif which_model == "psnr_approximator":
         netD = SRGAN_arch.PsnrApproximator(nf=opt_net['nf'], input_img_factor=img_sz / 128)
-    elif which_model == "pyramid_disc":
-        netD = SRGAN_arch.PyramidDiscriminator(in_nc=3, nf=opt_net['nf'])
     elif which_model == "stylegan2_discriminator":
         attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
         disc = stylegan2.StyleGan2Discriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'], attn_layers=attn)
