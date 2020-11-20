@@ -139,7 +139,8 @@ class ConfigurableStep(Module):
                 continue
             # Don't do injections tagged with 'after' or 'before' when we are out of spec.
             if 'after' in inj.opt.keys() and self.env['step'] < inj.opt['after'] or \
-               'before' in inj.opt.keys() and self.env['step'] > inj.opt['before']:
+               'before' in inj.opt.keys() and self.env['step'] > inj.opt['before'] or \
+               'every' in inj.opt.keys() and  self.env['step'] % inj.opt['every'] != 0:
                 continue
             injected = inj(local_state)
             local_state.update(injected)

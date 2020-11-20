@@ -105,12 +105,25 @@ class BaseModel():
         if 'state_dict' in load_net:
             load_net = load_net['state_dict']
 
+        is_srflow = False
         load_net_clean = OrderedDict()  # remove unnecessary 'module.'
         for k, v in load_net.items():
             if k.startswith('module.'):
                 load_net_clean[k[7:]] = v
             if k.startswith('generator'):   # Hack to fix ESRGAN pretrained model.
                 load_net_clean[k[10:]] = v
+            if 'RRDB_trunk' in k or is_srflow:   # Hacks to fix SRFlow imports, which uses some strange RDB names.
+                is_srflow = True
+                fixed_key = k.replace('RRDB_trunk', 'body')
+                if '.RDB' in fixed_key:
+                    fixed_key = fixed_key.replace('.RDB', '.rdb')
+                elif '.upconv' in fixed_key:
+                    fixed_key = fixed_key.replace('.upconv', '.conv_up')
+                elif '.trunk_conv' in fixed_key:
+                    fixed_key = fixed_key.replace('.trunk_conv', '.conv_body')
+                elif '.HRconv' in fixed_key:
+                    fixed_key = fixed_key.replace('.HRconv', '.conv_hr')
+                load_net_clean[fixed_key] = v
             else:
                 load_net_clean[k] = v
         network.load_state_dict(load_net_clean, strict=strict)

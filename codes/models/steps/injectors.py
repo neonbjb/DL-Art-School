@@ -157,6 +157,8 @@ class AddNoiseInjector(Injector):
             scale = state[self.opt['scale']]
         else:
             scale = self.opt['scale']
+            if scale is None:
+                scale = 1
 
         ref = state[self.opt['in']]
         if self.mode == 'normal':

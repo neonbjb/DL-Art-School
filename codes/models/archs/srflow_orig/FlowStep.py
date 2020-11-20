@@ -1,9 +1,8 @@
 import torch
 from torch import nn as nn
 
-import models.modules
-import models.modules.Permutations
-from models.modules import flow, thops, FlowAffineCouplingsAblation
+import models.archs.srflow_orig.Permutations
+from models.archs.srflow_orig import flow, thops, FlowAffineCouplingsAblation
 from utils.util import opt_get
 
 
@@ -47,16 +46,16 @@ class FlowStep(nn.Module):
         self.acOpt = acOpt
 
         # 1. actnorm
-        self.actnorm = models.modules.FlowActNorms.ActNorm2d(in_channels, actnorm_scale)
+        self.actnorm = models.archs.srflow_orig.FlowActNorms.ActNorm2d(in_channels, actnorm_scale)
 
         # 2. permute
         if flow_permutation == "invconv":
-            self.invconv = models.modules.Permutations.InvertibleConv1x1(
+            self.invconv = models.archs.srflow_orig.Permutations.InvertibleConv1x1(
                 in_channels, LU_decomposed=LU_decomposed)
 
         # 3. coupling
         if flow_coupling == "CondAffineSeparatedAndCond":
-            self.affine = models.modules.FlowAffineCouplingsAblation.CondAffineSeparatedAndCond(in_channels=in_channels,
+            self.affine = models.archs.srflow_orig.FlowAffineCouplingsAblation.CondAffineSeparatedAndCond(in_channels=in_channels,
                                                                                                 opt=opt)
         elif flow_coupling == "noCoupling":
             pass

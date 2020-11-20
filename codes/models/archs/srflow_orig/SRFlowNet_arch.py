@@ -4,10 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from models.modules.RRDBNet_arch import RRDBNet
-from models.modules.FlowUpsamplerNet import FlowUpsamplerNet
-import models.modules.thops as thops
-import models.modules.flow as flow
+from models.archs.srflow_orig.RRDBNet_arch import RRDBNet
+from models.archs.srflow_orig.FlowUpsamplerNet import FlowUpsamplerNet
+import models.archs.srflow_orig.thops as thops
+import models.archs.srflow_orig.flow as flow
 from utils.util import opt_get
 
 
@@ -19,27 +19,40 @@ class SRFlowNet(nn.Module):
         self.quant = 255 if opt_get(opt, ['datasets', 'train', 'quant']) is \
                             None else opt_get(opt, ['datasets', 'train', 'quant'])
         self.RRDB = RRDBNet(in_nc, out_nc, nf, nb, gc, scale, opt)
-        hidden_channels = opt_get(opt, ['network_G', 'flow', 'hidden_channels'])
+        if 'pretrain_rrdb' in opt['networks']['generator'].keys():
+            rrdb_state_dict = torch.load(opt['networks']['generator']['pretrain_rrdb'])
+            self.RRDB.load_state_dict(rrdb_state_dict, strict=True)
+
+        hidden_channels = opt_get(opt, ['networks', 'generator','flow', 'hidden_channels'])
         hidden_channels = hidden_channels or 64
         self.RRDB_training = True  # Default is true
 
-        train_RRDB_delay = opt_get(self.opt, ['network_G', 'train_RRDB_delay'])
-        set_RRDB_to_train = False
-        if set_RRDB_to_train:
-            self.set_rrdb_training(True)
+        train_RRDB_delay = opt_get(self.opt, ['networks', 'generator','train_RRDB_delay'])
+        self.RRDB_training = False
 
         self.flowUpsamplerNet = \
             FlowUpsamplerNet((160, 160, 3), hidden_channels, K,
-                             flow_coupling=opt['network_G']['flow']['coupling'], opt=opt)
+                             flow_coupling=opt['networks']['generator']['flow']['coupling'], opt=opt)
         self.i = 0
 
-    def set_rrdb_training(self, trainable):
-        if self.RRDB_training != trainable:
-            for p in self.RRDB.parameters():
-                p.requires_grad = trainable
-            self.RRDB_training = trainable
-            return True
-        return False
+    def get_random_z(self, heat, seed=None, batch_size=1, lr_shape=None, device='cuda'):
+        if seed: torch.manual_seed(seed)
+        if opt_get(self.opt, ['networks', 'generator', 'flow', 'split', 'enable']):
+            C = self.flowUpsamplerNet.C
+            H = int(self.opt['scale'] * lr_shape[2] // self.flowUpsamplerNet.scaleH)
+            W = int(self.opt['scale'] * lr_shape[3] // self.flowUpsamplerNet.scaleW)
+
+            size = (batch_size, C, H, W)
+            if heat == 0:
+                z = torch.zeros(size)
+            else:
+                z = torch.normal(mean=0, std=heat, size=size)
+        else:
+            L = opt_get(self.opt, ['networks', 'generator', 'flow', 'L']) or 3
+            fac = 2 ** (L - 3)
+            z_size = int(self.lr_size // (2 ** (L - 3)))
+            z = torch.normal(mean=0, std=heat, size=(batch_size, 3 * 8 * 8 * fac * fac, z_size, z_size))
+        return z.to(device)
 
     def forward(self, gt=None, lr=None, z=None, eps_std=None, reverse=False, epses=None, reverse_with_grad=False,
                 lr_enc=None,
@@ -48,14 +61,10 @@ class SRFlowNet(nn.Module):
             return self.normal_flow(gt, lr, epses=epses, lr_enc=lr_enc, add_gt_noise=add_gt_noise, step=step,
                                     y_onehot=y_label)
         else:
-            # assert lr.shape[0] == 1
             assert lr.shape[1] == 3
-            # assert lr.shape[2] == 20
-            # assert lr.shape[3] == 20
-            # assert z.shape[0] == 1
-            # assert z.shape[1] == 3 * 8 * 8
-            # assert z.shape[2] == 20
-            # assert z.shape[3] == 20
+            if z is None:
+                # Synthesize it.
+                z = self.get_random_z(eps_std, batch_size=lr.shape[0], lr_shape=lr.shape, device=lr.device)
             if reverse_with_grad:
                 return self.reverse_flow(lr, z, y_onehot=y_label, eps_std=eps_std, epses=epses, lr_enc=lr_enc,
                                          add_gt_noise=add_gt_noise)
@@ -66,7 +75,11 @@ class SRFlowNet(nn.Module):
 
     def normal_flow(self, gt, lr, y_onehot=None, epses=None, lr_enc=None, add_gt_noise=True, step=None):
         if lr_enc is None:
-            lr_enc = self.rrdbPreprocessing(lr)
+            if self.RRDB_training:
+                lr_enc = self.rrdbPreprocessing(lr)
+            else:
+                with torch.no_grad():
+                    lr_enc = self.rrdbPreprocessing(lr)
 
         logdet = torch.zeros_like(gt[:, 0, 0, 0])
         pixels = thops.pixels(gt)
@@ -75,7 +88,7 @@ class SRFlowNet(nn.Module):
 
         if add_gt_noise:
             # Setup
-            noiseQuant = opt_get(self.opt, ['network_G', 'flow', 'augmentation', 'noiseQuant'], True)
+            noiseQuant = opt_get(self.opt, ['networks', 'generator','flow', 'augmentation', 'noiseQuant'], True)
             if noiseQuant:
                 z = z + ((torch.rand(z.shape, device=z.device) - 0.5) / self.quant)
             logdet = logdet + float(-np.log(self.quant) * pixels)
@@ -101,11 +114,11 @@ class SRFlowNet(nn.Module):
 
     def rrdbPreprocessing(self, lr):
         rrdbResults = self.RRDB(lr, get_steps=True)
-        block_idxs = opt_get(self.opt, ['network_G', 'flow', 'stackRRDB', 'blocks']) or []
+        block_idxs = opt_get(self.opt, ['networks', 'generator','flow', 'stackRRDB', 'blocks']) or []
         if len(block_idxs) > 0:
             concat = torch.cat([rrdbResults["block_{}".format(idx)] for idx in block_idxs], dim=1)
 
-            if opt_get(self.opt, ['network_G', 'flow', 'stackRRDB', 'concat']) or False:
+            if opt_get(self.opt, ['networks', 'generator','flow', 'stackRRDB', 'concat']) or False:
                 keys = ['last_lr_fea', 'fea_up1', 'fea_up2', 'fea_up4']
                 if 'fea_up0' in rrdbResults.keys():
                     keys.append('fea_up0')
@@ -134,7 +147,11 @@ class SRFlowNet(nn.Module):
             logdet = logdet - float(-np.log(self.quant) * pixels)
 
         if lr_enc is None:
-            lr_enc = self.rrdbPreprocessing(lr)
+            if self.RRDB_training:
+                lr_enc = self.rrdbPreprocessing(lr)
+            else:
+                with torch.no_grad():
+                    lr_enc = self.rrdbPreprocessing(lr)
 
         x, logdet = self.flowUpsamplerNet(rrdbResults=lr_enc, z=z, eps_std=eps_std, reverse=True, epses=epses,
                                           logdet=logdet)

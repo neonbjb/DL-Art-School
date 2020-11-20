@@ -2,11 +2,11 @@ import numpy as np
 import torch
 from torch import nn as nn
 
-import models.modules.Split
-from models.modules import flow, thops
-from models.modules.Split import Split2d
-from models.modules.glow_arch import f_conv2d_bias
-from models.modules.FlowStep import FlowStep
+import models.archs.srflow_orig.Split
+from models.archs.srflow_orig import flow, thops
+from models.archs.srflow_orig.Split import Split2d
+from models.archs.srflow_orig.glow_arch import f_conv2d_bias
+from models.archs.srflow_orig.FlowStep import FlowStep
 from utils.util import opt_get
 
 
@@ -21,8 +21,8 @@ class FlowUpsamplerNet(nn.Module):
 
         self.layers = nn.ModuleList()
         self.output_shapes = []
-        self.L = opt_get(opt, ['network_G', 'flow', 'L'])
-        self.K = opt_get(opt, ['network_G', 'flow', 'K'])
+        self.L = opt_get(opt, ['networks', 'generator','flow', 'L'])
+        self.K = opt_get(opt, ['networks', 'generator','flow', 'K'])
         if isinstance(self.K, int):
             self.K = [K for K in [K, ] * (self.L + 1)]
 
@@ -60,11 +60,11 @@ class FlowUpsamplerNet(nn.Module):
         affineInCh = self.get_affineInCh(opt_get)
         flow_permutation = self.get_flow_permutation(flow_permutation, opt)
 
-        normOpt = opt_get(opt, ['network_G', 'flow', 'norm'])
+        normOpt = opt_get(opt, ['networks', 'generator','flow', 'norm'])
 
         conditional_channels = {}
         n_rrdb = self.get_n_rrdb_channels(opt, opt_get)
-        n_bypass_channels = opt_get(opt, ['network_G', 'flow', 'levelConditional', 'n_channels'])
+        n_bypass_channels = opt_get(opt, ['networks', 'generator','flow', 'levelConditional', 'n_channels'])
         conditional_channels[0] = n_rrdb
         for level in range(1, self.L + 1):
             # Level 1 gets conditionals from 2, 3, 4 => L - level
@@ -88,7 +88,7 @@ class FlowUpsamplerNet(nn.Module):
             # Split
             self.arch_split(H, W, level, self.L, opt, opt_get)
 
-        if opt_get(opt, ['network_G', 'flow', 'split', 'enable']):
+        if opt_get(opt, ['networks', 'generator','flow', 'split', 'enable']):
             self.f = f_conv2d_bias(affineInCh, 2 * 3 * 64 // 2 // 2)
         else:
             self.f = f_conv2d_bias(affineInCh, 2 * 3 * 64)
@@ -99,7 +99,7 @@ class FlowUpsamplerNet(nn.Module):
         self.scaleW = 160 / W
 
     def get_n_rrdb_channels(self, opt, opt_get):
-        blocks = opt_get(opt, ['network_G', 'flow', 'stackRRDB', 'blocks'])
+        blocks = opt_get(opt, ['networks', 'generator','flow', 'stackRRDB', 'blocks'])
         n_rrdb = 64 if blocks is None else (len(blocks) + 1) * 64
         return n_rrdb
 
@@ -126,33 +126,33 @@ class FlowUpsamplerNet(nn.Module):
                 [-1, self.C, H, W])
 
     def get_condAffSetting(self, opt, opt_get):
-        condAff = opt_get(opt, ['network_G', 'flow', 'condAff']) or None
-        condAff = opt_get(opt, ['network_G', 'flow', 'condFtAffine']) or condAff
+        condAff = opt_get(opt, ['networks', 'generator','flow', 'condAff']) or None
+        condAff = opt_get(opt, ['networks', 'generator','flow', 'condFtAffine']) or condAff
         return condAff
 
     def arch_split(self, H, W, L, levels, opt, opt_get):
-        correct_splits = opt_get(opt, ['network_G', 'flow', 'split', 'correct_splits'], False)
+        correct_splits = opt_get(opt, ['networks', 'generator','flow', 'split', 'correct_splits'], False)
         correction = 0 if correct_splits else 1
-        if opt_get(opt, ['network_G', 'flow', 'split', 'enable']) and L < levels - correction:
-            logs_eps = opt_get(opt, ['network_G', 'flow', 'split', 'logs_eps']) or 0
-            consume_ratio = opt_get(opt, ['network_G', 'flow', 'split', 'consume_ratio']) or 0.5
+        if opt_get(opt, ['networks', 'generator','flow', 'split', 'enable']) and L < levels - correction:
+            logs_eps = opt_get(opt, ['networks', 'generator','flow', 'split', 'logs_eps']) or 0
+            consume_ratio = opt_get(opt, ['networks', 'generator','flow', 'split', 'consume_ratio']) or 0.5
             position_name = get_position_name(H, self.opt['scale'])
-            position = position_name if opt_get(opt, ['network_G', 'flow', 'split', 'conditional']) else None
-            cond_channels = opt_get(opt, ['network_G', 'flow', 'split', 'cond_channels'])
+            position = position_name if opt_get(opt, ['networks', 'generator','flow', 'split', 'conditional']) else None
+            cond_channels = opt_get(opt, ['networks', 'generator','flow', 'split', 'cond_channels'])
             cond_channels = 0 if cond_channels is None else cond_channels
 
-            t = opt_get(opt, ['network_G', 'flow', 'split', 'type'], 'Split2d')
+            t = opt_get(opt, ['networks', 'generator','flow', 'split', 'type'], 'Split2d')
 
             if t == 'Split2d':
-                split = models.modules.Split.Split2d(num_channels=self.C, logs_eps=logs_eps, position=position,
+                split = models.archs.srflow_orig.Split.Split2d(num_channels=self.C, logs_eps=logs_eps, position=position,
                                                      cond_channels=cond_channels, consume_ratio=consume_ratio, opt=opt)
             self.layers.append(split)
             self.output_shapes.append([-1, split.num_channels_pass, H, W])
             self.C = split.num_channels_pass
 
     def arch_additionalFlowAffine(self, H, LU_decomposed, W, actnorm_scale, hidden_channels, opt):
-        if 'additionalFlowNoAffine' in opt['network_G']['flow']:
-            n_additionalFlowNoAffine = int(opt['network_G']['flow']['additionalFlowNoAffine'])
+        if 'additionalFlowNoAffine' in opt['networks']['generator']['flow']:
+            n_additionalFlowNoAffine = int(opt['networks']['generator']['flow']['additionalFlowNoAffine'])
             for _ in range(n_additionalFlowNoAffine):
                 self.layers.append(
                     FlowStep(in_channels=self.C,
@@ -171,11 +171,11 @@ class FlowUpsamplerNet(nn.Module):
         return H, W
 
     def get_flow_permutation(self, flow_permutation, opt):
-        flow_permutation = opt['network_G']['flow'].get('flow_permutation', 'invconv')
+        flow_permutation = opt['networks']['generator']['flow'].get('flow_permutation', 'invconv')
         return flow_permutation
 
     def get_affineInCh(self, opt_get):
-        affineInCh = opt_get(self.opt, ['network_G', 'flow', 'stackRRDB', 'blocks']) or []
+        affineInCh = opt_get(self.opt, ['networks', 'generator','flow', 'stackRRDB', 'blocks']) or []
         affineInCh = (len(affineInCh) + 1) * 64
         return affineInCh
 
@@ -204,7 +204,7 @@ class FlowUpsamplerNet(nn.Module):
         level_conditionals = {}
         bypasses = {}
 
-        L = opt_get(self.opt, ['network_G', 'flow', 'L'])
+        L = opt_get(self.opt, ['networks', 'generator','flow', 'L'])
 
         for level in range(1, L + 1):
             bypasses[level] = torch.nn.functional.interpolate(gt, scale_factor=2 ** -level, mode='bilinear', align_corners=False)
@@ -255,7 +255,7 @@ class FlowUpsamplerNet(nn.Module):
         # debug.imwrite("fl_fea", fl_fea)
         bypasses = {}
         level_conditionals = {}
-        if not opt_get(self.opt, ['network_G', 'flow', 'levelConditional', 'conditional']) == True:
+        if not opt_get(self.opt, ['networks', 'generator','flow', 'levelConditional', 'conditional']) == True:
             for level in range(self.L + 1):
                 level_conditionals[level] = rrdbResults[self.levelToName[level]]
 

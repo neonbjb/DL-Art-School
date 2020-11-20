@@ -1,8 +1,8 @@
 import torch
 from torch import nn as nn
 
-from models.modules import thops
-from models.modules.flow import Conv2d, Conv2dZeros
+from models.archs.srflow_orig import thops
+from models.archs.srflow_orig.flow import Conv2d, Conv2dZeros
 from utils.util import opt_get
 
 
@@ -15,10 +15,10 @@ class CondAffineSeparatedAndCond(nn.Module):
         self.kernel_hidden = 1
         self.affine_eps = 0.0001
         self.n_hidden_layers = 1
-        hidden_channels = opt_get(opt, ['network_G', 'flow', 'CondAffineSeparatedAndCond', 'hidden_channels'])
+        hidden_channels = opt_get(opt, ['networks', 'generator','flow', 'CondAffineSeparatedAndCond', 'hidden_channels'])
         self.hidden_channels = 64 if hidden_channels is None else hidden_channels
 
-        self.affine_eps = opt_get(opt, ['network_G', 'flow', 'CondAffineSeparatedAndCond', 'eps'],  0.0001)
+        self.affine_eps = opt_get(opt, ['networks', 'generator','flow', 'CondAffineSeparatedAndCond', 'eps'],  0.0001)
 
         self.channels_for_nn = self.in_channels // 2
         self.channels_for_co = self.in_channels - self.channels_for_nn

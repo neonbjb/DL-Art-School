@@ -28,11 +28,7 @@ from models.archs.teco_resgen import TecoGen
 logger = logging.getLogger('base')
 
 # Generator
-def define_G(opt, net_key='network_G', scale=None):
-    if net_key is not None:
-        opt_net = opt[net_key]
-    else:
-        opt_net = opt
+def define_G(opt, opt_net, scale=None):
     if scale is None:
         scale = opt['scale']
     which_model = opt_net['which_model_G']
@@ -141,6 +137,17 @@ def define_G(opt, net_key='network_G', scale=None):
         netG = stylegan2.StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
                                             style_depth=opt_net['style_depth'], structure_input=is_structured,
                                             attn_layers=attn)
+    elif which_model == 'srflow':
+        from models.archs.srflow import SRFlow_arch
+        netG = SRFlow_arch.SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'],
+                                     quant=opt_net['quant'], flow_block_maps=opt_net['rrdb_block_maps'],
+                                     noise_quant=opt_net['noise_quant'], hidden_channels=opt_net['nf'],
+                                     K=opt_net['K'], L=opt_net['L'], train_rrdb_at_step=opt_net['rrdb_train_step'],
+                                     hr_img_shape=opt_net['hr_shape'], scale=opt_net['scale'])
+    elif which_model == 'srflow_orig':
+        from models.archs.srflow_orig import SRFlowNet_arch
+        netG = SRFlowNet_arch.SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'], scale=opt['scale'],
+                                     K=opt_net['K'], opt=opt)
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
