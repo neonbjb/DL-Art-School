@@ -17,6 +17,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
         self.for_eval = opt['eval'] if 'eval' in opt.keys() else False
         self.scale = opt['scale'] if not self.for_eval else 1
         self.paths = opt['paths']
+        assert (self.target_hq_size // self.scale) % self.multiple == 0  # If we dont throw here, we get some really obscure errors.
         if not isinstance(self.paths, list):
             self.paths = [self.paths]
             self.weights = [1]
