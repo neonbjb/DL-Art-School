@@ -1,10 +1,7 @@
 import torch
 from torch import nn as nn
 
-import models.archs.srflow
-import models.archs.srflow.Permutations
-from models.archs.srflow import flow, thops, FlowAffineCouplingsAblation
-from utils.util import opt_get
+from models.archs.srflow import flow, thops, FlowAffineCouplingsAblation, FlowActNorms, Permutations
 
 
 def getConditional(rrdbResults, position):
@@ -28,7 +25,7 @@ class FlowStep(nn.Module):
 
     def __init__(self, in_channels, hidden_channels,
                  actnorm_scale=1.0, flow_permutation="invconv", flow_coupling="additive",
-                 LU_decomposed=False, opt=None, image_injector=None, idx=None, acOpt=None, normOpt=None, in_shape=None,
+                 LU_decomposed=False, image_injector=None, idx=None, acOpt=None, normOpt=None, in_shape=None,
                  position=None):
         # check configures
         assert flow_permutation in FlowStep.FlowPermutation, \
@@ -47,17 +44,16 @@ class FlowStep(nn.Module):
         self.acOpt = acOpt
 
         # 1. actnorm
-        self.actnorm = models.modules.FlowActNorms.ActNorm2d(in_channels, actnorm_scale)
+        self.actnorm = FlowActNorms.ActNorm2d(in_channels, actnorm_scale)
 
         # 2. permute
         if flow_permutation == "invconv":
-            self.invconv = models.modules.Permutations.InvertibleConv1x1(
+            self.invconv = Permutations.InvertibleConv1x1(
                 in_channels, LU_decomposed=LU_decomposed)
 
         # 3. coupling
         if flow_coupling == "CondAffineSeparatedAndCond":
-            self.affine = models.modules.FlowAffineCouplingsAblation.CondAffineSeparatedAndCond(in_channels=in_channels,
-                                                                                                opt=opt)
+            self.affine = FlowAffineCouplingsAblation.CondAffineSeparatedAndCond(in_channels=in_channels)
         elif flow_coupling == "noCoupling":
             pass
         else:

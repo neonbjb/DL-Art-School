@@ -7,7 +7,7 @@ from models.archs.srflow.flow import Conv2dZeros, GaussianDiag
 
 
 class Split2d(nn.Module):
-    def __init__(self, num_channels, logs_eps=0, cond_channels=0, position=None, consume_ratio=0.5, opt=None):
+    def __init__(self, num_channels, logs_eps=0, cond_channels=0, position=None, consume_ratio=0.5):
         super().__init__()
 
         self.num_channels_consume = int(round(num_channels * consume_ratio))
@@ -17,7 +17,6 @@ class Split2d(nn.Module):
                                 out_channels=self.num_channels_consume * 2)
         self.logs_eps = logs_eps
         self.position = position
-        self.opt = opt
 
     def split2d_prior(self, z, ft):
         if ft is not None:

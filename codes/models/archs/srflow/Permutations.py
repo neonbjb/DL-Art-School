@@ -3,7 +3,7 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
-from models.modules import thops
+from models.archs.srflow import thops
 
 
 class InvertibleConv1x1(nn.Module):

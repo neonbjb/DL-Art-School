@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import models.archs.srflow.module_util as mutil
-from utils.util import opt_get
+from utils.util import opt_get, checkpoint
 
 
 class ResidualDenseBlock_5C(nn.Module):
@@ -46,11 +46,14 @@ class RRDB(nn.Module):
 
 
 class RRDBNet(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=4, opt=None):
-        self.opt = opt
+    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=4, block_outputs=[], fea_up0=True,
+                 fea_up1=False):
         super(RRDBNet, self).__init__()
         RRDB_block_f = functools.partial(RRDB, nf=nf, gc=gc)
         self.scale = scale
+        self.block_outputs = block_outputs
+        self.fea_up0 = fea_up0
+        self.fea_up1 = fea_up1
 
         self.conv_first = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
         self.RRDB_trunk = mutil.make_layer(RRDB_block_f, nb)
@@ -73,11 +76,11 @@ class RRDBNet(nn.Module):
     def forward(self, x, get_steps=False):
         fea = self.conv_first(x)
 
-        block_idxs = opt_get(self.opt, ['network_G', 'flow', 'stackRRDB', 'blocks']) or []
+        block_idxs = self.block_outputs or []
         block_results = {}
 
         for idx, m in enumerate(self.RRDB_trunk.children()):
-            fea = m(fea)
+            fea = checkpoint(m, fea)
             for b in block_idxs:
                 if b == idx:
                     block_results["block_{}".format(idx)] = fea
@@ -117,11 +120,9 @@ class RRDBNet(nn.Module):
                    'fea_up32': fea_up32,
                    'out': out}
 
-        fea_up0_en = opt_get(self.opt, ['network_G', 'flow', 'fea_up0']) or False
-        if fea_up0_en:
+        if self.fea_up0:
             results['fea_up0'] = F.interpolate(last_lr_fea, scale_factor=1/2, mode='bilinear', align_corners=False, recompute_scale_factor=True)
-        fea_upn1_en = opt_get(self.opt, ['network_G', 'flow', 'fea_up-1']) or False
-        if fea_upn1_en:
+        if self.fea_up1:
             results['fea_up-1'] = F.interpolate(last_lr_fea, scale_factor=1/4, mode='bilinear', align_corners=False, recompute_scale_factor=True)
 
         if get_steps:
