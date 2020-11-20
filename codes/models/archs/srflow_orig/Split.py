@@ -49,7 +49,8 @@ class Split2d(nn.Module):
 
             if eps is None:
                 #print("WARNING: eps is None, generating eps untested functionality!")
-                eps = GaussianDiag.sample_eps(mean.shape, eps_std)
+                eps = GaussianDiag.sample(mean, logs, eps_std)
+                #eps = GaussianDiag.sample_eps(mean.shape, eps_std)
 
             eps = eps.to(mean.device)
             z2 = mean + self.exp_eps(logs) * eps

@@ -195,7 +195,6 @@ class FlowUpsamplerNet(nn.Module):
             assert gt is not None
             assert rrdbResults is not None
             z, logdet = self.encode(gt, rrdbResults, logdet=logdet, epses=epses, y_onehot=y_onehot)
-
             return z, logdet
 
     def encode(self, gt, rrdbResults, logdet=0.0, epses=None, y_onehot=None):
