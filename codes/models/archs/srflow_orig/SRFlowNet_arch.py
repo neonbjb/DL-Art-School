@@ -27,6 +27,7 @@ class SRFlowNet(nn.Module):
         hidden_channels = opt_get(opt, ['networks', 'generator','flow', 'hidden_channels'])
         hidden_channels = hidden_channels or 64
         self.RRDB_training = opt_get(self.opt, ['networks', 'generator','train_RRDB'], default=False)
+        self.flow_scale = opt_get(self.opt, ['networks', 'generator', 'flow_scale'], default=opt['scale'])  # <!-- hack to enable RRDB to do 2x scaling while retaining the flow architecture of 4x.
 
         self.flowUpsamplerNet = \
             FlowUpsamplerNet((160, 160, 3), hidden_channels, K,
@@ -41,8 +42,8 @@ class SRFlowNet(nn.Module):
         if seed: torch.manual_seed(seed)
         if opt_get(self.opt, ['networks', 'generator', 'flow', 'split', 'enable']):
             C = self.flowUpsamplerNet.C
-            H = int(self.opt['scale'] * lr_shape[2] // self.flowUpsamplerNet.scaleH)
-            W = int(self.opt['scale'] * lr_shape[3] // self.flowUpsamplerNet.scaleW)
+            H = int(self.flow_scale * lr_shape[2] // (self.flowUpsamplerNet.scaleH * self.flow_scale / self.RRDB.scale))
+            W = int(self.flow_scale * lr_shape[3] // (self.flowUpsamplerNet.scaleW * self.flow_scale / self.RRDB.scale))
 
             size = (batch_size, C, H, W)
             if heat == 0:
@@ -149,9 +150,9 @@ class SRFlowNet(nn.Module):
                     keys.append('fea_up0')
                 if 'fea_up-1' in rrdbResults.keys():
                     keys.append('fea_up-1')
-                if self.opt['scale'] >= 8:
+                if self.flow_scale >= 8:
                     keys.append('fea_up8')
-                if self.opt['scale'] == 16:
+                if self.flow_scale == 16:
                     keys.append('fea_up16')
                 for k in keys:
                     h = rrdbResults[k].shape[2]
@@ -166,7 +167,7 @@ class SRFlowNet(nn.Module):
 
     def reverse_flow(self, lr, z, y_onehot, eps_std, epses=None, lr_enc=None, add_gt_noise=True):
         logdet = torch.zeros_like(lr[:, 0, 0, 0])
-        pixels = thops.pixels(lr) * self.opt['scale'] ** 2
+        pixels = thops.pixels(lr) * self.flow_scale ** 2
 
         if add_gt_noise:
             logdet = logdet - float(-np.log(self.quant) * pixels)

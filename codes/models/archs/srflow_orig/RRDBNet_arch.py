@@ -186,21 +186,44 @@ class RRDBNet(nn.Module):
 
         out = self.conv_last(self.lrelu(self.conv_hr(fea)))
 
-        results = {'last_lr_fea': last_lr_fea,
-                   'fea_up1': last_lr_fea,
-                   'fea_up2': fea_up2,
-                   'fea_up4': fea_up4,
-                   'fea_up8': fea_up8,
-                   'fea_up16': fea_up16,
-                   'fea_up32': fea_up32,
-                   'out': out}
+        if self.scale >= 4:
+            results = {'last_lr_fea': last_lr_fea,
+                       'fea_up1': last_lr_fea,
+                       'fea_up2': fea_up2,
+                       'fea_up4': fea_up4,
+                       'fea_up8': fea_up8,
+                       'fea_up16': fea_up16,
+                       'fea_up32': fea_up32,
+                       'out': out}
 
-        fea_up0_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up0']) or False
-        if fea_up0_en:
-            results['fea_up0'] = F.interpolate(last_lr_fea, scale_factor=1/2, mode='bilinear', align_corners=False, recompute_scale_factor=True)
-        fea_upn1_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up-1']) or False
-        if fea_upn1_en:
-            results['fea_up-1'] = F.interpolate(last_lr_fea, scale_factor=1/4, mode='bilinear', align_corners=False, recompute_scale_factor=True)
+            fea_up0_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up0']) or False
+            if fea_up0_en:
+                results['fea_up0'] = F.interpolate(last_lr_fea, scale_factor=1/2, mode='bilinear', align_corners=False, recompute_scale_factor=True)
+            fea_upn1_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up-1']) or False
+            if fea_upn1_en:
+                results['fea_up-1'] = F.interpolate(last_lr_fea, scale_factor=1/4, mode='bilinear', align_corners=False, recompute_scale_factor=True)
+        elif self.scale == 2:
+            # "Pretend" this is is 4x by shuffling around the inputs a bit.
+            half = F.interpolate(last_lr_fea, scale_factor=1/2, mode='bilinear', align_corners=False, recompute_scale_factor=True)
+            quarter = F.interpolate(last_lr_fea, scale_factor=1/4, mode='bilinear', align_corners=False, recompute_scale_factor=True)
+            eighth = F.interpolate(last_lr_fea, scale_factor=1/8, mode='bilinear', align_corners=False, recompute_scale_factor=True)
+            results = {'last_lr_fea': half,
+                       'fea_up1': half,
+                       'fea_up2': last_lr_fea,
+                       'fea_up4': fea_up2,
+                       'fea_up8': fea_up4,
+                       'fea_up16': fea_up8,
+                       'fea_up32': fea_up16,
+                       'out': out}
+
+            fea_up0_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up0']) or False
+            if fea_up0_en:
+                results['fea_up0'] = quarter
+            fea_upn1_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up-1']) or False
+            if fea_upn1_en:
+                results['fea_up-1'] = eighth
+        else:
+            raise NotImplementedError
 
         if get_steps:
             for k, v in block_results.items():

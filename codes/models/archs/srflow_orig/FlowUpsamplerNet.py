@@ -48,7 +48,7 @@ class FlowUpsamplerNet(nn.Module):
                 4: 'fea_up0'
             }
 
-        elif opt['scale'] == 4:
+        elif opt['scale'] == 4 or opt['scale'] == 2:
             self.levelToName = {
                 0: 'fea_up4',
                 1: 'fea_up2',
