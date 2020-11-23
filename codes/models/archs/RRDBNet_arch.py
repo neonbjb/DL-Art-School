@@ -222,4 +222,3 @@ class RRDBNet(nn.Module):
         for i, bm in enumerate(self.body):
             if hasattr(bm, 'bypass_map'):
                 torchvision.utils.save_image(bm.bypass_map.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
-

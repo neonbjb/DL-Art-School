@@ -22,6 +22,7 @@ class SrStyleTransferEvaluator(evaluator.Evaluator):
         self.im_sz = opt_eval['image_size']
         self.scale = opt_eval['scale']
         self.fid_real_samples = opt_eval['real_fid_path']
+        self.embedding_generator = opt_eval['embedding_generator']
         self.gen_output_index = opt_eval['gen_index'] if 'gen_index' in opt_eval.keys() else 0
         self.dataset = Stylegan2Dataset({'path': self.fid_real_samples,
                                          'target_size': self.im_sz,
@@ -30,6 +31,7 @@ class SrStyleTransferEvaluator(evaluator.Evaluator):
         self.sampler = BatchSampler(self.dataset, self.batch_sz, False)
 
     def perform_eval(self):
+        embedding_generator = self.env['generators'][self.embedding_generator]
         fid_fake_path = osp.join(self.env['base_path'], "..", "fid_fake", str(self.env["step"]))
         os.makedirs(fid_fake_path, exist_ok=True)
         fid_real_path = osp.join(self.env['base_path'], "..", "fid_real", str(self.env["step"]))
@@ -40,7 +42,8 @@ class SrStyleTransferEvaluator(evaluator.Evaluator):
             batch_hq = [e['GT'] for e in batch]
             batch_hq = torch.stack(batch_hq, dim=0).to(self.env['device'])
             resized_batch = torch.nn.functional.interpolate(batch_hq, scale_factor=1/self.scale, mode="area")
-            gen = self.model(noise, resized_batch)
+            embedding = embedding_generator(resized_batch)
+            gen = self.model(noise, embedding)
             if not isinstance(gen, list) and not isinstance(gen, tuple):
                 gen = [gen]
             gen = gen[self.gen_output_index]

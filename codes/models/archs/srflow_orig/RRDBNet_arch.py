@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import models.archs.srflow_orig.module_util as mutil
-from models.archs.arch_util import default_init_weights, ConvGnSilu
+from models.archs.arch_util import default_init_weights, ConvGnSilu, ConvGnLelu
 from utils.util import opt_get
 
 
@@ -231,3 +231,27 @@ class RRDBNet(nn.Module):
             return results
         else:
             return out
+
+
+class RRDBLatentWrapper(nn.Module):
+    def __init__(self, in_nc, out_nc, nf, nb, with_bypass, blocks, pretrain_rrdb_path=None, gc=32, scale=4):
+        super().__init__()
+        self.with_bypass = with_bypass
+        self.blocks = blocks
+        fake_opt = { 'networks': {'generator': {'flow': {'stackRRDB': {'blocks': blocks}}, 'rrdb_bypass': with_bypass}}}
+        self.wrappedRRDB = RRDBNet(in_nc, out_nc, nf, nb, gc, scale, fake_opt)
+        if pretrain_rrdb_path is not None:
+            rrdb_state_dict = torch.load(pretrain_rrdb_path)
+            self.wrappedRRDB.load_state_dict(rrdb_state_dict, strict=True)
+        out_dim = nf * (len(blocks) + 1)
+        self.postprocess = nn.Sequential(ConvGnLelu(out_dim, out_dim, kernel_size=1, bias=True, activation=True, norm=True),
+                                         ConvGnLelu(out_dim, out_dim, kernel_size=1, bias=True, activation=True, norm=True),
+                                         ConvGnLelu(out_dim, out_dim, kernel_size=1, bias=True, activation=False, norm=False))
+
+    def forward(self, lr):
+        rrdbResults = self.wrappedRRDB(lr, get_steps=True)
+        blocklist = [rrdbResults["block_{}".format(idx)] for idx in self.blocks]
+        blocklist.append(rrdbResults['last_lr_fea'])
+        fea = torch.cat(blocklist, dim=1)
+        fea = self.postprocess(fea)
+        return fea

@@ -13,7 +13,7 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 5
+    opt['n_thread'] = 20
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
@@ -46,6 +46,9 @@ class TiledDataset(data.Dataset):
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
         # Greyscale not supported.
+        if img is None:
+            print("Error with ", path)
+            return None
         if len(img.shape) == 2:
             return None
         h, w, c = img.shape

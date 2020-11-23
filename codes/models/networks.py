@@ -148,6 +148,11 @@ def define_G(opt, opt_net, scale=None):
         from models.archs.srflow_orig import SRFlowNet_arch
         netG = SRFlowNet_arch.SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'], scale=opt['scale'],
                                      K=opt_net['K'], opt=opt)
+    elif which_model == 'rrdb_latent_wrapper':
+        from models.archs.srflow_orig.RRDBNet_arch import RRDBLatentWrapper
+        netG = RRDBLatentWrapper(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                                  nf=opt_net['nf'], nb=opt_net['nb'], with_bypass=opt_net['with_bypass'],
+                                 blocks=opt_net['blocks_for_latent'], scale=opt_net['scale'], pretrain_rrdb_path=opt_net['pretrain_path'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG

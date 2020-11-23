@@ -78,15 +78,20 @@ class Injector(torch.nn.Module):
 class ImageGeneratorInjector(Injector):
     def __init__(self, opt, env):
         super(ImageGeneratorInjector, self).__init__(opt, env)
+        self.grad = opt['grad'] if 'grad' in opt.keys() else True
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
         with autocast(enabled=self.env['opt']['fp16']):
             if isinstance(self.input, list):
                 params = extract_params_from_state(self.input, state)
+            else:
+                params = [state[self.input]]
+            if self.grad:
                 results = gen(*params)
             else:
-                results = gen(state[self.input])
+                with torch.no_grad():
+                    results = gen(*params)
         new_state = {}
         if isinstance(self.output, list):
             # Only dereference tuples or lists, not tensors.

@@ -1,3 +1,4 @@
+import functools
 import math
 import multiprocessing
 from contextlib import contextmanager, ExitStack
@@ -371,6 +372,76 @@ class RGBBlock(nn.Module):
         return x
 
 
+class AdaptiveInstanceNorm(nn.Module):
+    def __init__(self, in_channel, style_dim):
+        super().__init__()
+        from models.archs.arch_util import ConvGnLelu
+        self.style2scale = ConvGnLelu(style_dim, in_channel, kernel_size=1, norm=False, activation=False, bias=True)
+        self.style2bias = ConvGnLelu(style_dim, in_channel, kernel_size=1, norm=False, activation=False, bias=True, weight_init_factor=0)
+        self.norm = nn.InstanceNorm2d(in_channel)
+
+    def forward(self, input, style):
+        gamma = self.style2scale(style)
+        beta = self.style2bias(style)
+        out = self.norm(input)
+        out = gamma * out + beta
+        return out
+
+
+class NoiseInjection(nn.Module):
+    def __init__(self, channel):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(1, channel, 1, 1))
+
+    def forward(self, image, noise):
+        return image + self.weight * noise
+
+
+class EqualLR:
+    def __init__(self, name):
+        self.name = name
+
+    def compute_weight(self, module):
+        weight = getattr(module, self.name + '_orig')
+        fan_in = weight.data.size(1) * weight.data[0][0].numel()
+
+        return weight * math.sqrt(2 / fan_in)
+
+    @staticmethod
+    def apply(module, name):
+        fn = EqualLR(name)
+
+        weight = getattr(module, name)
+        del module._parameters[name]
+        module.register_parameter(name + '_orig', nn.Parameter(weight.data))
+        module.register_forward_pre_hook(fn)
+
+        return fn
+
+    def __call__(self, module, input):
+        weight = self.compute_weight(module)
+        setattr(module, self.name, weight)
+
+
+def equal_lr(module, name='weight'):
+    EqualLR.apply(module, name)
+
+    return module
+
+
+class EqualConv2d(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+        conv = nn.Conv2d(*args, **kwargs)
+        conv.weight.data.normal_()
+        conv.bias.data.zero_()
+        self.conv = equal_lr(conv)
+
+    def forward(self, input):
+        return self.conv(input)
+
+
 class Conv2DMod(nn.Module):
     def __init__(self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, **kwargs):
         super().__init__()
@@ -406,6 +477,54 @@ class Conv2DMod(nn.Module):
 
         x = x.reshape(-1, self.filters, h, w)
         return x
+
+
+class GeneratorBlockWithStructure(nn.Module):
+    def __init__(self, latent_dim, input_channels, filters, upsample=True, upsample_rgb=True, rgba=False):
+        super().__init__()
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
+
+        # Uses stylegan1 style blocks for injecting structural latent.
+        self.conv0 = EqualConv2d(input_channels, filters, 3, padding=1)
+        self.to_noise0 = nn.Linear(1, filters)
+        self.noise0 = equal_lr(NoiseInjection(filters))
+        self.adain0 = AdaptiveInstanceNorm(filters, latent_dim)
+
+        self.to_style1 = nn.Linear(latent_dim, filters)
+        self.to_noise1 = nn.Linear(1, filters)
+        self.conv1 = Conv2DMod(filters, filters, 3)
+
+        self.to_style2 = nn.Linear(latent_dim, filters)
+        self.to_noise2 = nn.Linear(1, filters)
+        self.conv2 = Conv2DMod(filters, filters, 3)
+
+        self.activation = leaky_relu()
+        self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
+
+    def forward(self, x, prev_rgb, istyle, inoise, structure_input):
+        if exists(self.upsample):
+            x = self.upsample(x)
+
+        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
+        noise0 = self.to_noise0(inoise).permute((0, 3, 1, 2))
+        noise1 = self.to_noise1(inoise).permute((0, 3, 1, 2))
+        noise2 = self.to_noise2(inoise).permute((0, 3, 1, 2))
+
+        structure = torch.nn.functional.interpolate(structure_input, size=x.shape[2:], mode="nearest")
+        x = self.conv0(x)
+        x = self.noise0(x, noise0)
+        x = self.adain0(x, structure)
+
+        style1 = self.to_style1(istyle)
+        x = self.conv1(x, style1)
+        x = self.activation(x + noise1)
+
+        style2 = self.to_style2(istyle)
+        x = self.conv2(x, style2)
+        x = self.activation(x + noise2)
+
+        rgb = self.to_rgb(x, prev_rgb, istyle)
+        return x, rgb
 
 
 class GeneratorBlock(nn.Module):
@@ -453,32 +572,6 @@ class GeneratorBlock(nn.Module):
         return x, rgb
 
 
-class DiscriminatorBlock(nn.Module):
-    def __init__(self, input_channels, filters, downsample=True):
-        super().__init__()
-        self.conv_res = nn.Conv2d(input_channels, filters, 1, stride=(2 if downsample else 1))
-
-        self.net = nn.Sequential(
-            nn.Conv2d(input_channels, filters, 3, padding=1),
-            leaky_relu(),
-            nn.Conv2d(filters, filters, 3, padding=1),
-            leaky_relu()
-        )
-
-        self.downsample = nn.Sequential(
-            Blur(),
-            nn.Conv2d(filters, filters, 3, padding=1, stride=2)
-        ) if downsample else None
-
-    def forward(self, x):
-        res = self.conv_res(x)
-        x = self.net(x)
-        if exists(self.downsample):
-            x = self.downsample(x)
-        x = (x + res) * (1 / math.sqrt(2))
-        return x
-
-
 class Generator(nn.Module):
     def __init__(self, image_size, latent_dim, network_capacity=16, transparent=False, attn_layers=[], no_const=False,
                  fmap_max=512, structure_input=False):
@@ -515,18 +608,22 @@ class Generator(nn.Module):
 
             self.attns.append(attn_fn)
 
-            block = GeneratorBlock(
+            if structure_input:
+                block_fn = GeneratorBlockWithStructure
+            else:
+                block_fn = GeneratorBlock
+
+            block = block_fn(
                 latent_dim,
                 in_chan,
                 out_chan,
                 upsample=not_first,
                 upsample_rgb=not_last,
-                rgba=transparent,
-                structure_input=structure_input
+                rgba=transparent
             )
             self.blocks.append(block)
 
-    def forward(self, styles, input_noise, structure_input=None):
+    def forward(self, styles, input_noise, structure_input=None, starting_shape=None):
         batch_size = styles.shape[0]
         image_size = self.image_size
 
@@ -535,6 +632,8 @@ class Generator(nn.Module):
             x = self.to_initial_block(avg_style)
         else:
             x = self.initial_block.expand(batch_size, -1, -1, -1)
+        if starting_shape is not None:
+            x = F.interpolate(x, size=starting_shape, mode="bilinear")
 
         rgb = None
         styles = styles.transpose(0, 1)
@@ -591,7 +690,7 @@ class StyleGan2GeneratorWithLatent(nn.Module):
 
     # To use per the stylegan paper, input should be uniform noise. This gen takes it in as a normal "image" format:
     # b,f,h,w.
-    def forward(self, x, structure_input=None):
+    def forward(self, x, structure_input=None, fit_starting_shape_to_structure=False):
         b, f, h, w = x.shape
 
         full_random_latents = True
@@ -614,12 +713,15 @@ class StyleGan2GeneratorWithLatent(nn.Module):
             w_space = self.latent_to_w(self.vectorizer, style)
             w_styles = self.styles_def_to_tensor(w_space)
 
+        starting_shape = None
+        if fit_starting_shape_to_structure:
+            starting_shape = (x.shape[2] // 32, x.shape[3] // 32)
         # The underlying model expects the noise as b,h,w,1. Make it so.
-        return self.gen(w_styles, x[:,0,:,:].unsqueeze(dim=3), structure_input), w_styles
+        return self.gen(w_styles, x[:,0,:,:].unsqueeze(dim=3), structure_input, starting_shape), w_styles
 
     def _init_weights(self):
         for m in self.modules():
-            if type(m) in {nn.Conv2d, nn.Linear}:
+            if type(m) in {nn.Conv2d, nn.Linear} and hasattr(m, 'weight'):
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
 
         for block in self.gen.blocks:
@@ -627,6 +729,32 @@ class StyleGan2GeneratorWithLatent(nn.Module):
             nn.init.zeros_(block.to_noise2.weight)
             nn.init.zeros_(block.to_noise1.bias)
             nn.init.zeros_(block.to_noise2.bias)
+
+
+class DiscriminatorBlock(nn.Module):
+    def __init__(self, input_channels, filters, downsample=True):
+        super().__init__()
+        self.conv_res = nn.Conv2d(input_channels, filters, 1, stride=(2 if downsample else 1))
+
+        self.net = nn.Sequential(
+            nn.Conv2d(input_channels, filters, 3, padding=1),
+            leaky_relu(),
+            nn.Conv2d(filters, filters, 3, padding=1),
+            leaky_relu()
+        )
+
+        self.downsample = nn.Sequential(
+            Blur(),
+            nn.Conv2d(filters, filters, 3, padding=1, stride=2)
+        ) if downsample else None
+
+    def forward(self, x):
+        res = self.conv_res(x)
+        x = self.net(x)
+        if exists(self.downsample):
+            x = self.downsample(x)
+        x = (x + res) * (1 / math.sqrt(2))
+        return x
 
 
 class StyleGan2Discriminator(nn.Module):
