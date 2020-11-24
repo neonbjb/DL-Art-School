@@ -285,6 +285,7 @@ class ForEachInjector(Injector):
         o['in'] = '_in'
         o['out'] = '_out'
         self.injector = create_injector(o, self.env)
+        self.aslist = opt['aslist'] if 'aslist' in opt.keys() else False
 
     def forward(self, state):
         injs = []
@@ -293,7 +294,10 @@ class ForEachInjector(Injector):
         for i in range(inputs.shape[1]):
             st['_in'] = inputs[:, i]
             injs.append(self.injector(st)['_out'])
-        return {self.output: torch.stack(injs, dim=1)}
+        if self.aslist:
+            return {self.output: injs}
+        else:
+            return {self.output: torch.stack(injs, dim=1)}
 
     
 class ConstantInjector(Injector):

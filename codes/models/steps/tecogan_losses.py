@@ -44,10 +44,12 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
         super(RecurrentImageGeneratorSequenceInjector, self).__init__(opt, env)
         self.flow = opt['flow_network']
         self.input_lq_index = opt['input_lq_index'] if 'input_lq_index' in opt.keys() else 0
-        self.output_hq_index = opt['output_hq_index'] if 'output_hq_index' in opt.keys() else 0
         self.recurrent_index = opt['recurrent_index']
+        self.output_hq_index = opt['output_hq_index'] if 'output_hq_index' in opt.keys() else 0
+        self.output_recurrent_index = opt['output_recurrent_index'] if 'output_recurrent_index' in opt.keys() else self.output_hq_index
         self.scale = opt['scale']
         self.resample = Resample2d()
+        self.flow_key = opt['flow_input_key'] if 'flow_input_key' in opt.keys() else None
         self.first_inputs = opt['first_inputs'] if 'first_inputs' in opt.keys() else opt['in']  # Use this to specify inputs that will be used in the first teco iteration, the rest will use 'in'.
         self.do_backwards = opt['do_backwards'] if 'do_backwards' in opt.keys() else True
         self.hq_recurrent = opt['hq_recurrent'] if 'hq_recurrent' in opt.keys() else False  # When True, recurrent_index is not touched for the first iteration, allowing you to specify what is fed in. When False, zeros are fed into the recurrent index.
@@ -82,20 +84,21 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
             else:
                 input = extract_inputs_index(inputs, i)
                 with torch.no_grad() and autocast(enabled=False):
-                    # This is a hack to workaround the fact that flownet2 cannot operate at resolutions < 64px. An assumption is
-                    # made here that if you are operating at 4x scale, your inputs are 32px x 32px
-                    if self.scale >= 4:
-                        flow_input = F.interpolate(input[self.input_lq_index], scale_factor=self.scale//2, mode='bicubic')
+                    if self.flow_key is not None:
+                        flow_input = state[self.flow_key][:, i]
                     else:
                         flow_input = input[self.input_lq_index]
-                    reduced_recurrent = F.interpolate(recurrent_input, scale_factor=.5, mode='bicubic')
+                    reduced_recurrent = F.interpolate(hq_recurrent, scale_factor=1/self.scale, mode='bicubic')
                     flow_input = torch.stack([flow_input, reduced_recurrent], dim=2).float()
-                    flowfield = F.interpolate(flow(flow_input), scale_factor=2, mode='bicubic')
+                    flowfield = flow(flow_input)
+                    if recurrent_input.shape[-1] != flow_input.shape[-1]:
+                        flowfield = F.interpolate(flowfield, scale_factor=self.scale, mode='bicubic')
                     recurrent_input = self.resample(recurrent_input.float(), flowfield)
             input[self.recurrent_index] = recurrent_input
             if self.env['step'] % 50 == 0:
-                self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
-                debug_index += 1
+                if input[self.input_lq_index].shape[1] == 3:   # Only debug this if we're dealing with images.
+                    self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.hq_recurrent], debug_index)
+                    debug_index += 1
 
             with autocast(enabled=self.env['opt']['fp16']):
                 gen_out = gen(*input)
@@ -104,7 +107,8 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                 gen_out = [gen_out]
             for i, out_key in enumerate(self.output):
                 results[out_key].append(gen_out[i])
-            recurrent_input = gen_out[self.output_hq_index]
+            hq_recurrent = gen_out[self.output_hq_index]
+            recurrent_input = gen_out[self.output_recurrent_index]
 
         # Now go backwards, skipping the last element (it's already stored in recurrent_input)
         if self.do_backwards:
@@ -113,20 +117,21 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                 input = extract_inputs_index(inputs, i)
                 with torch.no_grad():
                     with autocast(enabled=False):
-                    # This is a hack to workaround the fact that flownet2 cannot operate at resolutions < 64px. An assumption is
-                        # made here that if you are operating at 4x scale, your inputs are 32px x 32px
-                        if self.scale >= 4:
-                            flow_input = F.interpolate(input[self.input_lq_index], scale_factor=self.scale//2, mode='bicubic')
+                        if self.flow_key is not None:
+                            flow_input = state[self.flow_key][:, i]
                         else:
                             flow_input = input[self.input_lq_index]
-                        reduced_recurrent = F.interpolate(recurrent_input, scale_factor=.5, mode='bicubic')
+                        reduced_recurrent = F.interpolate(hq_recurrent, scale_factor=1/self.scale, mode='bicubic')
                         flow_input = torch.stack([flow_input, reduced_recurrent], dim=2).float()
-                        flowfield = F.interpolate(flow(flow_input), scale_factor=2, mode='bicubic')
+                        flowfield = flow(flow_input)
+                        if recurrent_input.shape[-1] != flow_input.shape[-1]:
+                            flowfield = F.interpolate(flow(flow_input), scale_factor=self.scale, mode='bicubic')
                         recurrent_input = self.resample(recurrent_input.float(), flowfield)
                 input[self.recurrent_index] = recurrent_input
                 if self.env['step'] % 50 == 0:
-                    self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
-                    debug_index += 1
+                    if input[self.input_lq_index].shape[1] == 3:   # Only debug this if we're dealing with images.
+                        self.produce_teco_visual_debugs(input[self.input_lq_index], input[self.recurrent_index], debug_index)
+                        debug_index += 1
 
                 with autocast(enabled=self.env['opt']['fp16']):
                     gen_out = gen(*input)
@@ -135,7 +140,8 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
                     gen_out = [gen_out]
                 for i, out_key in enumerate(self.output):
                     results[out_key].append(gen_out[i])
-                recurrent_input = gen_out[self.output_hq_index]
+                hq_recurrent = gen_out[self.output_hq_index]
+                recurrent_input = gen_out[self.output_recurrent_index]
 
         final_results = {}
         # Include 'hq_batched' here - because why not... Don't really need a separate injector for this.

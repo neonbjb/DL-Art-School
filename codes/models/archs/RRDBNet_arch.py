@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torchvision
 from torch.utils.checkpoint import checkpoint_sequential
 
-from models.archs.arch_util import make_layer, default_init_weights, ConvGnSilu
+from models.archs.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
 
 
 class ResidualDenseBlock(nn.Module):
@@ -60,11 +60,16 @@ class RRDB(nn.Module):
         growth_channels (int): Channels for each growth.
     """
 
-    def __init__(self, mid_channels, growth_channels=32):
+    def __init__(self, mid_channels, growth_channels=32, reduce_to=None):
         super(RRDB, self).__init__()
         self.rdb1 = ResidualDenseBlock(mid_channels, growth_channels)
         self.rdb2 = ResidualDenseBlock(mid_channels, growth_channels)
         self.rdb3 = ResidualDenseBlock(mid_channels, growth_channels)
+        if reduce_to is not None:
+            self.reducer = ConvGnLelu(mid_channels, reduce_to, kernel_size=3, activation=False, norm=False, bias=True)
+            self.recover_ch = mid_channels - reduce_to
+        else:
+            self.reducer = None
 
     def forward(self, x):
         """Forward function.
@@ -78,6 +83,10 @@ class RRDB(nn.Module):
         out = self.rdb1(x)
         out = self.rdb2(out)
         out = self.rdb3(out)
+        if self.reducer is not None:
+            out = self.reducer(out)
+            b, f, h, w = out.shape
+            out = torch.cat([out, torch.zeros((b, self.recover_ch, h, w), device=out.device)], dim=1)
         # Emperically, we use 0.2 to scale the residual for better performance
         return out * 0.2 + x
 
@@ -92,12 +101,19 @@ class RRDBWithBypass(nn.Module):
         growth_channels (int): Channels for each growth.
     """
 
-    def __init__(self, mid_channels, growth_channels=32):
+    def __init__(self, mid_channels, growth_channels=32, reduce_to=None):
         super(RRDBWithBypass, self).__init__()
         self.rdb1 = ResidualDenseBlock(mid_channels, growth_channels)
         self.rdb2 = ResidualDenseBlock(mid_channels, growth_channels)
         self.rdb3 = ResidualDenseBlock(mid_channels, growth_channels)
-        self.bypass = nn.Sequential(ConvGnSilu(mid_channels*2, mid_channels, kernel_size=3, bias=True, activation=True, norm=True),
+        if reduce_to is not None:
+            self.reducer = ConvGnLelu(mid_channels, reduce_to, kernel_size=3, activation=False, norm=False, bias=True)
+            self.recover_ch = mid_channels - reduce_to
+            bypass_channels = mid_channels + reduce_to
+        else:
+            self.reducer = None
+            bypass_channels = mid_channels * 2
+        self.bypass = nn.Sequential(ConvGnSilu(bypass_channels, mid_channels, kernel_size=3, bias=True, activation=True, norm=True),
                                     ConvGnSilu(mid_channels, mid_channels//2, kernel_size=3, bias=False, activation=True, norm=False),
                                     ConvGnSilu(mid_channels//2, 1, kernel_size=3, bias=False, activation=False, norm=False),
                                     nn.Sigmoid())
@@ -114,8 +130,15 @@ class RRDBWithBypass(nn.Module):
         out = self.rdb1(x)
         out = self.rdb2(out)
         out = self.rdb3(out)
+
+        if self.reducer is not None:
+            out = self.reducer(out)
+            b, f, h, w = out.shape
+            out = torch.cat([out, torch.zeros((b, self.recover_ch, h, w), device=out.device)], dim=1)
+
         bypass = self.bypass(torch.cat([x, out], dim=1))
         self.bypass_map = bypass.detach().clone()
+
         # Empirically, we use 0.2 to scale the residual for better performance
         return out * 0.2 * bypass + x
 
@@ -143,30 +166,45 @@ class RRDBNet(nn.Module):
                  num_blocks=23,
                  growth_channels=32,
                  body_block=RRDB,
-                 blocks_per_checkpoint=4,
+                 blocks_per_checkpoint=1,
                  scale=4,
-                 additive_mode="not_additive"  # Options: "not", "additive", "additive_enforced"
+                 additive_mode="not",  # Options: "not", "additive", "additive_enforced"
+                 headless=False,
+                 feature_channels=64,  # Only applicable when headless=True. How many channels are used at the trunk level.
+                 output_mode="hq_only",  # Options: "hq_only", "hq+features", "features_only"
                  ):
         super(RRDBNet, self).__init__()
+        assert output_mode in ['hq_only', 'hq+features', 'features_only']
+        assert additive_mode in ['not', 'additive', 'additive_enforced']
         self.num_blocks = num_blocks
         self.blocks_per_checkpoint = blocks_per_checkpoint
         self.scale = scale
         self.in_channels = in_channels
+        self.output_mode = output_mode
         first_conv_stride = 1 if in_channels <= 4 else scale
         first_conv_ksize = 3 if first_conv_stride == 1 else 7
         first_conv_padding = 1 if first_conv_stride == 1 else 3
-        self.conv_first = nn.Conv2d(in_channels, mid_channels, first_conv_ksize, first_conv_stride, first_conv_padding)
+        if headless:
+            self.conv_first = None
+            self.reduce_ch = feature_channels
+            reduce_to = feature_channels
+            self.conv_ref_first = ConvGnLelu(3, feature_channels, 7, stride=2, norm=False, activation=False, bias=True)
+        else:
+            self.conv_first = nn.Conv2d(in_channels, mid_channels, first_conv_ksize, first_conv_stride, first_conv_padding)
+            self.reduce_ch = mid_channels
+            reduce_to = None
         self.body = make_layer(
             body_block,
             num_blocks,
             mid_channels=mid_channels,
-            growth_channels=growth_channels)
-        self.conv_body = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
+            growth_channels=growth_channels,
+            reduce_to=reduce_to)
+        self.conv_body = nn.Conv2d(self.reduce_ch, self.reduce_ch, 3, 1, 1)
         # upsample
-        self.conv_up1 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
-        self.conv_up2 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
-        self.conv_hr = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
-        self.conv_last = nn.Conv2d(mid_channels, out_channels, 3, 1, 1)
+        self.conv_up1 = nn.Conv2d(self.reduce_ch, self.reduce_ch, 3, 1, 1)
+        self.conv_up2 = nn.Conv2d(self.reduce_ch, self.reduce_ch, 3, 1, 1)
+        self.conv_hr = nn.Conv2d(self.reduce_ch, self.reduce_ch, 3, 1, 1)
+        self.conv_last = nn.Conv2d(self.reduce_ch, out_channels, 3, 1, 1)
 
         self.additive_mode = additive_mode
         if additive_mode == "additive_enforced":
@@ -178,7 +216,8 @@ class RRDBNet(nn.Module):
             self.conv_first, self.conv_body, self.conv_up1,
             self.conv_up2, self.conv_hr, self.conv_last
         ]:
-            default_init_weights(m, 0.1)
+            if m is not None:
+                default_init_weights(m, 0.1)
 
     def forward(self, x, ref=None):
         """Forward function.
@@ -189,25 +228,39 @@ class RRDBNet(nn.Module):
         Returns:
             Tensor: Forward results.
         """
-        if self.in_channels > 4:
-            x_lg = F.interpolate(x, scale_factor=self.scale, mode="bicubic")
-            if ref is None:
-                ref = torch.zeros_like(x_lg)
-            x_lg = torch.cat([x_lg, ref], dim=1)
+        if self.conv_first is None:
+            # Headless mode -> embedding inputs.
+            if ref is not None:
+                ref = self.conv_ref_first(ref)
+                feat = torch.cat([x, ref], dim=1)
+            else:
+                feat = x
         else:
-            x_lg = x
-        feat = self.conv_first(x_lg)
-        body_feat = self.conv_body(checkpoint_sequential(self.body, self.num_blocks // self.blocks_per_checkpoint, feat))
+            # "Normal" mode -> image input.
+            if self.in_channels > 4:
+                x_lg = F.interpolate(x, scale_factor=self.scale, mode="bicubic")
+                if ref is None:
+                    ref = torch.zeros_like(x_lg)
+                x_lg = torch.cat([x_lg, ref], dim=1)
+            else:
+                x_lg = x
+            feat = self.conv_first(x_lg)
+        feat = checkpoint_sequential(self.body, self.num_blocks // self.blocks_per_checkpoint, feat)
+        feat = feat[:, :self.reduce_ch]
+        body_feat = self.conv_body(feat)
         feat = feat + body_feat
+        if self.output_mode == "features_only":
+            return feat
+
         # upsample
-        feat = self.lrelu(
+        out = self.lrelu(
             self.conv_up1(F.interpolate(feat, scale_factor=2, mode='nearest')))
         if self.scale == 4:
-            feat = self.lrelu(
-                self.conv_up2(F.interpolate(feat, scale_factor=2, mode='nearest')))
+            out = self.lrelu(
+                self.conv_up2(F.interpolate(out, scale_factor=2, mode='nearest')))
         else:
-            feat = self.lrelu(self.conv_up2(feat))
-        out = self.conv_last(self.lrelu(self.conv_hr(feat)))
+            out = self.lrelu(self.conv_up2(out))
+        out = self.conv_last(self.lrelu(self.conv_hr(out)))
         if "additive" in self.additive_mode:
             x_interp = F.interpolate(x, scale_factor=self.scale, mode='bilinear')
         if self.additive_mode == 'additive':
@@ -216,9 +269,14 @@ class RRDBNet(nn.Module):
             out_pooled = self.add_enforced_pool(out)
             out = out - F.interpolate(out_pooled, scale_factor=self.scale, mode='nearest')
             out = out + x_interp
+
+        if self.output_mode == "hq+features":
+            return out, feat
         return out
 
     def visual_dbg(self, step, path):
         for i, bm in enumerate(self.body):
             if hasattr(bm, 'bypass_map'):
                 torchvision.utils.save_image(bm.bypass_map.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
+
+

@@ -39,14 +39,17 @@ def define_G(opt, opt_net, scale=None):
                                        nf=opt_net['nf'], nb=opt_net['nb'], upscale=opt_net['scale'])
     elif which_model == 'RRDBNet':
         additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not_additive'
+        output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
         netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode)
+                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
+                                    output_mode=output_mode)
     elif which_model == 'RRDBNetBypass':
         additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
+        output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
         netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
                                     mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], body_block=RRDBNet_arch.RRDBWithBypass,
                                     blocks_per_checkpoint=opt_net['blocks_per_checkpoint'], scale=opt_net['scale'],
-                                    additive_mode=additive_mode)
+                                    additive_mode=additive_mode, output_mode=output_mode)
     elif which_model == 'rcan':
         #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
         opt_net['rgb_range'] = 255
@@ -110,8 +113,6 @@ def define_G(opt, opt_net, scale=None):
         netG = SwitchedGen_arch.BackboneResnet()
     elif which_model == "tecogen":
         netG = TecoGen(opt_net['nf'], opt_net['scale'])
-    elif which_model == "basic_resampling_flow_predictor":
-        netG = BasicResamplingFlowNet(opt_net['nf'], resample_scale=opt_net['resample_scale'])
     elif which_model == "rrdb_with_latent":
         netG = RRDBNetWithLatent(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
                                   mid_channels=opt_net['nf'], num_blocks=opt_net['nb'],
@@ -153,6 +154,11 @@ def define_G(opt, opt_net, scale=None):
         netG = RRDBLatentWrapper(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                   nf=opt_net['nf'], nb=opt_net['nb'], with_bypass=opt_net['with_bypass'],
                                  blocks=opt_net['blocks_for_latent'], scale=opt_net['scale'], pretrain_rrdb_path=opt_net['pretrain_path'])
+    elif which_model == 'rrdb_centipede':
+        output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
+        netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], scale=opt_net['scale'],
+                                    headless=True, output_mode=output_mode)
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
