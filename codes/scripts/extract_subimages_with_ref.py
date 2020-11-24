@@ -13,20 +13,20 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 2
+    opt['n_thread'] = 8
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vr\\images_sized'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vr\\paired_images'
+    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset3'
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\256_with_ref_3'
     opt['crop_sz'] = [512, 1024]  # the size of each sub-image
     opt['step'] = [512, 1024]  # step of the sliding crop window
     opt['thres_sz'] = 128  # size threshold
     opt['resize_final_img'] = [.5, .25]
     opt['only_resize'] = False
-    opt['vertical_split'] = True
+    opt['vertical_split'] = False
 
     save_folder = opt['save_folder']
     if not osp.exists(save_folder):
@@ -178,10 +178,14 @@ class TiledDataset(data.Dataset):
     def get(self, index, split_mode, left_img):
         path = self.images[index]
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+
+        if img is None or len(img.shape) == 2:
+            return None
+
         h, w, c = img.shape
 
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < 1024:
+        if min(h,w) < 512:
             return None
         # Greyscale not supported.
         if len(img.shape) == 2:

@@ -50,9 +50,10 @@ if __name__ == '__main__':
         'force_multiple': 32,
         'scale': 2,
         'eval': False,
-        'fixed_corruptions': ['jpeg-broad'],
+        'fixed_corruptions': ['jpeg-broad', 'gaussian_blur'],
         'random_corruptions': ['noise-5', 'none'],
-        'num_corrupts_per_image': 1
+        'num_corrupts_per_image': 1,
+        'corrupt_before_downsize': True,
     }
 
     ds = SingleImageDataset(opt)
@@ -61,7 +62,7 @@ if __name__ == '__main__':
     for i in range(0, len(ds)):
         o = ds[random.randint(0, len(ds))]
         #for k, v in o.items():
-        k = 'GT'
+        k = 'LQ'
         v = o[k]
         #if 'LQ' in k and 'path' not in k and 'center' not in k:
         #if 'full' in k:

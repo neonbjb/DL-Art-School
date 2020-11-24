@@ -17,6 +17,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
         self.for_eval = opt['eval'] if 'eval' in opt.keys() else False
         self.scale = opt['scale'] if not self.for_eval else 1
         self.paths = opt['paths']
+        self.corrupt_before_downsize = opt['corrupt_before_downsize'] if 'corrupt_before_downsize' in opt.keys() else False
         assert (self.target_hq_size // self.scale) % self.multiple == 0  # If we dont throw here, we get some really obscure errors.
         if not isinstance(self.paths, list):
             self.paths = [self.paths]
@@ -98,6 +99,8 @@ class BaseUnsupervisedImageDataset(data.Dataset):
     def synthesize_lq(self, hs, hrefs, hmasks, hcenters):
         h, w, _ = hs[0].shape
         ls, lrs, lms, lcs = [], [], [], []
+        if self.corrupt_before_downsize and not self.for_eval:
+            hs = self.corruptor.corrupt_images(hs)
         for hq, hq_ref, hq_mask, hq_center in zip(hs, hrefs, hmasks, hcenters):
             if self.for_eval:
                 ls.append(hq)
@@ -110,7 +113,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
                 lms.append(cv2.resize(hq_mask, (h // self.scale, w // self.scale), interpolation=cv2.INTER_AREA))
                 lcs.append(self.resize_point(hq_center, (h, w), ls[0].shape[:2]))
         # Corrupt the LQ image (only in eval mode)
-        if not self.for_eval:
+        if not self.corrupt_before_downsize and not self.for_eval:
             ls = self.corruptor.corrupt_images(ls)
         return ls, lrs, lms, lcs
 
