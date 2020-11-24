@@ -159,6 +159,10 @@ def define_G(opt, opt_net, scale=None):
         netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
                                     mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], scale=opt_net['scale'],
                                     headless=True, output_mode=output_mode)
+    elif which_model == 'rrdb_srflow':
+        from models.archs.srflow_orig.RRDBNet_arch import RRDBNet
+        netG = RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
