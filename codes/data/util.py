@@ -2,9 +2,12 @@ import os
 import math
 import pickle
 import random
+
+import numpy
 import numpy as np
 import glob
 import torch
+import torchvision
 import cv2
 
 ####################
@@ -13,6 +16,24 @@ import cv2
 
 ###################### get image path list ######################
 IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm', '.PPM', '.bmp', '.BMP']
+
+
+def torch2cv(tensor):
+    if len(tensor.shape) == 4:
+        squeezed = True
+        tensor = tensor.squeeze(0)
+        assert len(tensor.shape) == 3
+    pil = torchvision.transforms.ToPILImage()(tensor)
+    np = numpy.array(pil)
+    return cv2.cvtColor(np, cv2.COLOR_RGB2BGR) / 255.0
+
+
+def cv2torch(cv, batchify=True):
+    cv = cv2.cvtColor(cv, cv2.COLOR_BGR2RGB)
+    tens = torch.from_numpy(np.ascontiguousarray(np.transpose(cv, (2, 0, 1)))).float()
+    if batchify:
+        tens = tens.unsqueeze(0)
+    return tens
 
 
 def is_image_file(filename):

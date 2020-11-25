@@ -10,10 +10,10 @@ from io import BytesIO
 class ImageCorruptor:
     def __init__(self, opt):
         self.fixed_corruptions = opt['fixed_corruptions']
-        self.num_corrupts = opt['num_corrupts_per_image'] if 'num_corrupts_per_image' in opt.keys() else 2
+        self.num_corrupts = opt['num_corrupts_per_image'] if 'num_corrupts_per_image' in opt.keys() else 0
         if self.num_corrupts == 0:
             return
-        self.random_corruptions = opt['random_corruptions']
+        self.random_corruptions = opt['random_corruptions'] if 'random_corruptions' in opt.keys() else []
         self.blur_scale = opt['corruption_blur_scale'] if 'corruption_blur_scale' in opt.keys() else 1
 
     def corrupt_images(self, imgs):
@@ -50,6 +50,8 @@ class ImageCorruptor:
             # Gaussian Blur
             if aug == 'gaussian_blur_3':
                 kernel = 3
+            elif aug == 'gaussian_blur_5':
+                kernel = 5
             else:
                 kernel = 2 * self.blur_scale * (rand_int % 3) + 1
             img = cv2.GaussianBlur(img, (kernel, kernel), 3)
@@ -101,6 +103,9 @@ class ImageCorruptor:
                 if aug == 'jpeg':
                     lo=10
                     range=20
+                elif aug == 'jpeg-low':
+                    lo=15
+                    range=10
                 elif aug == 'jpeg-medium':
                     lo=23
                     range=25
