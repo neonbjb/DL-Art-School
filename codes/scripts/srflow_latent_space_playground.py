@@ -152,8 +152,8 @@ if __name__ == "__main__":
         resample_imgs = []
         img_files = glob(imgs_to_resample_pattern)
         for i, img_file in enumerate(img_files):
-            #if i > 5:
-            #    break
+            if i > 5:
+                break
             t = image_2_tensor(img_file, desired_size).to(model.env['device'])
             if resample_factor != 1:
                 t = F.interpolate(t, scale_factor=resample_factor, mode="bicubic")
@@ -175,7 +175,7 @@ if __name__ == "__main__":
             dt_transfers = [image_2_tensor(i, desired_size) for i in dt_imgs]
             # Downsample the images because they are often just too big to feed through the network (probably needs to be parameterized)
             for j in range(len(dt_transfers)):
-                if max(dt_transfers[j].shape[2], dt_transfers[j].shape[3]) > 2000:
+                if min(dt_transfers[j].shape[2], dt_transfers[j].shape[3]) > 1600:
                     dt_transfers[j] = F.interpolate(dt_transfers[j], scale_factor=1/2, mode='area')
             corruptor = ImageCorruptor({'fixed_corruptions':['jpeg-low', 'gaussian_blur_5']})
 
