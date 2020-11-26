@@ -84,6 +84,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
             h, w = self.target_hq_size, self.target_hq_size
         else:
             hqs_adjusted, hq_refs_adjusted, hq_masks_adjusted, hq_centers_adjusted = imgs_hq, refs_hq, masks_hq, centers_hq
+            hq_masks_adjusted = [m.squeeze(-1) for m in hq_masks_adjusted]  # This is done implicitly above..
         hq_multiple = self.multiple * self.scale   # Multiple must apply to LQ image.
         if h % hq_multiple != 0 or w % hq_multiple != 0:
             hqs_conformed, hq_refs_conformed, hq_masks_conformed, hq_centers_conformed = [], [], [], []

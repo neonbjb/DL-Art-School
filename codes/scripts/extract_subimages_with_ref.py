@@ -150,6 +150,9 @@ class TiledDataset(data.Dataset):
         thres_sz = self.opt['thres_sz']
         h, w, c = img.shape
 
+        if crop_sz > h:
+            return []
+
         h_space = np.arange(0, h - crop_sz + 1, step)
         if h - (h_space[-1] + crop_sz) > thres_sz:
             h_space = np.append(h_space, h - crop_sz)
