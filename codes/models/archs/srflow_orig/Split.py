@@ -37,8 +37,7 @@ class Split2d(nn.Module):
             
             eps = (z2 - mean) / self.exp_eps(logs)
 
-            # This has been moved into SRFlowNet_arch.py alongside the other Z NLL losses.
-            # logdet = logdet + self.get_logdet(logs, mean, z2)
+            logdet = logdet + self.get_logdet(logs, mean, z2)
 
             # print(logs.shape, mean.shape, z2.shape)
             # self.eps = eps
@@ -57,8 +56,7 @@ class Split2d(nn.Module):
             z2 = mean + self.exp_eps(logs) * eps
             z = thops.cat_feature(z1, z2)
 
-            # This has been moved into SRFlowNet_arch.py alongside the other Z NLL losses.
-            #logdet = logdet - self.get_logdet(logs, mean, z2)
+            logdet = logdet - self.get_logdet(logs, mean, z2)
 
             return z, logdet
             # return z, logdet, eps
