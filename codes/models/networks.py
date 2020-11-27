@@ -39,10 +39,10 @@ def define_G(opt, opt_net, scale=None):
                                        nf=opt_net['nf'], nb=opt_net['nb'], upscale=opt_net['scale'])
     elif 'RRDBNet' in which_model:
         if which_model == 'RRDBNetBypass':
+            block = RRDBNet_arch.RRDBWithBypass
+        elif which_model == 'RRDBNetLambda':
             from models.archs.lambda_rrdb import LambdaRRDB
             block = LambdaRRDB
-        elif which_model == 'RRDBNetLambda':
-            block = RRDBNet_arch.RRDBWithBypass
         else:
             block = RRDBNet_arch.RRDB
         additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
@@ -226,6 +226,8 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
     elif which_model == "stylegan2_unet":
         disc = stylegan2_unet.StyleGan2UnetDiscriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'])
         netD = stylegan2.StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
+    elif which_model == "rrdb_disc":
+        netD = RRDBNet_arch.RRDBDiscriminator(opt_net['in_nc'], opt_net['nf'], opt_net['nb'], blocks_per_checkpoint=3)
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD

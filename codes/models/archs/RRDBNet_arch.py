@@ -7,6 +7,7 @@ import torchvision
 from torch.utils.checkpoint import checkpoint_sequential
 
 from models.archs.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
+from utils.util import checkpoint
 
 
 class ResidualDenseBlock(nn.Module):
@@ -280,3 +281,79 @@ class RRDBNet(nn.Module):
                 torchvision.utils.save_image(bm.bypass_map.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
 
 
+
+class DiscRDB(nn.Module):
+    def __init__(self, mid_channels=64, growth_channels=32):
+        super(DiscRDB, self).__init__()
+        for i in range(5):
+            out_channels = mid_channels if i == 4 else growth_channels
+            actnorm = i != 5
+            self.add_module(
+                f'conv{i+1}',
+                ConvGnLelu(mid_channels + i * growth_channels, out_channels, kernel_size=3, norm=actnorm, activation=actnorm, bias=True)
+            )
+            self.lrelu = nn.LeakyReLU(negative_slope=.2)
+        for i in range(5):
+            default_init_weights(getattr(self, f'conv{i+1}'), 1)
+
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x2 = self.conv2(torch.cat((x, x1), 1))
+        x3 = self.conv3(torch.cat((x, x1, x2), 1))
+        x4 = self.conv4(torch.cat((x, x1, x2, x3), 1))
+        x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
+        return self.lrelu(x5 + x)
+
+
+class DiscRRDB(nn.Module):
+    def __init__(self, mid_channels, growth_channels=32):
+        super(DiscRRDB, self).__init__()
+        self.rdb1 = DiscRDB(mid_channels, growth_channels)
+        self.rdb2 = DiscRDB(mid_channels, growth_channels)
+        self.rdb3 = DiscRDB(mid_channels, growth_channels)
+        self.gn = nn.GroupNorm(num_groups=8, num_channels=mid_channels)
+
+    def forward(self, x):
+        out = self.rdb1(x)
+        out = self.rdb2(out)
+        out = self.rdb3(out)
+        return self.gn(out + x)
+
+
+class RRDBDiscriminator(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 mid_channels=64,
+                 num_blocks=23,
+                 growth_channels=32,
+                 blocks_per_checkpoint=1
+                 ):
+        super(RRDBDiscriminator, self).__init__()
+        self.num_blocks = num_blocks
+        self.blocks_per_checkpoint = blocks_per_checkpoint
+        self.in_channels = in_channels
+        self.conv_first = ConvGnLelu(in_channels, mid_channels, 3, stride=4, activation=False, norm=False, bias=True)
+        self.body = make_layer(
+            DiscRRDB,
+            num_blocks,
+            mid_channels=mid_channels,
+            growth_channels=growth_channels)
+        self.tail = nn.Sequential(
+            ConvGnLelu(mid_channels, mid_channels // 2, kernel_size=1, activation=True, norm=False, bias=True),
+            ConvGnLelu(mid_channels // 2, mid_channels // 4, kernel_size=1, activation=True, norm=False, bias=True),
+            ConvGnLelu(mid_channels // 4, 1, kernel_size=1, activation=False, norm=False, bias=True)
+        )
+        self.pred_ = None
+
+    def forward(self, x):
+        feat = self.conv_first(x)
+        feat = checkpoint_sequential(self.body, self.num_blocks // self.blocks_per_checkpoint, feat)
+        pred = checkpoint(self.tail, feat)
+        self.pred_ = pred.detach().clone()
+        return pred
+
+    def visual_dbg(self, step, path):
+        if self.pred_ is not None:
+            self.pred_ = F.sigmoid(self.pred_)
+            torchvision.utils.save_image(self.pred_.cpu().float(), os.path.join(path, "%i_predictions.png" % (step,)))
