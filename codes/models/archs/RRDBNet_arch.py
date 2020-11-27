@@ -19,7 +19,7 @@ class ResidualDenseBlock(nn.Module):
         growth_channels (int): Channels for each growth.
     """
 
-    def __init__(self, mid_channels=64, growth_channels=32):
+    def __init__(self, mid_channels=64, growth_channels=32, init_weight=.1):
         super(ResidualDenseBlock, self).__init__()
         for i in range(5):
             out_channels = mid_channels if i == 4 else growth_channels
@@ -29,7 +29,7 @@ class ResidualDenseBlock(nn.Module):
                           1, 1))
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         for i in range(5):
-            default_init_weights(getattr(self, f'conv{i+1}'), 0.1)
+            default_init_weights(getattr(self, f'conv{i+1}'), init_weight)
 
 
     def forward(self, x):

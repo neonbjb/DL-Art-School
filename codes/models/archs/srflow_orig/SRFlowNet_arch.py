@@ -22,7 +22,7 @@ class SRFlowNet(nn.Module):
         self.RRDB = RRDBNet(in_nc, out_nc, nf, nb, gc, scale, opt)
         if 'pretrain_rrdb' in opt['networks']['generator'].keys():
             rrdb_state_dict = torch.load(opt['networks']['generator']['pretrain_rrdb'])
-            self.RRDB.load_state_dict(rrdb_state_dict, strict=True)
+            self.RRDB.load_state_dict(rrdb_state_dict, strict=False)
 
         hidden_channels = opt_get(opt, ['networks', 'generator','flow', 'hidden_channels'])
         hidden_channels = hidden_channels or 64
@@ -140,7 +140,7 @@ class SRFlowNet(nn.Module):
 
     def rrdbPreprocessing(self, lr):
         rrdbResults = self.RRDB(lr, get_steps=True)
-        block_idxs = opt_get(self.opt, ['networks', 'generator','flow', 'stackRRDB', 'blocks']) or []
+        block_idxs = opt_get(self.opt, ['networks', 'generator', 'flow', 'stackRRDB', 'blocks']) or []
         if len(block_idxs) > 0:
             concat = torch.cat([rrdbResults["block_{}".format(idx)] for idx in block_idxs], dim=1)
 

@@ -20,45 +20,6 @@ import torch
 import models.networks as networks
 
 
-# Concepts: Swap transformations around. Normalize attention. Disable individual switches, both randomly and one at
-# a time, starting at the last switch. Pick random regions in an image and print out the full attention vector for
-# each switch. Yield an output directory name for each alteration and None when last alteration is completed.
-def alter_srg(srg: srg.ConfigurableSwitchedResidualGenerator2):
-    # First alteration, strip off switches one at a time.
-    yield "naked"
-
-    '''
-    for i in range(1, len(srg.switches)):
-        srg.switches = srg.switches[:-i]
-        yield "stripped-%i" % (i,)
-    '''
-
-    for sw in srg.switches:
-        sw.set_temperature(.001)
-    yield "specific"
-
-    for sw in srg.switches:
-        sw.set_temperature(1000)
-    yield "normalized"
-
-    for sw in srg.switches:
-        sw.set_temperature(1)
-        sw.switch.attention_norm = None
-    yield "no_anorm"
-    return None
-
-def analyze_srg(srg: srg.ConfigurableSwitchedResidualGenerator2, path, alteration_suffix):
-    mean_hists = [compute_attention_specificity(att, 2) for att in srg.attentions]
-    means = [i[0] for i in mean_hists]
-    hists = [torch.histc(i[1].clone().detach().cpu().flatten().float(), bins=srg.transformation_counts) for i in mean_hists]
-    hists = [h / torch.sum(h) for h in hists]
-    for i in range(len(means)):
-        print("%s - switch_%i_specificity" % (alteration_suffix, i), means[i])
-        print("%s - switch_%i_histogram" % (alteration_suffix, i), hists[i])
-
-    [save_attention_to_image_rgb(path, srg.attentions[i], srg.transformation_counts, alteration_suffix, i) for i in range(len(srg.attentions))]
-
-
 def forward_pass(model, output_dir, alteration_suffix=''):
     model.feed_data(data, need_GT=need_GT)
     model.test()
@@ -135,27 +96,9 @@ if __name__ == "__main__":
         for data in tq:
             need_GT = False if test_loader.dataset.opt['dataroot_GT'] is None else True
 
-            if srg_analyze:
-                orig_model = model.netG
-                model_copy = networks.define_G(opt).to(model.device)
-                model_copy.load_state_dict(orig_model.state_dict())
-                model.netG = model_copy
-                for alteration_suffix in alter_srg(model_copy):
-                    alt_path = osp.join(dataset_dir, alteration_suffix)
-                    img_path = data['GT_path'][0] if need_GT else data['LQ_path'][0]
-                    img_name = osp.splitext(osp.basename(img_path))[0] + opt['name']
-                    alteration_suffix += img_name
-                    os.makedirs(alt_path, exist_ok=True)
-                    forward_pass(model, dataset_dir, alteration_suffix)
-                    analyze_srg(model_copy, alt_path, alteration_suffix)
-                # Reset model and do next alteration.
-                model_copy = networks.define_G(opt).to(model.device)
-                model_copy.load_state_dict(orig_model.state_dict())
-                model.netG = model_copy
-            else:
-                fea_loss, psnr_loss = forward_pass(model, dataset_dir, opt['name'])
-                fea_loss += fea_loss
-                psnr_loss += psnr_loss
+            fea_loss, psnr_loss = forward_pass(model, dataset_dir, opt['name'])
+            fea_loss += fea_loss
+            psnr_loss += psnr_loss
 
         # log
         logger.info('# Validation # Fea: {:.4e}, PSNR: {:.4e}'.format(fea_loss / len(test_loader), psnr_loss / len(test_loader)))

@@ -37,19 +37,19 @@ def define_G(opt, opt_net, scale=None):
     if which_model == 'MSRResNet':
         netG = SRResNet_arch.MSRResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                        nf=opt_net['nf'], nb=opt_net['nb'], upscale=opt_net['scale'])
-    elif which_model == 'RRDBNet':
-        additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not_additive'
-        output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
-        netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
-                                    output_mode=output_mode)
-    elif which_model == 'RRDBNetBypass':
+    elif 'RRDBNet' in which_model:
+        if which_model == 'RRDBNetBypass':
+            from models.archs.lambda_rrdb import LambdaRRDB
+            block = LambdaRRDB
+        elif which_model == 'RRDBNetLambda':
+            block = RRDBNet_arch.RRDBWithBypass
+        else:
+            block = RRDBNet_arch.RRDB
         additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
         output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
         netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], body_block=RRDBNet_arch.RRDBWithBypass,
-                                    blocks_per_checkpoint=opt_net['blocks_per_checkpoint'], scale=opt_net['scale'],
-                                    additive_mode=additive_mode, output_mode=output_mode)
+                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
+                                    output_mode=output_mode, body_block=block)
     elif which_model == 'rcan':
         #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
         opt_net['rgb_range'] = 255
