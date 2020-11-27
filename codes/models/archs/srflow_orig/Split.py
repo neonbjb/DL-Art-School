@@ -18,7 +18,7 @@ class Split2d(nn.Module):
                                 out_channels=self.num_channels_consume * 2)
         self.logs_eps = logs_eps
         self.position = position
-        self.opt = opt
+        self.gaussian_nll_weight = opt_get(opt, ['networks', 'generator', 'flow', 'gaussian_loss_weight'], 1)
 
     def split2d_prior(self, z, ft):
         if ft is not None:
@@ -37,7 +37,8 @@ class Split2d(nn.Module):
             
             eps = (z2 - mean) / self.exp_eps(logs)
 
-            logdet = logdet + self.get_logdet(logs, mean, z2)
+            # This has been moved into SRFlowNet_arch.py alongside the other Z NLL losses.
+            # logdet = logdet + self.get_logdet(logs, mean, z2)
 
             # print(logs.shape, mean.shape, z2.shape)
             # self.eps = eps
@@ -54,17 +55,17 @@ class Split2d(nn.Module):
 
             eps = eps.to(mean.device)
             z2 = mean + self.exp_eps(logs) * eps
-
             z = thops.cat_feature(z1, z2)
-            logdet = logdet - self.get_logdet(logs, mean, z2)
+
+            # This has been moved into SRFlowNet_arch.py alongside the other Z NLL losses.
+            #logdet = logdet - self.get_logdet(logs, mean, z2)
 
             return z, logdet
             # return z, logdet, eps
 
     def get_logdet(self, logs, mean, z2):
         logdet_diff = GaussianDiag.logp(mean, logs, z2)
-        # print("Split2D: logdet diff", logdet_diff.item())
-        return logdet_diff
+        return logdet_diff * self.gaussian_nll_weight
 
     def split_ratio(self, input):
         z1, z2 = input[:, :self.num_channels_pass, ...], input[:, self.num_channels_pass:, ...]

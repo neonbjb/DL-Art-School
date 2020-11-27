@@ -242,9 +242,7 @@ class FlowUpsamplerNet(nn.Module):
     def forward_split2d(self, epses, fl_fea, layer, logdet, reverse, rrdbResults, y_onehot=None):
         ft = None if layer.position is None else rrdbResults[layer.position]
         fl_fea, logdet, eps = layer(fl_fea, logdet, reverse=reverse, eps=epses, ft=ft, y_onehot=y_onehot)
-
-        if isinstance(epses, list):
-            epses.append(eps)
+        epses.append(eps)
         return fl_fea, logdet
 
     def decode(self, rrdbResults, z, eps_std=None, epses=None, logdet=0.0, y_onehot=None):
