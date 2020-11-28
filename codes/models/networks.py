@@ -47,9 +47,18 @@ def define_G(opt, opt_net, scale=None):
             block = RRDBNet_arch.RRDB
         additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
         output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
+        gc = opt_net['gc'] if 'gc' in opt_net.keys() else 32
+        initial_stride = opt_net['initial_stride'] if 'initial_stride' in opt_net.keys() else 1
         netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
                                     mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
-                                    output_mode=output_mode, body_block=block, scale=opt_net['scale'])
+                                    output_mode=output_mode, body_block=block, scale=opt_net['scale'], growth_channels=gc,
+                                    initial_stride=initial_stride)
+    elif which_model == "multires_rrdb":
+        from models.archs.multi_res_rrdb import MultiResRRDBNet
+        netG = MultiResRRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                               mid_channels=opt_net['nf'], l1_blocks=opt_net['l1'],
+                               l2_blocks=opt_net['l2'], l3_blocks=opt_net['l3'],
+                               growth_channels=opt_net['gc'], scale=opt_net['scale'])
     elif which_model == 'rcan':
         #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
         opt_net['rgb_range'] = 255

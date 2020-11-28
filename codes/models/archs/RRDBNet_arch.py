@@ -72,7 +72,7 @@ class RRDB(nn.Module):
         else:
             self.reducer = None
 
-    def forward(self, x):
+    def forward(self, x, return_residual=False):
         """Forward function.
 
         Args:
@@ -88,8 +88,12 @@ class RRDB(nn.Module):
             out = self.reducer(out)
             b, f, h, w = out.shape
             out = torch.cat([out, torch.zeros((b, self.recover_ch, h, w), device=out.device)], dim=1)
-        # Emperically, we use 0.2 to scale the residual for better performance
-        return out * 0.2 + x
+
+        if return_residual:
+            return 0.2 * out
+        else:
+            # Empirically, we use 0.2 to scale the residual for better performance
+            return out * 0.2 + x
 
 
 class RRDBWithBypass(nn.Module):
@@ -173,6 +177,7 @@ class RRDBNet(nn.Module):
                  headless=False,
                  feature_channels=64,  # Only applicable when headless=True. How many channels are used at the trunk level.
                  output_mode="hq_only",  # Options: "hq_only", "hq+features", "features_only"
+                 initial_stride=1,
                  ):
         super(RRDBNet, self).__init__()
         assert output_mode in ['hq_only', 'hq+features', 'features_only']
@@ -182,7 +187,7 @@ class RRDBNet(nn.Module):
         self.scale = scale
         self.in_channels = in_channels
         self.output_mode = output_mode
-        first_conv_stride = 1 if in_channels <= 4 else scale
+        first_conv_stride = initial_stride if in_channels <= 4 else scale
         first_conv_ksize = 3 if first_conv_stride == 1 else 7
         first_conv_padding = 1 if first_conv_stride == 1 else 3
         if headless:
