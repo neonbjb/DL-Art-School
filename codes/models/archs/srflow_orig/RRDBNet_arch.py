@@ -135,7 +135,8 @@ class RRDBNet(nn.Module):
         self.conv_body = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         #### upsampling
         self.conv_up1 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
-        self.conv_up2 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
+        if self.scale >= 2:
+            self.conv_up2 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         if self.scale >= 8:
             self.conv_up3 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         if self.scale >= 16:
@@ -167,13 +168,14 @@ class RRDBNet(nn.Module):
         fea_up2 = self.conv_up1(F.interpolate(last_lr_fea, scale_factor=2, mode='nearest'))
         fea = self.lrelu(fea_up2)
 
-        fea_up4 = self.conv_up2(F.interpolate(fea, scale_factor=2, mode='nearest'))
-        fea = self.lrelu(fea_up4)
-
+        fea_up4 = None
         fea_up8 = None
         fea_up16 = None
         fea_up32 = None
 
+        if self.scale >= 4:
+            fea_up4 = self.conv_up2(F.interpolate(fea, scale_factor=2, mode='nearest'))
+            fea = self.lrelu(fea_up4)
         if self.scale >= 8:
             fea_up8 = self.conv_up3(F.interpolate(fea, scale_factor=2, mode='nearest'))
             fea = self.lrelu(fea_up8)

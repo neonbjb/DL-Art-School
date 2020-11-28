@@ -29,8 +29,9 @@ class SRFlowNet(nn.Module):
         self.RRDB_training = opt_get(self.opt, ['networks', 'generator','train_RRDB'], default=False)
         self.flow_scale = opt_get(self.opt, ['networks', 'generator', 'flow_scale'], default=opt['scale'])  # <!-- hack to enable RRDB to do 2x scaling while retaining the flow architecture of 4x.
 
+        self.patch_sz = opt_get(self.opt, ['networks', 'generator', 'flow', 'patch_size'], 160)
         self.flowUpsamplerNet = \
-            FlowUpsamplerNet((160, 160, 3), hidden_channels, K,
+            FlowUpsamplerNet((self.patch_sz, self.patch_sz, 3), hidden_channels, K,
                              flow_coupling=opt['networks']['generator']['flow']['coupling'], opt=opt)
         self.force_act_norm_init_until = opt_get(self.opt, ['networks', 'generator', 'flow', 'act_norm_start_step'])
         self.act_norm_always_init = False
