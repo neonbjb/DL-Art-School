@@ -119,7 +119,7 @@ class RRDBWithBypass(nn.Module):
 
 
 class RRDBNet(nn.Module):
-    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=4, opt=None):
+    def __init__(self, in_nc, out_nc, nf, nb, gc=32, scale=4, initial_conv_stride=1, opt=None):
         self.opt = opt
         super(RRDBNet, self).__init__()
 
@@ -130,7 +130,10 @@ class RRDBNet(nn.Module):
             RRDB_block_f = functools.partial(RRDB, mid_channels=nf, growth_channels=gc)
         self.scale = scale
 
-        self.conv_first = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
+        if initial_conv_stride == 1:
+            self.conv_first = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
+        else:
+            self.conv_first = nn.Conv2d(in_nc, nf, 7, stride=initial_conv_stride, padding=3, bias=True)
         self.body = mutil.make_layer(RRDB_block_f, nb)
         self.conv_body = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         #### upsampling
@@ -204,26 +207,6 @@ class RRDBNet(nn.Module):
             fea_upn1_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up-1']) or False
             if fea_upn1_en:
                 results['fea_up-1'] = F.interpolate(last_lr_fea, scale_factor=1/4, mode='bilinear', align_corners=False, recompute_scale_factor=True)
-        elif self.scale == 2:
-            # "Pretend" this is is 4x by shuffling around the inputs a bit.
-            half = F.interpolate(last_lr_fea, scale_factor=1/2, mode='bilinear', align_corners=False, recompute_scale_factor=True)
-            quarter = F.interpolate(last_lr_fea, scale_factor=1/4, mode='bilinear', align_corners=False, recompute_scale_factor=True)
-            eighth = F.interpolate(last_lr_fea, scale_factor=1/8, mode='bilinear', align_corners=False, recompute_scale_factor=True)
-            results = {'last_lr_fea': half,
-                       'fea_up1': half,
-                       'fea_up2': last_lr_fea,
-                       'fea_up4': fea_up2,
-                       'fea_up8': fea_up4,
-                       'fea_up16': fea_up8,
-                       'fea_up32': fea_up16,
-                       'out': out}
-
-            fea_up0_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up0']) or False
-            if fea_up0_en:
-                results['fea_up0'] = quarter
-            fea_upn1_en = opt_get(self.opt, ['networks', 'generator','flow', 'fea_up-1']) or False
-            if fea_upn1_en:
-                results['fea_up-1'] = eighth
         else:
             raise NotImplementedError
 

@@ -4,10 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-from torch.utils.checkpoint import checkpoint_sequential
 
 from models.archs.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
-from utils.util import checkpoint
+from utils.util import checkpoint, sequential_checkpoint
 
 
 class ResidualDenseBlock(nn.Module):
@@ -251,7 +250,7 @@ class RRDBNet(nn.Module):
             else:
                 x_lg = x
             feat = self.conv_first(x_lg)
-        feat = checkpoint_sequential(self.body, self.num_blocks // self.blocks_per_checkpoint, feat)
+        feat = sequential_checkpoint(self.body, self.num_blocks // self.blocks_per_checkpoint, feat)
         feat = feat[:, :self.reduce_ch]
         body_feat = self.conv_body(feat)
         feat = feat + body_feat
@@ -353,7 +352,7 @@ class RRDBDiscriminator(nn.Module):
 
     def forward(self, x):
         feat = self.conv_first(x)
-        feat = checkpoint_sequential(self.body, self.num_blocks // self.blocks_per_checkpoint, feat)
+        feat = sequential_checkpoint(self.body, self.num_blocks // self.blocks_per_checkpoint, feat)
         pred = checkpoint(self.tail, feat)
         self.pred_ = pred.detach().clone()
         return pred

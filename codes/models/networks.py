@@ -171,7 +171,8 @@ def define_G(opt, opt_net, scale=None):
     elif which_model == 'rrdb_srflow':
         from models.archs.srflow_orig.RRDBNet_arch import RRDBNet
         netG = RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                    nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'])
+                       nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
+                       initial_conv_stride=opt_net['initial_stride'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG

@@ -21,7 +21,7 @@ import models.networks as networks
 
 
 def forward_pass(model, output_dir, alteration_suffix=''):
-    model.feed_data(data, need_GT=need_GT)
+    model.feed_data(data, 0, need_GT=need_GT)
     model.test()
 
     visuals = model.get_current_visuals(need_GT)['rlt'].cpu()
@@ -53,7 +53,7 @@ def forward_pass(model, output_dir, alteration_suffix=''):
 if __name__ == "__main__":
     #### options
     torch.backends.cudnn.benchmark = True
-    srg_analyze = False
+    want_metrics = False
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_4x_psnr.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
@@ -95,6 +95,7 @@ if __name__ == "__main__":
         tq = tqdm(test_loader)
         for data in tq:
             need_GT = False if test_loader.dataset.opt['dataroot_GT'] is None else True
+            need_GT = need_GT and want_metrics
 
             fea_loss, psnr_loss = forward_pass(model, dataset_dir, opt['name'])
             fea_loss += fea_loss
