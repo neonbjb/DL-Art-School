@@ -83,7 +83,7 @@ class Discriminator_VGG_128(nn.Module):
 
 class Discriminator_VGG_128_GN(nn.Module):
     # input_img_factor = multiplier to support images over 128x128. Only certain factors are supported.
-    def __init__(self, in_nc, nf, input_img_factor=1, do_checkpointing=False):
+    def __init__(self, in_nc, nf, input_img_factor=1, do_checkpointing=False, extra_conv=False):
         super(Discriminator_VGG_128_GN, self).__init__()
         self.do_checkpointing = do_checkpointing
 
@@ -111,6 +111,14 @@ class Discriminator_VGG_128_GN(nn.Module):
         self.bn4_0 = nn.GroupNorm(8, nf * 8, affine=True)
         self.conv4_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
         self.bn4_1 = nn.GroupNorm(8, nf * 8, affine=True)
+
+        self.extra_conv = extra_conv
+        if extra_conv:
+            self.conv5_0 = nn.Conv2d(nf * 8, nf * 8, 3, 1, 1, bias=False)
+            self.bn5_0 = nn.GroupNorm(8, nf * 8, affine=True)
+            self.conv5_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
+            self.bn5_1 = nn.GroupNorm(8, nf * 8, affine=True)
+            input_img_factor = input_img_factor // 2
         final_nf = nf * 8
 
         # activation function
@@ -136,6 +144,10 @@ class Discriminator_VGG_128_GN(nn.Module):
 
         fea = self.lrelu(self.bn4_0(self.conv4_0(fea)))
         fea = self.lrelu(self.bn4_1(self.conv4_1(fea)))
+
+        if self.extra_conv:
+            fea = self.lrelu(self.bn5_0(self.conv5_0(fea)))
+            fea = self.lrelu(self.bn5_1(self.conv5_1(fea)))
         return fea
 
     def forward(self, x):

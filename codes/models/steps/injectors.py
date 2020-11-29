@@ -56,6 +56,8 @@ def create_injector(opt_inject, env):
         return BatchRotateInjector(opt_inject, env)
     elif type == 'sr_diffs':
         return SrDiffsInjector(opt_inject, env)
+    elif type == 'multiframe_combiner':
+        return MultiFrameCombiner(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -419,3 +421,52 @@ class SrDiffsInjector(Injector):
         elif self.mode == 'recombine':
             combined = resampled_lq + hq
             return {self.output: combined}
+
+
+class MultiFrameCombiner(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.mode = opt['mode']
+        self.dim = opt['dim'] if 'dim' in opt.keys() else None
+        self.flow = opt['flow']
+        self.in_lq_key = opt['in']
+        self.in_hq_key = opt['in_hq']
+        self.out_lq_key = opt['out']
+        self.out_hq_key = opt['out_hq']
+        from models.flownet2.networks.resample2d_package.resample2d import Resample2d
+        self.resampler = Resample2d()
+
+    def combine(self, state):
+        flow = self.env['generators'][self.flow]
+        lq = state[self.in_lq_key]
+        hq = state[self.in_hq_key]
+        b, f, c, h, w = lq.shape
+        center = f // 2
+        center_img = lq[:,center,:,:,:]
+        imgs = [center_img]
+        with torch.no_grad():
+            for i in range(f):
+                if i == center:
+                    continue
+                nimg = lq[:,i,:,:,:]
+                flowfield = flow(torch.stack([center_img, nimg], dim=2).float())
+                nimg = self.resampler(nimg, flowfield)
+                imgs.append(nimg)
+        hq_out = hq[:,center,:,:,:]
+        return {self.out_lq_key: torch.cat(imgs, dim=1),
+                self.out_hq_key: hq_out,
+                self.out_lq_key + "_flow_sample": torch.cat(imgs, dim=0)}
+
+    def synthesize(self, state):
+        lq = state[self.in_lq_key]
+        return {
+            self.out_lq_key: lq.repeat(1, self.dim, 1, 1)
+        }
+
+    def forward(self, state):
+        if self.mode == "synthesize":
+            return self.synthesize(state)
+        elif self.mode == "combine":
+            return self.combine(state)
+        else:
+            raise NotImplementedError

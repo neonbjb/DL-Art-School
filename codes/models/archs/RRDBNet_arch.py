@@ -177,6 +177,7 @@ class RRDBNet(nn.Module):
                  feature_channels=64,  # Only applicable when headless=True. How many channels are used at the trunk level.
                  output_mode="hq_only",  # Options: "hq_only", "hq+features", "features_only"
                  initial_stride=1,
+                 use_ref=False,  # When set, a reference image is expected as input and synthesized if not found. Useful for video SR.
                  ):
         super(RRDBNet, self).__init__()
         assert output_mode in ['hq_only', 'hq+features', 'features_only']
@@ -186,7 +187,8 @@ class RRDBNet(nn.Module):
         self.scale = scale
         self.in_channels = in_channels
         self.output_mode = output_mode
-        first_conv_stride = initial_stride if in_channels <= 4 else scale
+        self.use_ref = use_ref
+        first_conv_stride = initial_stride if not self.use_ref else scale
         first_conv_ksize = 3 if first_conv_stride == 1 else 7
         first_conv_padding = 1 if first_conv_stride == 1 else 3
         if headless:
@@ -242,7 +244,7 @@ class RRDBNet(nn.Module):
                 feat = x
         else:
             # "Normal" mode -> image input.
-            if self.in_channels > 4:
+            if self.use_ref:
                 x_lg = F.interpolate(x, scale_factor=self.scale, mode="bicubic")
                 if ref is None:
                     ref = torch.zeros_like(x_lg)
