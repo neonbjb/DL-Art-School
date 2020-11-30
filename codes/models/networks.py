@@ -173,6 +173,10 @@ def define_G(opt, opt_net, scale=None):
         netG = RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                        nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
                        initial_conv_stride=opt_net['initial_stride'])
+    elif which_model == 'mdcn':
+        from models.archs.mdcn.mdcn import MDCN
+        args = munchify({'scale': opt_net['scale'], 'n_colors': 3, 'rgb_range': 1.0})
+        netG = MDCN(args)
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
