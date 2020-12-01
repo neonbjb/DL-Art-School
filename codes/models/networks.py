@@ -21,8 +21,6 @@ import models.archs.rcan as rcan
 from models.archs import srg2_classic
 from models.archs.biggan.biggan_discriminator import BigGanDiscriminator
 from models.archs.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
-from models.archs.rrdb_with_adain_latent import AdaRRDBNet, LinearLatentEstimator
-from models.archs.rrdb_with_latent import LatentEstimator, RRDBNetWithLatent, LatentEstimator2
 from models.archs.teco_resgen import TecoGen
 
 logger = logging.getLogger('base')
@@ -58,6 +56,12 @@ def define_G(opt, opt_net, scale=None):
         netG = MultiResRRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
                                mid_channels=opt_net['nf'], l1_blocks=opt_net['l1'],
                                l2_blocks=opt_net['l2'], l3_blocks=opt_net['l3'],
+                               growth_channels=opt_net['gc'], scale=opt_net['scale'])
+    elif which_model == "twostep_rrdb":
+        from models.archs.multi_res_rrdb import PixelShufflingSteppedResRRDBNet
+        netG = PixelShufflingSteppedResRRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                               mid_channels=opt_net['nf'], l1_blocks=opt_net['l1'],
+                               l2_blocks=opt_net['l2'],
                                growth_channels=opt_net['gc'], scale=opt_net['scale'])
     elif which_model == 'rcan':
         #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
@@ -122,25 +126,6 @@ def define_G(opt, opt_net, scale=None):
         netG = SwitchedGen_arch.BackboneResnet()
     elif which_model == "tecogen":
         netG = TecoGen(opt_net['nf'], opt_net['scale'])
-    elif which_model == "rrdb_with_latent":
-        netG = RRDBNetWithLatent(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                  mid_channels=opt_net['nf'], num_blocks=opt_net['nb'],
-                                  blocks_per_checkpoint=opt_net['blocks_per_checkpoint'],
-                                  scale=opt_net['scale'],
-                                  bottom_latent_only=opt_net['bottom_latent_only'])
-    elif which_model == "adarrdb":
-        netG = AdaRRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                  mid_channels=opt_net['nf'], num_blocks=opt_net['nb'],
-                                  blocks_per_checkpoint=opt_net['blocks_per_checkpoint'],
-                                  scale=opt_net['scale'])
-    elif which_model == "latent_estimator":
-        if opt_net['version'] == 2:
-            netG = LatentEstimator2(in_nc=3, nf=opt_net['nf'])
-        else:
-            overwrite = [1,2] if opt_net['only_base_level'] else []
-            netG = LatentEstimator(in_nc=3, nf=opt_net['nf'], overwrite_levels=overwrite)
-    elif which_model == "linear_latent_estimator":
-        netG = LinearLatentEstimator(in_nc=3, nf=opt_net['nf'])
     elif which_model == 'stylegan2':
         is_structured = opt_net['structured'] if 'structured' in opt_net.keys() else False
         attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
