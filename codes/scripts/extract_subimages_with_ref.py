@@ -19,14 +19,17 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset3'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\256_with_ref_3'
-    opt['crop_sz'] = [512, 1024]  # the size of each sub-image
-    opt['step'] = [512, 1024]  # step of the sliding crop window
-    opt['thres_sz'] = 128  # size threshold
+    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\fkaw\\images'
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\512_with_ref_and_fkaw'
+    opt['crop_sz'] = [1024, 2048]  # the size of each sub-image
+    opt['step'] = [1024, 2048]  # step of the sliding crop window
+    opt['thres_sz'] = 512  # size threshold
     opt['resize_final_img'] = [.5, .25]
     opt['only_resize'] = False
     opt['vertical_split'] = False
+    opt['input_image_max_size_before_being_halved'] = 5500  # As described, images larger than this dimensional size will be halved before anything else is done.
+                                                            # This helps prevent images from cameras with "false-megapixels" from polluting the dataset.
+                                                            # False-megapixel=lots of noise at ultra-high res.
 
     save_folder = opt['save_folder']
     if not osp.exists(save_folder):
@@ -186,6 +189,12 @@ class TiledDataset(data.Dataset):
             return None
 
         h, w, c = img.shape
+
+        if max(h,w) > self.opt['input_image_max_size_before_being_halved']:
+            h = h // 2
+            w = w // 2
+            img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+            #print("Resizing to ", img.shape)
 
         # Uncomment to filter any image that doesnt meet a threshold size.
         if min(h,w) < 512:
