@@ -1,3 +1,4 @@
+from models.eval.flow_gaussian_nll import FlowGaussianNll
 from models.eval.sr_style import SrStyleTransferEvaluator
 from models.eval.style import StyleTransferEvaluator
 
@@ -8,5 +9,7 @@ def create_evaluator(model, opt_eval, env):
         return StyleTransferEvaluator(model, opt_eval, env)
     elif type == 'sr_stylegan':
         return SrStyleTransferEvaluator(model, opt_eval, env)
+    elif type == 'flownet_gaussian':
+        return FlowGaussianNll(model, opt_eval, env)
     else:
         raise NotImplementedError()
