@@ -13,14 +13,14 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 8
+    opt['n_thread'] = 16
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\fkaw\\images'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\512_with_ref_and_fkaw'
+    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset2'
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\USELESS_DELETE_ME'
     opt['crop_sz'] = [1024, 2048]  # the size of each sub-image
     opt['step'] = [1024, 2048]  # step of the sliding crop window
     opt['thres_sz'] = 512  # size threshold

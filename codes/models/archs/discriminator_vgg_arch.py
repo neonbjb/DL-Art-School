@@ -118,7 +118,7 @@ class Discriminator_VGG_128_GN(nn.Module):
             self.bn5_0 = nn.GroupNorm(8, nf * 8, affine=True)
             self.conv5_1 = nn.Conv2d(nf * 8, nf * 8, 4, 2, 1, bias=False)
             self.bn5_1 = nn.GroupNorm(8, nf * 8, affine=True)
-            input_img_factor = input_img_factor // 2
+            input_img_factor = input_img_factor / 2
         final_nf = nf * 8
 
         # activation function
