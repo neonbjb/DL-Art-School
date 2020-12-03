@@ -45,6 +45,8 @@ def create_dataset(dataset_opt):
         from data.stylegan2_dataset import Stylegan2Dataset as D
     elif mode == 'imagefolder':
         from data.image_folder_dataset import ImageFolderDataset as D
+    elif mode == 'torch_dataset':
+        from data.torch_dataset import TorchDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)

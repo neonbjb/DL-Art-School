@@ -20,6 +20,9 @@ def create_injector(opt_inject, env):
     elif 'stereoscopic_' in type:
         from models.steps.stereoscopic import create_stereoscopic_injector
         return create_stereoscopic_injector(opt_inject, env)
+    elif 'igpt' in type:
+        from models.archs.transformers.igpt import gpt2
+        return gpt2.create_injector(opt_inject, env)
     elif type == 'generator':
         return ImageGeneratorInjector(opt_inject, env)
     elif type == 'discriminator':

@@ -16,7 +16,6 @@ import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.feature_arch as feature_arch
-import models.archs.panet.panet as panet
 import models.archs.rcan as rcan
 from models.archs import srg2_classic
 from models.archs.biggan.biggan_discriminator import BigGanDiscriminator
@@ -69,12 +68,6 @@ def define_G(opt, opt_net, scale=None):
         opt_net['n_colors'] = 3
         args_obj = munchify(opt_net)
         netG = rcan.RCAN(args_obj)
-    elif which_model == 'panet':
-        #args: n_resblocks, res_scale, scale, n_feats
-        opt_net['rgb_range'] = 255
-        opt_net['n_colors'] = 3
-        args_obj = munchify(opt_net)
-        netG = panet.PANET(args_obj)
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
@@ -158,10 +151,9 @@ def define_G(opt, opt_net, scale=None):
         netG = RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                        nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
                        initial_conv_stride=opt_net['initial_stride'])
-    elif which_model == 'mdcn':
-        from models.archs.mdcn.mdcn import MDCN
-        args = munchify({'scale': opt_net['scale'], 'n_colors': 3, 'rgb_range': 1.0})
-        netG = MDCN(args)
+    elif which_model == 'igpt2':
+        from models.archs.transformers.igpt.gpt2 import iGPT2
+        netG = iGPT2(opt_net['embed_dim'], opt_net['num_heads'], opt_net['num_layers'], opt_net['num_pixels'] ** 2, opt_net['num_vocab'], centroids_file=opt_net['centroids_file'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG

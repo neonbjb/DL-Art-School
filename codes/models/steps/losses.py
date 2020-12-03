@@ -17,6 +17,8 @@ def create_loss(opt_loss, env):
     elif 'stylegan2_' in type:
         from models.archs.stylegan import create_stylegan2_loss
         return create_stylegan2_loss(opt_loss, env)
+    elif type == 'crossentropy':
+        return CrossEntropy(opt_loss, env)
     elif type == 'pix':
         return PixLoss(opt_loss, env)
     elif type == 'direct':
@@ -87,6 +89,18 @@ def get_basic_criterion_for_name(name, device):
         return nn.CosineEmbeddingLoss().to(device)
     else:
         raise NotImplementedError
+
+
+class CrossEntropy(ConfigurableLoss):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.opt = opt
+        self.ce = nn.CrossEntropyLoss()
+
+    def forward(self, _, state):
+        labels = state[self.opt['labels']]
+        logits = state[self.opt['logits']]
+        return self.ce(logits.view(-1, logits.size(-1)), labels.view(-1))
 
 
 class PixLoss(ConfigurableLoss):
