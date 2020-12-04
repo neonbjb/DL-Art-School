@@ -1,0 +1,94 @@
+#### general settings
+name: train_div2k_rrdb_psnr
+use_tb_logger: true
+model: extensibletrainer
+distortion: sr
+scale: 2
+gpu_ids: [0]
+fp16: false
+start_step: 0
+checkpointing_enabled: true  # <-- Highly recommended for single-GPU training. Will not work with DDP.
+wandb: false
+
+datasets:
+  train:
+    n_workers: 4
+    batch_size: 32
+    name: div2k
+    mode: single_image_extensible
+    paths: /content/div2k   # <-- Put your path here.
+    target_size: 128
+    force_multiple: 1
+    scale: 4
+    eval: False
+    num_corrupts_per_image: 0
+    strict: false
+  val:
+    name: val
+    mode: fullimage
+    dataroot_GT: /content/set14
+    scale: 4
+    force_multiple: 16
+
+networks:
+  generator:
+    type: generator
+    which_model_G: RRDBNet
+    in_nc: 3
+    out_nc: 3
+    nf: 64
+    nb: 23
+    scale: 4
+    blocks_per_checkpoint: 3
+
+#### path
+path:
+  #pretrain_model_generator: <insert pretrained model path if desired>
+  strict_load: true
+  #resume_state: ../experiments/train_div2k_rrdb_psnr/training_state/0.state   # <-- Set this to resume from a previous training state.
+
+steps:
+  generator:
+    training: generator
+
+    optimizer_params:
+      # Optimizer params
+      lr: !!float 2e-4
+      weight_decay: 0
+      beta1: 0.9
+      beta2: 0.99
+
+    injectors:
+      gen_inj:
+        type: generator
+        generator: generator
+        in: lq
+        out: gen
+        
+    losses:
+      pix:
+        type: pix
+        weight: 1
+        criterion: l1
+        real: hq
+        fake: gen
+
+train:
+  niter: 500000
+  warmup_iter: -1
+  mega_batch_factor: 1    # <-- Gradient accumulation factor. If you are running OOM, increase this to [2,4,8].
+  val_freq: 2000
+
+  # Default LR scheduler options
+  default_lr_scheme: MultiStepLR
+  gen_lr_steps: [50000, 100000, 150000, 200000]
+  lr_gamma: 0.5
+
+eval:
+  output_state: gen
+
+logger:
+  print_freq: 30
+  save_checkpoint_freq: 1000
+  visuals: [gen, hq, lq]
+  visual_debug_rate: 100
