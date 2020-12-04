@@ -4,6 +4,7 @@ import torch
 import os.path as osp
 import torchvision
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 import models.eval.evaluator as evaluator
 from pytorch_fid import fid_score
@@ -25,7 +26,8 @@ class FlowGaussianNll(evaluator.Evaluator):
         total_zs = 0
         z_loss = 0
         with torch.no_grad():
-            for batch in self.dataloader:
+            print("Evaluating FlowGaussianNll..")
+            for batch in tqdm(self.dataloader):
                 z, _, _ = self.model(gt=batch['GT'],
                                      lr=batch['LQ'],
                                      epses=[],
