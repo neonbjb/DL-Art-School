@@ -62,7 +62,7 @@ class FlowStep(nn.Module):
         else:
             raise RuntimeError("coupling not Found:", flow_coupling)
 
-    def forward(self, input, logdet=None, reverse=False, rrdbResults=None):
+    def forward(self, input, logdet=None, rrdbResults=None, reverse=False):
         if not reverse:
             return self.normal_flow(input, logdet, rrdbResults)
         else:
