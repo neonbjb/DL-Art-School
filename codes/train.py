@@ -255,13 +255,14 @@ class Trainer:
                     self.tb_logger.add_scalar('val_psnr', avg_psnr, self.current_step)
                     self.tb_logger.add_scalar('val_fea', avg_fea_loss, self.current_step)
 
-        if len(self.evaluators) != 0 and self.current_step % opt['train']['val_freq'] == 0:
+        if len(self.evaluators) != 0 and self.current_step % opt['train']['val_freq'] == 0 and self.rank <= 0:
             eval_dict = {}
             for eval in self.evaluators:
                 eval_dict.update(eval.perform_eval())
-            print("Evaluator results: ", eval_dict)
-            for ek, ev in eval_dict.items():
-                self.tb_logger.add_scalar(ek, ev, self.current_step)
+            if self.rank <= 0:
+                print("Evaluator results: ", eval_dict)
+                for ek, ev in eval_dict.items():
+                    self.tb_logger.add_scalar(ek, ev, self.current_step)
 
     def do_training(self):
         self.logger.info('Start training from epoch: {:d}, iter: {:d}'.format(self.start_epoch, self.current_step))

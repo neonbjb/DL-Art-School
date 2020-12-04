@@ -25,15 +25,18 @@ class FlowGaussianNll(evaluator.Evaluator):
     def perform_eval(self):
         total_zs = 0
         z_loss = 0
+        self.model.eval()
         with torch.no_grad():
             print("Evaluating FlowGaussianNll..")
             for batch in tqdm(self.dataloader):
-                z, _, _ = self.model(gt=batch['GT'],
-                                     lr=batch['LQ'],
+                dev = self.env['device']
+                z, _, _ = self.model(gt=batch['GT'].to(dev),
+                                     lr=batch['LQ'].to(dev),
                                      epses=[],
                                      reverse=False,
                                      add_gt_noise=False)
                 for z_ in z:
                     z_loss += GaussianDiag.logp(None, None, z_).mean()
                     total_zs += 1
+        self.model.train()
         return {"gaussian_diff": z_loss / total_zs}

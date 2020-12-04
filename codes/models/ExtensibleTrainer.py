@@ -4,7 +4,7 @@ import os
 import torch
 from torch.nn.parallel import DataParallel
 import torch.nn as nn
-from torch.nn.parallel.distributed import DistributedDataParallel
+from apex.parallel import DistributedDataParallel
 
 import models.lr_scheduler as lr_scheduler
 import models.networks as networks
@@ -106,9 +106,7 @@ class ExtensibleTrainer(BaseModel):
         all_networks = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
         for anet in all_networks:
             if opt['dist']:
-                dnet = DistributedDataParallel(anet,
-                                               device_ids=[torch.cuda.current_device()],
-                                               find_unused_parameters=False)
+                dnet = DistributedDataParallel(anet, delay_allreduce=True)
             else:
                 dnet = DataParallel(anet, device_ids=opt['gpu_ids'])
             if self.is_train:
