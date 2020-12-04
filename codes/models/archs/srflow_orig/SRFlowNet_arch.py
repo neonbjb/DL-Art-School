@@ -127,11 +127,7 @@ class SRFlowNet(nn.Module):
         else:
             z = epses
 
-        logp = 0
-        for eps in epses:
-            logp = logp + flow.GaussianDiag.logp(None, None, eps)
-        logp_weight = opt_get(self.opt, ['networks', 'generator', 'flow', 'gaussian_loss_weight'], 1)
-        logp = logp * logp_weight
+        logp = flow.GaussianDiag.logp(None, None, z)
         objective = objective + logp
 
         nll = (-objective) / float(np.log(2.) * pixels)
