@@ -125,13 +125,6 @@ def define_G(opt, opt_net, scale=None):
         netG = stylegan2.StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
                                             style_depth=opt_net['style_depth'], structure_input=is_structured,
                                             attn_layers=attn)
-    elif which_model == 'srflow':
-        from models.archs.srflow import SRFlow_arch
-        netG = SRFlow_arch.SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'],
-                                     quant=opt_net['quant'], flow_block_maps=opt_net['rrdb_block_maps'],
-                                     noise_quant=opt_net['noise_quant'], hidden_channels=opt_net['nf'],
-                                     K=opt_net['K'], L=opt_net['L'], train_rrdb_at_step=opt_net['rrdb_train_step'],
-                                     hr_img_shape=opt_net['hr_shape'], scale=opt_net['scale'])
     elif which_model == 'srflow_orig':
         from models.archs.srflow_orig import SRFlowNet_arch
         netG = SRFlowNet_arch.SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
