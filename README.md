@@ -42,6 +42,11 @@ TBC..
 ## User Guide
 TBC
 
+### Development Environment
+If you aren't already using [Pycharm](https://www.jetbrains.com/pycharm/) - now is the time to try it out. This project was built in Pycharm and comes with
+an IDEA project for you to get started with. I've done all of my development on this repo in this IDE and lean heavily
+on its incredible debugger. It's free. Try it out. You won't be sorry.
+
 ### Dataset Preparation
 DLAS comes with some Dataset instances that I have created for my own use. Unless you want to use one of the recipes above, you'll need to provide your own. Here is how to add your own Dataset:
 
