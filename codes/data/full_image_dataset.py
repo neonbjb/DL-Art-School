@@ -323,7 +323,7 @@ class FullImageDataset(data.Dataset):
         gt_fullsize_ref = torch.cat([gt_fullsize_ref, gt_mask], dim=0)
         lq_fullsize_ref = torch.cat([lq_fullsize_ref, lq_mask], dim=0)
 
-        d = {'LQ': img_LQ, 'GT': img_GT, 'gt_fullsize_ref': gt_fullsize_ref, 'lq_fullsize_ref': lq_fullsize_ref,
+        d = {'lq': img_LQ, 'hq': img_GT, 'gt_fullsize_ref': gt_fullsize_ref, 'lq_fullsize_ref': lq_fullsize_ref,
              'lq_center': lq_center, 'gt_center': gt_center,
              'LQ_path': LQ_path, 'GT_path': full_path}
         return d

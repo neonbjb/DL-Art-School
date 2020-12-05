@@ -88,7 +88,7 @@ class FfmpegBackedVideoDataset(data.Dataset):
             img_LQ = lq_template
             ref = ref_template
 
-        return {'LQ': img_LQ, 'lq_fullsize_ref': ref,
+        return {'lq': img_LQ, 'lq_fullsize_ref': ref,
                 'lq_center': torch.tensor([img_LQ.shape[1] // 2, img_LQ.shape[2] // 2], dtype=torch.long) }
 
     def __len__(self):
@@ -159,8 +159,8 @@ if __name__ == "__main__":
         need_GT = False if test_loader.dataset.opt['dataroot_GT'] is None else True
 
         if recurrent_mode and first_frame:
-            b, c, h, w = data['LQ'].shape
-            recurrent_entry = torch.zeros((b,c,h*scale,w*scale), device=data['LQ'].device)
+            b, c, h, w = data['lq'].shape
+            recurrent_entry = torch.zeros((b,c,h*scale,w*scale), device=data['lq'].device)
             # Optionally swap out the 'generator' for the first frame to create a better image that the recurrent generator works off of.
             if 'recurrent_hr_generator' in opt.keys():
                 recurrent_gen = model.env['generators']['generator']

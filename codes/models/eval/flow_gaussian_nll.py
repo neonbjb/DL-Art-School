@@ -30,8 +30,8 @@ class FlowGaussianNll(evaluator.Evaluator):
             print("Evaluating FlowGaussianNll..")
             for batch in tqdm(self.dataloader):
                 dev = self.env['device']
-                z, _, _ = self.model(gt=batch['GT'].to(dev),
-                                     lr=batch['LQ'].to(dev),
+                z, _, _ = self.model(gt=batch['hq'].to(dev),
+                                     lr=batch['lq'].to(dev),
                                      epses=[],
                                      reverse=False,
                                      add_gt_noise=False)

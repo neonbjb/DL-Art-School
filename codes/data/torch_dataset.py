@@ -24,7 +24,7 @@ class TorchDataset(Dataset):
 
     def __getitem__(self, item):
         underlying_item = self.dataset[item][0]
-        return {'LQ': underlying_item, 'GT': underlying_item,
+        return {'lq': underlying_item, 'hq': underlying_item,
                 'LQ_path': str(item), 'GT_path': str(item)}
 
     def __len__(self):

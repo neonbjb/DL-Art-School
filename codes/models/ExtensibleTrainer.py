@@ -4,7 +4,6 @@ import os
 import torch
 from torch.nn.parallel import DataParallel
 import torch.nn as nn
-from apex.parallel import DistributedDataParallel
 
 import models.lr_scheduler as lr_scheduler
 import models.networks as networks
@@ -106,6 +105,8 @@ class ExtensibleTrainer(BaseModel):
         all_networks = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
         for anet in all_networks:
             if opt['dist']:
+                # Use Apex to enable delay_allreduce, which is compatible with gradient checkpointing.
+                from apex.parallel import DistributedDataParallel
                 dnet = DistributedDataParallel(anet, delay_allreduce=True)
             else:
                 dnet = DataParallel(anet, device_ids=opt['gpu_ids'])
@@ -160,18 +161,9 @@ class ExtensibleTrainer(BaseModel):
             o.zero_grad()
         torch.cuda.empty_cache()
 
-        self.lq = [t.to(self.device) for t in torch.chunk(data['LQ'], chunks=self.batch_factor, dim=0)]
-        if need_GT:
-            self.hq = [t.to(self.device) for t in torch.chunk(data['GT'], chunks=self.batch_factor, dim=0)]
-            input_ref = data['ref'] if 'ref' in data.keys() else data['GT']
-            self.ref = [t.to(self.device) for t in torch.chunk(input_ref, chunks=self.batch_factor, dim=0)]
-        else:
-            self.hq = self.lq
-            self.ref = self.lq
-
-        self.dstate = {'lq': self.lq, 'hq': self.hq, 'ref': self.ref}
+        self.dstate = {}
         for k, v in data.items():
-            if k not in ['LQ', 'ref', 'GT'] and isinstance(v, torch.Tensor):
+            if isinstance(v, torch.Tensor):
                 self.dstate[k] = [t.to(self.device) for t in torch.chunk(v, chunks=self.batch_factor, dim=0)]
 
     def optimize_parameters(self, step):
@@ -328,8 +320,8 @@ class ExtensibleTrainer(BaseModel):
 
     def get_current_visuals(self, need_GT=True):
         # Conforms to an archaic format from MMSR.
-        return {'LQ': self.eval_state['lq'][0].float().cpu(),
-                'GT': self.eval_state['hq'][0].float().cpu(),
+        return {'lq': self.eval_state['lq'][0].float().cpu(),
+                'hq': self.eval_state['hq'][0].float().cpu(),
                 'rlt': self.eval_state[self.opt['eval']['output_state']][0].float().cpu()}
 
     def print_network(self):

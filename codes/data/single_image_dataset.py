@@ -36,7 +36,7 @@ class SingleImageDataset(BaseUnsupervisedImageDataset):
         lq_mask = torch.from_numpy(np.ascontiguousarray(lms[0])).unsqueeze(dim=0)
         lq_ref = torch.cat([lq_ref, lq_mask], dim=0)
 
-        return {'LQ': lq, 'GT': hq, 'gt_fullsize_ref': hq_ref, 'lq_fullsize_ref': lq_ref,
+        return {'lq': lq, 'hq': hq, 'gt_fullsize_ref': hq_ref, 'lq_fullsize_ref': lq_ref,
              'lq_center': torch.tensor(lcs[0], dtype=torch.long), 'gt_center': torch.tensor(hcs[0], dtype=torch.long),
              'LQ_path': path, 'GT_path': path}
 
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     for i in range(0, len(ds)):
         o = ds[random.randint(0, len(ds))]
         #for k, v in o.items():
-        k = 'LQ'
+        k = 'lq'
         v = o[k]
         #if 'LQ' in k and 'path' not in k and 'center' not in k:
         #if 'full' in k:

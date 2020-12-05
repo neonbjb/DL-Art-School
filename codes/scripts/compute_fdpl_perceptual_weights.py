@@ -40,8 +40,8 @@ if __name__ == '__main__':
             break
         sampled += 1
 
-        im = rgb2ycbcr(train_data['GT'].double())
-        im_LR = rgb2ycbcr(F.interpolate(train_data['LQ'].double(),
+        im = rgb2ycbcr(train_data['hq'].double())
+        im_LR = rgb2ycbcr(F.interpolate(train_data['lq'].double(),
                                         size=im.shape[2:],
                                         mode="bicubic", align_corners=False))
         patches_hr = extract_patches_2d(img=im, patch_shape=(patch_size,patch_size), batch_first=True)

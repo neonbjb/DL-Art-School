@@ -41,9 +41,9 @@ def forward_pass(model, output_dir, alteration_suffix=''):
             save_img_path = osp.join(output_dir, img_name + '.png')
 
         if need_GT:
-            fea_loss += model.compute_fea_loss(visuals[i], data['GT'][i])
+            fea_loss += model.compute_fea_loss(visuals[i], data['hq'][i])
             psnr_sr = util.tensor2img(visuals[i])
-            psnr_gt = util.tensor2img(data['GT'][i])
+            psnr_gt = util.tensor2img(data['hq'][i])
             psnr_loss += util.calculate_psnr(psnr_sr, psnr_gt)
 
         util.save_img(sr_img, save_img_path)

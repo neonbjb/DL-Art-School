@@ -3,6 +3,8 @@ import math
 import argparse
 import random
 import logging
+
+import torchvision
 from tqdm import tqdm
 
 import torch
@@ -231,18 +233,18 @@ class Trainer:
                         sr_img = util.tensor2img(visuals['rlt'][b])  # uint8
                         # calculate PSNR
                         if self.val_compute_psnr:
-                            gt_img = util.tensor2img(visuals['GT'][b])  # uint8
+                            gt_img = util.tensor2img(visuals['hq'][b])  # uint8
                             sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
                             avg_psnr += util.calculate_psnr(sr_img, gt_img)
 
                         # calculate fea loss
                         if self.val_compute_fea:
-                            avg_fea_loss += self.model.compute_fea_loss(visuals['rlt'][b], visuals['GT'][b])
+                            avg_fea_loss += self.model.compute_fea_loss(visuals['rlt'][b], visuals['hq'][b])
 
                         # Save SR images for reference
                         img_base_name = '{:s}_{:d}.png'.format(img_name, self.current_step)
                         save_img_path = os.path.join(img_dir, img_base_name)
-                        util.save_img(sr_img, save_img_path)
+                        torchvision.utils.save_image(visuals['rlt'], save_img_path)
 
                 avg_psnr = avg_psnr / idx
                 avg_fea_loss = avg_fea_loss / idx
@@ -291,7 +293,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgsetext_srflow_frompsnr.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgsetext_srflow_bigboi_frompsnr.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()

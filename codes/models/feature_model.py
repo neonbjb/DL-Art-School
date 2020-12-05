@@ -66,9 +66,9 @@ class FeatureModel(BaseModel):
             self.log_dict = OrderedDict()
 
     def feed_data(self, data, need_GT=True):
-        self.var_L = data['LQ'].to(self.device)  # LQ
+        self.var_L = data['lq'].to(self.device)  # LQ
         if need_GT:
-            self.real_H = data['GT'].to(self.device)  # GT
+            self.real_H = data['hq'].to(self.device)  # GT
 
     def optimize_parameters(self, step):
         self.optimizer_G.zero_grad()

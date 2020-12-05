@@ -16,7 +16,7 @@ import utils.util as util  # noqa: E402
 
 def main():
     dataset = 'DIV2K_demo'  # vimeo90K | REDS | general (e.g., DIV2K, 291) | DIV2K_demo |test
-    mode = 'GT'  # used for vimeo90k and REDS datasets
+    mode = 'hq'  # used for vimeo90k and REDS datasets
     # vimeo90k: GT | LR | flow
     # REDS: train_sharp, train_sharp_bicubic, train_blur_bicubic, train_blur, train_blur_comp
     #       train_sharp_flowx4
@@ -159,7 +159,7 @@ def vimeo90k(mode):
     read_all_imgs = False  # whether real all images to memory with multiprocessing
     # Set False for use limited memory
     BATCH = 5000  # After BATCH images, lmdb commits, if read_all_imgs = False
-    if mode == 'GT':
+    if mode == 'hq':
         img_folder = '../../datasets/vimeo90k/vimeo_septuplet/sequences'
         lmdb_save_path = '../../datasets/vimeo90k/vimeo90k_train_GT.lmdb'
         txt_file = '../../datasets/vimeo90k/vimeo_septuplet/sep_trainlist.txt'
@@ -204,7 +204,7 @@ def vimeo90k(mode):
                 keys.append('{}_{}_{}'.format(folder, sub_folder, j + 1))
     all_img_list = sorted(all_img_list)
     keys = sorted(keys)
-    if mode == 'GT':  # only read the 4th frame for the GT mode
+    if mode == 'hq':  # only read the 4th frame for the GT mode
         print('Only keep the 4th frame.')
         all_img_list = [v for v in all_img_list if v.endswith('im4.png')]
         keys = [v for v in keys if v.endswith('_4')]
@@ -255,9 +255,9 @@ def vimeo90k(mode):
 
     #### create meta information
     meta_info = {}
-    if mode == 'GT':
+    if mode == 'hq':
         meta_info['name'] = 'Vimeo90K_train_GT'
-    elif mode == 'LR':
+    elif mode == 'lq':
         meta_info['name'] = 'Vimeo90K_train_LR'
     elif mode == 'flow':
         meta_info['name'] = 'Vimeo90K_train_flowx4'

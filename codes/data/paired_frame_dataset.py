@@ -42,7 +42,7 @@ class PairedFrameDataset(BaseUnsupervisedImageDataset):
         lq_mask = torch.from_numpy(np.ascontiguousarray(np.stack(lms))).squeeze().unsqueeze(dim=1)
         lq_ref = torch.cat([lq_ref, lq_mask], dim=1)
 
-        return {'GT_path': path, 'LQ': lq, 'GT': hq, 'gt_fullsize_ref': hq_ref, 'lq_fullsize_ref': lq_ref,
+        return {'GT_path': path, 'lq': lq, 'hq': hq, 'gt_fullsize_ref': hq_ref, 'lq_fullsize_ref': lq_ref,
              'lq_center': torch.tensor(lcs, dtype=torch.long), 'gt_center': torch.tensor(hcs, dtype=torch.long)}
 
 
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     batch = None
     for i in range(len(ds)):
         import random
-        k = 'LQ'
+        k = 'lq'
         element = ds[random.randint(0,len(ds))]
         base_file = osp.basename(element["GT_path"])
         o = element[k].unsqueeze(0)

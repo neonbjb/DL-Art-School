@@ -66,7 +66,7 @@ if __name__ == "__main__":
             model.test()
             gen = model.eval_state['gen'][0].to(model.env['device'])
             feagen = netF(gen)
-            feareal = netF(data['GT'].to(model.env['device']))
+            feareal = netF(data['hq'].to(model.env['device']))
             losses = torch.sum(torch.abs(feareal - feagen), dim=(1,2,3))
             means.append(torch.mean(losses).item())
             #print(sum(means)/len(means), torch.mean(losses), torch.max(losses), torch.min(losses))
@@ -76,6 +76,6 @@ if __name__ == "__main__":
                     removed += 1
                 #imname = osp.basename(data['GT_path'][i])
                 #if losses[i] < 25000:
-                #    torchvision.utils.save_image(data['GT'][i], osp.join(bin_path, imname))
+                #    torchvision.utils.save_image(data['hq'][i], osp.join(bin_path, imname))
 
         print("Removed %i/%i images" % (removed, len(test_set)))

@@ -98,4 +98,4 @@ class Stylegan2Dataset(data.Dataset):
         path = self.paths[index]
         img = Image.open(path)
         img = self.transform(img)
-        return {'LQ': img, 'GT': img, 'GT_path': str(path)}
+        return {'lq': img, 'hq': img, 'GT_path': str(path)}
