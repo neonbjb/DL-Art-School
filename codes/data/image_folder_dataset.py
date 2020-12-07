@@ -29,7 +29,7 @@ class ImageFolderDataset:
             self.weights = opt['weights']
 
         # Just scan the given directory for images of standard types.
-        supported_types = ['jpg', 'JPG', 'jpeg', 'JPEG', 'png', 'PNG', 'gif', 'GIF']
+        supported_types = ['jpg', 'jpeg', 'png', 'gif']
         self.image_paths = []
         for path, weight in zip(self.paths, self.weights):
             cache_path = os.path.join(path, 'cache.pth')
