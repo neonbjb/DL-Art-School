@@ -20,12 +20,15 @@ This directory contains several reference datasets which I have used in building
 1. MultiframeDataset - Similar to SingleImageDataset, but infers a temporal relationship between images based on their
    filenames: the last 12 characters before the file extension are assumed to be a frame counter. Images from this 
    dataset are grouped together with a temporal dimension for working with video data.
+1. ImageFolderDataset - Reads raw images from a folder and feeds them into the model. Capable of performing corruptions
+   on those images like the above.
 1. MultiscaleDataset - Reads full images from a directory and builds a tree of images constructed by cropping squares
    from the source image and resizing them to the target size recursively until the native resolution is hit. Each
    recursive step decreases the crop size by a factor of 2.
+1. TorchDataset - A wrapper for miscellaneous pytorch datasets (e.g. MNIST, CIFAR, etc) which extracts the images
+   and reformats them in a way that the DLAS trainer understands.
 1. FullImageDataset - An image patch dataset where the patches are dynamically extracted from full-size images. I have
-   generally stopped using this for performance reasons in favor of SingleImageDataset but it is useful for validation
-   and test so I keep it around.
+   generally stopped using this for performance reasons and it should be considered deprecated.
    
 ## Information about the "chunked" format
 

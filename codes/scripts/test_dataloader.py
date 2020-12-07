@@ -85,8 +85,8 @@ def main():
         if dataset == 'REDS' or dataset == 'Vimeo90K':
             LQs = data['LQs']
         else:
-            LQ = data['LQ']
-        GT = data['GT']
+        LQ = data['lq']
+        GT = data['hq']
 
         if dataset == 'REDS' or dataset == 'Vimeo90K':
             for j in range(LQs.size(1)):

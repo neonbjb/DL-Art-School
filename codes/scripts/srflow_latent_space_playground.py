@@ -163,7 +163,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     srg_analyze = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../../experiments/train_exd_imgset_srflow/train_exd_imgset_srflow.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../../options/train_exd_imgsetext_srflow_frompsnr.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
@@ -180,10 +180,10 @@ if __name__ == "__main__":
     gen = model.networks['generator']
     gen.eval()
 
-    mode = "temperature"  # temperature | restore | latent_transfer | feed_through
+    mode = "restore"  # temperature | restore | latent_transfer | feed_through
     #imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\adrianna\\val2\\lr\\*"
-    #imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\*"
-    imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\imagesets\\images-half\\*lanette*"
+    imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\*"
+    #imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\imagesets\\images-half\\*lanette*"
     scale = 2
     resample_factor = 1  # When != 1, the HR image is upsampled by this factor using a bicubic to get the local latents.
     temperature = 1
@@ -224,6 +224,11 @@ if __name__ == "__main__":
             t = image_2_tensor(img_file).to(model.env['device'])
             if resample_factor != 1:
                 t = F.interpolate(t, scale_factor=resample_factor, mode="bicubic")
+            # Ensure the input image is a factor of 16.
+            _, _, h, w = t.shape
+            h = 16 * (h // 16)
+            w = 16 * (w // 16)
+            t = t[:, :, :h, :w]
             resample_img = t
 
             # Fetch the latent metrics & latents for each image we are resampling.
@@ -255,6 +260,6 @@ if __name__ == "__main__":
             for j in range(len(lats)):
                 path = os.path.join(output_path, "%i_%i" % (im_it, j))
                 os.makedirs(path, exist_ok=True)
-                torchvision.utils.save_image(resample_img, os.path.join(path, "%i_orig.jpg" %(im_it)))
+                torchvision.utils.save_image(resample_img, os.path.join(path, "orig.jpg" %(im_it)))
                 create_interpolation_video(gen, F.interpolate(resample_img, scale_factor=1/scale, mode="area"),
                                            path, [torch.zeros_like(l) for l in lats[j]], lats[j])

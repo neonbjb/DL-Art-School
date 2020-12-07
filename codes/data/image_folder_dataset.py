@@ -29,7 +29,7 @@ class ImageFolderDataset:
             self.weights = opt['weights']
 
         # Just scan the given directory for images of standard types.
-        supported_types = ['jpg', 'JPG', 'jpeg', 'JPEG', 'png', 'PNG', 'gif', 'GIF']
+        supported_types = ['jpg', 'jpeg', 'png', 'gif']
         self.image_paths = []
         for path, weight in zip(self.paths, self.weights):
             cache_path = os.path.join(path, 'cache.pth')
@@ -95,7 +95,7 @@ class ImageFolderDataset:
         hq = torch.from_numpy(np.ascontiguousarray(np.transpose(hs[0], (2, 0, 1)))).float()
         lq = torch.from_numpy(np.ascontiguousarray(np.transpose(ls[0], (2, 0, 1)))).float()
 
-        return {'LQ': lq, 'GT': hq, 'LQ_path': self.image_paths[item], 'GT_path': self.image_paths[item]}
+        return {'lq': lq, 'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item]}
 
 
 if __name__ == '__main__':
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     for i in range(0, len(ds)):
         o = ds[random.randint(0, len(ds))]
         #for k, v in o.items():
-        k = 'LQ'
+        k = 'lq'
         v = o[k]
         #if 'LQ' in k and 'path' not in k and 'center' not in k:
         #if 'full' in k:

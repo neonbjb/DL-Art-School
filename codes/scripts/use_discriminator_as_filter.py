@@ -68,6 +68,6 @@ if __name__ == "__main__":
                 #    removed += 1
                 imname = osp.basename(data['GT_path'][i])
                 if results[i]-dataset_mean > 1:
-                    torchvision.utils.save_image(data['GT'][i], osp.join(bin_path, imname))
+                    torchvision.utils.save_image(data['hq'][i], osp.join(bin_path, imname))
 
         print("Removed %i/%i images" % (removed, len(test_set)))

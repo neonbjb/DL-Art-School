@@ -9,7 +9,7 @@ from io import BytesIO
 # options.
 class ImageCorruptor:
     def __init__(self, opt):
-        self.fixed_corruptions = opt['fixed_corruptions']
+        self.fixed_corruptions = opt['fixed_corruptions'] if 'fixed_corruptions' in opt.keys() else []
         self.num_corrupts = opt['num_corrupts_per_image'] if 'num_corrupts_per_image' in opt.keys() else 0
         if self.num_corrupts == 0:
             return

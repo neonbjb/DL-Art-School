@@ -87,7 +87,7 @@ class MultiScaleDataset(data.Dataset):
         patches_lq = [torch.nn.functional.interpolate(p.unsqueeze(0), scale_factor=1/self.scale, mode='area').squeeze() for p in patches_hq_corrupted]
         patches_lq = torch.stack(patches_lq, dim=0)
 
-        d = {'LQ': patches_lq, 'GT': patches_hq, 'GT_path': full_path}
+        d = {'lq': patches_lq, 'hq': patches_hq, 'GT_path': full_path}
         return d
 
     def __len__(self):

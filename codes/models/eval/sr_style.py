@@ -39,7 +39,7 @@ class SrStyleTransferEvaluator(evaluator.Evaluator):
         counter = 0
         for batch in self.sampler:
             noise = torch.FloatTensor(self.batch_sz, 3, self.im_sz, self.im_sz).uniform_(0., 1.).to(self.env['device'])
-            batch_hq = [e['GT'] for e in batch]
+            batch_hq = [e['hq'] for e in batch]
             batch_hq = torch.stack(batch_hq, dim=0).to(self.env['device'])
             resized_batch = torch.nn.functional.interpolate(batch_hq, scale_factor=1/self.scale, mode="area")
             embedding = embedding_generator(resized_batch)
