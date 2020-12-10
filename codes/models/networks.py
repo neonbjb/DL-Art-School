@@ -153,6 +153,12 @@ def define_G(opt, opt_net, scale=None):
         subnet = define_G(opt, opt_net['subnet'])
         netG = BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
                     structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False))
+    elif which_model == 'structural_byol':
+        from models.byol.byol_structural import StructuralBYOL
+        subnet = define_G(opt, opt_net['subnet'])
+        netG = StructuralBYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
+                              pretrained_state_dict=opt_get(opt_net, ["pretrained_path"]),
+                              freeze_until=opt_get(opt_net, ['freeze_until'], 0))
     elif which_model == 'spinenet':
         from models.archs.spinenet_arch import SpineNet
         netG = SpineNet(str(opt_net['arch']), in_channels=3, use_input_norm=opt_net['use_input_norm'])

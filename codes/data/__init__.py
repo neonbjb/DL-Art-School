@@ -49,6 +49,8 @@ def create_dataset(dataset_opt):
         from data.torch_dataset import TorchDataset as D
     elif mode == 'byol_dataset':
         from data.byol_attachment import ByolDatasetWrapper as D
+    elif mode == 'byol_structured_dataset':
+        from data.byol_attachment import StructuredCropDatasetWrapper as D
     elif mode == 'random_dataset':
         from data.random_dataset import RandomDataset as D
     else:
