@@ -4,7 +4,7 @@ from time import time
 import torch
 import torchvision
 from torch.utils.data import Dataset
-from kornia import augmentation as augs
+from kornia import augmentation as augs, kornia
 from kornia import filters
 import torch.nn as nn
 import torch.nn.functional as F
@@ -98,10 +98,11 @@ class RandomSharedRegionCrop(nn.Module):
         # 2. Pick a random width, height and top corner location for the first patch.
         # 3. Pick a random width, height and top corner location for the second patch.
         #    Note: All dims from (2) and (3) must contain at least half of the image, guaranteeing overlap.
-        # 6. Build patches from input images. Resize them appropriately. Apply translational jitter.
-        # 7. Compute the metrics needed to extract overlapping regions from the resized patches: top, left,
+        # 4. Build patches from input images. Resize them appropriately. Apply translational jitter.\
+        # 5. Randomly flip image 2 if needed.
+        # 5. Compute the metrics needed to extract overlapping regions from the resized patches: top, left,
         #    original_height, original_width.
-        # 8. Compute the "shared_view" from the above data.
+        # 6. Compute the "shared_view" from the above data.
 
         # Step 1
         c, d, _ = i1.shape
@@ -122,7 +123,7 @@ class RandomSharedRegionCrop(nn.Module):
         im2_t = random.randint(0, d-im2_h)
         im2_r, im2_b = im2_l+im2_w, im2_t+im2_h
 
-        # Step 6
+        # Step 4
         m = self.multiple
         jl, jt = random.randint(-self.jitter_range, self.jitter_range), random.randint(-self.jitter_range, self.jitter_range)
         jt = jt if base_t != 0 else abs(jt)  # If the top of a patch is zero, a negative jitter will cause it to go negative.
@@ -139,14 +140,22 @@ class RandomSharedRegionCrop(nn.Module):
         p2 = i2[:, im2_t*m+jt:(im2_t+im2_h)*m+jt, im2_l*m+jl:(im2_l+im2_w)*m+jl]
         p2_resized = no_batch_interpolate(p2, size=(d*m, d*m), mode="bilinear")
 
-        # Step 7
+        # Step 5
+        should_flip = random.random() < .5
+        if should_flip:
+            should_flip = 1
+            p2_resized = kornia.geometry.transform.hflip(p2_resized)
+        else:
+            should_flip = 0
+
+        # Step 6
         i1_shared_t, i1_shared_l = snap(base_t, im2_t), snap(base_l, im2_l)
         i2_shared_t, i2_shared_l = snap(im2_t, base_t), snap(im2_l, base_l)
         ix_h = min(base_b, im2_b) - max(base_t, im2_t)
         ix_w = min(base_r, im2_r) - max(base_l, im2_l)
-        recompute_package = torch.tensor([base_h, base_w, i1_shared_t, i1_shared_l, im2_h, im2_w, i2_shared_t, i2_shared_l, ix_h, ix_w], dtype=torch.long)
+        recompute_package = torch.tensor([base_h, base_w, i1_shared_t, i1_shared_l, im2_h, im2_w, i2_shared_t, i2_shared_l, should_flip, ix_h, ix_w], dtype=torch.long)
 
-        # Step 8
+        # Step 7
         mask1 = torch.full((1, base_h*m, base_w*m), fill_value=.5)
         mask1[:, i1_shared_t*m:(i1_shared_t+ix_h)*m, i1_shared_l*m:(i1_shared_l+ix_w)*m] = 1
         masked1 = pad_to(p1 * mask1, d*m)
@@ -171,10 +180,14 @@ def reconstructed_shared_regions(fea1, fea2, recompute_package: torch.Tensor):
     # It'd be real nice if we could do this at the batch level, but I don't see a really good way to do that outside
     # of conforming the recompute_package across the entire batch.
     for b in range(package.shape[0]):
-        f1_h, f1_w, f1s_t, f1s_l, f2_h, f2_w, f2s_t, f2s_l, s_h, s_w = tuple(package[b].tolist())
+        f1_h, f1_w, f1s_t, f1s_l, f2_h, f2_w, f2s_t, f2s_l, should_flip, s_h, s_w = tuple(package[b].tolist())
+        # Unflip 2 if needed.
+        f2 = fea2[b]
+        if should_flip == 1:
+            f2 = kornia.geometry.transform.hflip(f2)
         # Resize the input features to match
         f1s = F.interpolate(fea1[b].unsqueeze(0), (f1_h, f1_w), mode="bilinear")
-        f2s = F.interpolate(fea2[b].unsqueeze(0), (f2_h, f2_w), mode="bilinear")
+        f2s = F.interpolate(f2.unsqueeze(0), (f2_h, f2_w), mode="bilinear")
         # Outputs must be padded so they can "get along" with each other.
         res1.append(pad_to(f1s[:, :, f1s_t:f1s_t+s_h, f1s_l:f1s_l+s_w], pad_dim))
         res2.append(pad_to(f2s[:, :, f2s_t:f2s_t+s_h, f2s_l:f2s_l+s_w], pad_dim))

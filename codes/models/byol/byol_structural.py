@@ -176,3 +176,8 @@ class StructuralBYOL(nn.Module):
 
         loss = loss_one + loss_two
         return loss.mean()
+
+    def get_projection(self, image):
+        enc = self.online_encoder(image)
+        proj = self.online_predictor(enc)
+        return enc, proj
