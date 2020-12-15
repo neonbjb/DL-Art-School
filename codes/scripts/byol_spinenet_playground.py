@@ -171,21 +171,20 @@ def find_similar_latents(model, model_index=0, lat_patch_size=16, compare_fn=str
         t = lat_patch_size * u[1]
         l = lat_patch_size * u[2]
         patch = img[:, t:t + lat_patch_size, l:l + lat_patch_size]
-        img_out[:,:, h_ * lat_patch_size:h_ * lat_patch_size + lat_patch_size,
-        w_ * lat_patch_size:w_ * lat_patch_size + lat_patch_size] = patch
+        io_loc_t = h_ * lat_patch_size
+        io_loc_l = w_ * lat_patch_size
+        img_out[:,:,io_loc_t:io_loc_t+lat_patch_size,io_loc_l:io_loc_l+lat_patch_size] = patch
 
         # Also save the image with a masked map
         mask = torch.full_like(img, fill_value=.3)
         mask[:, t:t + lat_patch_size, l:l + lat_patch_size] = 1
         masked_img = img * mask
-        masked_src_img_output_file = os.path.join(output_path, "%i_%i__%i.png" % (t, l, u[0]))
+        masked_src_img_output_file = os.path.join(output_path, "%i_%i__%i.png" % (io_loc_t, io_loc_l, u[0]))
         torchvision.utils.save_image(masked_img, masked_src_img_output_file)
 
         # Update the image map areas.
-        img_map_areas.append('<area shape="rect" coords="%i,%i,%i,%i" href="%s">' % (w_ * lat_patch_size,
-                                                                                     h_ * lat_patch_size,
-                                                                                     w_ * lat_patch_size + lat_patch_size,
-                                                                                     h_ * lat_patch_size + lat_patch_size,
+        img_map_areas.append('<area shape="rect" coords="%i,%i,%i,%i" href="%s">' % (io_loc_l, io_loc_t,
+                                                                                     io_loc_l + lat_patch_size, io_loc_t + lat_patch_size,
                                                                                      masked_src_img_output_file))
     torchvision.utils.save_image(img_out, os.path.join(output_path, "output.png"))
     torchvision.utils.save_image(img_t, os.path.join(output_path, "source.png"))
@@ -226,20 +225,20 @@ class BYOLModelWrapper(nn.Module):
 
 
 if __name__ == '__main__':
-    util.loaded_options = {'checkpointing_enabled': True}
     pretrained_path = '../../experiments/spinenet49_imgset_sbyol.pth'
     model = SpineNet('49', in_channels=3, use_input_norm=True).to('cuda')
     model.load_state_dict(torch.load(pretrained_path), strict=True)
     model.eval()
 
-    #pretrained_path = '../../experiments/train_sbyol_512unsupervised/models/35000_generator.pth'
+    #util.loaded_options = {'checkpointing_enabled': True}
+    #pretrained_path = '../../experiments/train_sbyol_512unsupervised_restart/models/48000_generator.pth'
     #from models.byol.byol_structural import StructuralBYOL
     #subnet = SpineNet('49', in_channels=3, use_input_norm=True).to('cuda')
-    #model = StructuralBYOL(subnet, image_size=256, hidden_layer='endpoint_convs.3.conv')
+    #model = StructuralBYOL(subnet, image_size=256, hidden_layer='endpoint_convs.4.conv')
     #model.load_state_dict(torch.load(pretrained_path), strict=True)
     #model = BYOLModelWrapper(model)
     #model.eval()
 
     with torch.no_grad():
-        #create_latent_database(model, 0)    # 0 = model output dimension to use for latent storage
-        find_similar_latents(model, 0, 8, structural_euc_dist)  # 1 = model output dimension to use for latent predictor.
+        #create_latent_database(model, 1)    # 0 = model output dimension to use for latent storage
+        find_similar_latents(model, 1, 16, structural_euc_dist)  # 1 = model output dimension to use for latent predictor.

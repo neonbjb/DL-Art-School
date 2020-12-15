@@ -3,7 +3,7 @@ import torch
 from models.archs.spinenet_arch import SpineNet
 
 if __name__ == '__main__':
-    pretrained_path = '../../experiments/train_sbyol_512unsupervised/models/35000_generator.pth'
+    pretrained_path = '../../experiments/train_sbyol_512unsupervised_restart/models/48000_generator.pth'
     output_path = '../../experiments/spinenet49_imgset_sbyol.pth'
 
     wrap_key = 'online_encoder.net.'

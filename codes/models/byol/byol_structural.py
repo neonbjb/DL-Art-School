@@ -113,6 +113,7 @@ class StructuralBYOL(nn.Module):
         if pretrained_state_dict:
             net.load_state_dict(torch.load(pretrained_state_dict), strict=True)
         self.freeze_until = freeze_until
+        self.frozen = False
         if self.freeze_until > 0:
             for p in net.parameters():
                 p.DO_NOT_TRAIN = True

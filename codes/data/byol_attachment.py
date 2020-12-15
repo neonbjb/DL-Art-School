@@ -110,14 +110,14 @@ class RandomSharedRegionCrop(nn.Module):
         d = d // self.multiple
 
         # Step 2
-        base_w = random.randint(d//2, d-1)
+        base_w = random.randint(d//2+1, d-1)
         base_l = random.randint(0, d-base_w)
         base_h = random.randint(base_w-1, base_w+1)
         base_t = random.randint(0, d-base_h)
         base_r, base_b = base_l+base_w, base_t+base_h
 
         # Step 3
-        im2_w = random.randint(d//2, d-1)
+        im2_w = random.randint(d//2+1, d-1)
         im2_l = random.randint(0, d-im2_w)
         im2_h = random.randint(im2_w-1, im2_w+1)
         im2_t = random.randint(0, d-im2_h)
@@ -153,7 +153,7 @@ class RandomSharedRegionCrop(nn.Module):
         i2_shared_t, i2_shared_l = snap(im2_t, base_t), snap(im2_l, base_l)
         ix_h = min(base_b, im2_b) - max(base_t, im2_t)
         ix_w = min(base_r, im2_r) - max(base_l, im2_l)
-        recompute_package = torch.tensor([base_h, base_w, i1_shared_t, i1_shared_l, im2_h, im2_w, i2_shared_t, i2_shared_l, should_flip, ix_h, ix_w], dtype=torch.long)
+        recompute_package = torch.tensor([d, base_h, base_w, i1_shared_t, i1_shared_l, im2_h, im2_w, i2_shared_t, i2_shared_l, should_flip, ix_h, ix_w], dtype=torch.long)
 
         # Step 7
         mask1 = torch.full((1, base_h*m, base_w*m), fill_value=.5)
@@ -167,7 +167,14 @@ class RandomSharedRegionCrop(nn.Module):
         mask[:, im2_t*m:(im2_t+im2_w)*m, im2_l*m:(im2_l+im2_h)*m] += .33
         masked_dbg = i1 * mask
 
-        return p1_resized, p2_resized, recompute_package, masked1, masked2, masked_dbg
+        # Step 8 - Rebuild shared regions for testing purposes.
+        p1_shuf, p2_shuf = PixelUnshuffle(self.multiple)(p1_resized.unsqueeze(0)), \
+                           PixelUnshuffle(self.multiple)(p2_resized.unsqueeze(0))
+        i1_shared, i2_shared = reconstructed_shared_regions(p1_shuf, p2_shuf, recompute_package.unsqueeze(0))
+        i1_shared = pad_to(nn.PixelShuffle(self.multiple)(i1_shared).squeeze(0), d * m)
+        i2_shared = pad_to(nn.PixelShuffle(self.multiple)(i2_shared).squeeze(0), d*m)
+
+        return p1_resized, p2_resized, recompute_package, masked1, masked2, masked_dbg, i1_shared, i2_shared
 
 
 # Uses the recompute package returned from the above dataset to extract matched-size "similar regions" from two feature
@@ -180,14 +187,17 @@ def reconstructed_shared_regions(fea1, fea2, recompute_package: torch.Tensor):
     # It'd be real nice if we could do this at the batch level, but I don't see a really good way to do that outside
     # of conforming the recompute_package across the entire batch.
     for b in range(package.shape[0]):
-        f1_h, f1_w, f1s_t, f1s_l, f2_h, f2_w, f2s_t, f2s_l, should_flip, s_h, s_w = tuple(package[b].tolist())
+        expected_dim, f1_h, f1_w, f1s_t, f1s_l, f2_h, f2_w, f2s_t, f2s_l, should_flip, s_h, s_w = tuple(package[b].tolist())
+        # If you are hitting this assert, you specified `latent_multiple` in your dataset config wrong.
+        assert expected_dim == fea1.shape[2] and expected_dim == fea2.shape[2]
+
         # Unflip 2 if needed.
         f2 = fea2[b]
         if should_flip == 1:
             f2 = kornia.geometry.transform.hflip(f2)
         # Resize the input features to match
-        f1s = F.interpolate(fea1[b].unsqueeze(0), (f1_h, f1_w), mode="bilinear")
-        f2s = F.interpolate(f2.unsqueeze(0), (f2_h, f2_w), mode="bilinear")
+        f1s = F.interpolate(fea1[b].unsqueeze(0), (f1_h, f1_w), mode="nearest")
+        f2s = F.interpolate(f2.unsqueeze(0), (f2_h, f2_w), mode="nearest")
         # Outputs must be padded so they can "get along" with each other.
         res1.append(pad_to(f1s[:, :, f1s_t:f1s_t+s_h, f1s_l:f1s_l+s_w], pad_dim))
         res2.append(pad_to(f2s[:, :, f2s_t:f2s_t+s_h, f2s_l:f2s_l+s_w], pad_dim))
@@ -214,9 +224,10 @@ class StructuredCropDatasetWrapper(Dataset):
         item = self.wrapped_dataset[item]
         a1 = self.aug(item['hq']).squeeze(dim=0)
         a2 = self.aug(item['lq']).squeeze(dim=0)
-        a1, a2, sr_dim, m1, m2, db = self.rrc(a1, a2)
+        a1, a2, sr_dim, m1, m2, db, i1s, i2s = self.rrc(a1, a2)
         item.update({'aug1': a1, 'aug2': a2, 'similar_region_dimensions': sr_dim,
-                     'masked1': m1, 'masked2': m2, 'aug_shared_view': db})
+                     'masked1': m1, 'masked2': m2, 'aug_shared_view': db,
+                     'i1_shared': i1s, 'i2_shared': i2s})
         return item
 
     def __len__(self):
@@ -240,7 +251,7 @@ if __name__ == '__main__':
             'num_corrupts_per_image': 1,
             'corrupt_before_downsize': True,
             },
-        'latent_multiple': 8,
+        'latent_multiple': 16,
         'jitter_range': 0,
     }
 
@@ -254,8 +265,8 @@ if __name__ == '__main__':
             #if k in [ 'aug_shared_view', 'masked1', 'masked2']:
                 #torchvision.utils.save_image(v.unsqueeze(0), "debug/%i_%s.png" % (i, k))
         rcpkg = o['similar_region_dimensions']
-        pixun = PixelUnshuffle(8)
-        pixsh = nn.PixelShuffle(8)
-        rc1, rc2 = reconstructed_shared_regions(pixun(o['aug1'].unsqueeze(0)), pixun(o['aug2'].unsqueeze(0)), rcpkg)
+        pixun = PixelUnshuffle(16)
+        pixsh = nn.PixelShuffle(16)
+        rc1, rc2 = reconstructed_shared_regions(pixun(o['aug1'].unsqueeze(0)), pixun(o['aug2'].unsqueeze(0)), rcpkg.unsqueeze(0))
         #torchvision.utils.save_image(pixsh(rc1), "debug/%i_rc1.png" % (i,))
         #torchvision.utils.save_image(pixsh(rc2), "debug/%i_rc2.png" % (i,))
