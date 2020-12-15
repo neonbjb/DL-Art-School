@@ -13,18 +13,19 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 16
+    opt['n_thread'] = 7
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset2'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\vixen\\USELESS_DELETE_ME'
-    opt['crop_sz'] = [1024, 2048]  # the size of each sub-image
-    opt['step'] = [1024, 2048]  # step of the sliding crop window
-    opt['thres_sz'] = 512  # size threshold
-    opt['resize_final_img'] = [.5, .25]
+    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\images'
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\256_with_ref_v3'
+    opt['crop_sz'] = [512, 1024, 2048]  # the size of each sub-image
+    opt['step'] = [256, 512, 1024]  # step of the sliding crop window
+    opt['exclusions'] = [[],[],[]] # image names matching these terms wont be included in the processing.
+    opt['thres_sz'] = 256  # size threshold
+    opt['resize_final_img'] = [.5, .25, .125]
     opt['only_resize'] = False
     opt['vertical_split'] = False
     opt['input_image_max_size_before_being_halved'] = 5500  # As described, images larger than this dimensional size will be halved before anything else is done.
@@ -239,7 +240,14 @@ class TiledDataset(data.Dataset):
         assert success
         results = [(ref_buffer, (-1,-1), (-1,-1))]
 
-        for crop_sz, resize_factor, step in zip(self.opt['crop_sz'], self.opt['resize_final_img'], self.opt['step']):
+        for crop_sz, exclusions, resize_factor, step in zip(self.opt['crop_sz'], self.opt['exclusions'], self.opt['resize_final_img'], self.opt['step']):
+            excluded = False
+            for exc in exclusions:
+                if exc in path:
+                    excluded = True
+                    break;
+            if excluded:
+                continue
             results.extend(self.get_for_scale(img, crop_sz, step, resize_factor, ref_resize_factor))
         return results, path
 
