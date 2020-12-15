@@ -219,6 +219,7 @@ class Trainer:
                     for b in range(len(val_data['GT_path'])):
                         img_name = os.path.splitext(os.path.basename(val_data['GT_path'][b]))[0]
                         img_dir = os.path.join(opt['path']['val_images'], img_name)
+
                         util.mkdir(img_dir)
 
                         self.model.feed_data(val_data, self.current_step)
@@ -292,7 +293,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_sbyol_512unsupervised.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgsetext_rrdb_bigboi_psnr_4x.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
