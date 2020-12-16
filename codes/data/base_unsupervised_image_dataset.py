@@ -4,6 +4,7 @@ from data.image_corruptor import ImageCorruptor
 from data.chunk_with_reference import ChunkWithReference
 import os
 import cv2
+import numpy as np
 
 # Class whose purpose is to hold as much logic as can possibly be shared between datasets that operate on raw image
 # data and nothing else (which also have a very specific directory structure being used, as dictated by
@@ -101,7 +102,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
         h, w, _ = hs[0].shape
         ls, lrs, lms, lcs = [], [], [], []
         if self.corrupt_before_downsize and not self.for_eval:
-            hs = self.corruptor.corrupt_images(hs)
+            hs = self.corruptor.corrupt_images(np.copy(hs))
         for hq, hq_ref, hq_mask, hq_center in zip(hs, hrefs, hmasks, hcenters):
             if self.for_eval:
                 ls.append(hq)
