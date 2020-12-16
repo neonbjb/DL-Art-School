@@ -111,10 +111,13 @@ class ImageFolderDataset:
         out_dict = {'lq': lq, 'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item]}
         if self.labeler:
             base_file = self.image_paths[item].replace(self.paths[0], "")
+            while base_file.startswith("\\"):
+                base_file = base_file[1:]
             assert dim % hq.shape[1] == 0
-            lbls, lbl_masks = self.labeler.get_labels_as_tensor(hq, base_file, dim // hq.shape[1])
+            lbls, lbl_masks, lblstrings = self.labeler.get_labels_as_tensor(hq, base_file, dim // hq.shape[1])
             out_dict['labels'] = lbls
             out_dict['labels_mask'] = lbl_masks
+            out_dict['label_strings'] = lblstrings
         return out_dict
 
 if __name__ == '__main__':
@@ -122,7 +125,7 @@ if __name__ == '__main__':
         'name': 'amalgam',
         'paths': ['F:\\4k6k\\datasets\\ns_images\\512_unsupervised\\'],
         'weights': [1],
-        'target_size': 128,
+        'target_size': 512,
         'force_multiple': 32,
         'scale': 2,
         'fixed_corruptions': ['jpeg-broad', 'gaussian_blur'],
@@ -144,4 +147,8 @@ if __name__ == '__main__':
         masked = (o['labels_mask'] * .5 + .5) * hq
         import torchvision
         torchvision.utils.save_image(hq.unsqueeze(0), "debug/%i_hq.png" % (i,))
-        torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_masked.png" % (i,))
+        #torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_masked.png" % (i,))
+        if len(o['labels'].unique()) > 1:
+            randlbl = np.random.choice(o['labels'].unique()[1:])
+            moremask = hq * ((1*(o['labels'] == randlbl))*.5+.5)
+            torchvision.utils.save_image(moremask.unsqueeze(0), "debug/%i_%s.png" % (i, o['label_strings'][randlbl]))

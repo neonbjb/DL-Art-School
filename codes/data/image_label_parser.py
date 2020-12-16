@@ -33,7 +33,7 @@ class VsNetImageLabeler:
             # Build the label values, from [1,inf]
             label_value_dict = {}
             for i, l in enumerate(available_labels):
-                label_value_dict[l] = i+1
+                label_value_dict[l] = i
 
             # Insert "labelValue" for each entry.
             for v in labeled_images.values():
@@ -41,13 +41,15 @@ class VsNetImageLabeler:
                     l['labelValue'] = label_value_dict[l['label']]
 
             self.labeled_images = labeled_images
+            self.str_labels = available_labels
 
     def get_labeled_paths(self, base_path):
         return [os.path.join(base_path, pth) for pth in self.labeled_images]
 
     def get_labels_as_tensor(self, hq, img_key, resize_factor):
-        labels = torch.zeros(hq.shape, dtype=torch.long)
-        mask = torch.zeros_like(hq)
+        _, h, w = hq.shape
+        labels = torch.zeros((1,h,w), dtype=torch.long)
+        mask = torch.zeros((1,h,w), dtype=torch.float)
         lbl_list = self.labeled_images[img_key]
         for patch_lbl in lbl_list:
             t, l, h, w = patch_lbl['patch_top'] // resize_factor, patch_lbl['patch_left'] // resize_factor, \
@@ -55,4 +57,4 @@ class VsNetImageLabeler:
             val = patch_lbl['labelValue']
             labels[:,t:t+h,l:l+w] = val
             mask[:,t:t+h,l:l+w] = 1.0
-        return labels, mask
+        return labels, mask, self.str_labels
