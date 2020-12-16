@@ -22,7 +22,6 @@ class _ActNorm(nn.Module):
         self.num_features = num_features
         self.scale = float(scale)
         self.inited = False
-        self.force_initialization = False
 
     def _check_input_dim(self, input):
         return NotImplemented
@@ -77,8 +76,6 @@ class _ActNorm(nn.Module):
         return input, logdet
 
     def forward(self, input, logdet=None, reverse=False, offset_mask=None, logs_offset=None, bias_offset=None):
-        if self.force_initialization or not self.inited:
-            self.initialize_parameters(input)
         self._check_input_dim(input)
 
         if offset_mask is not None:

@@ -34,8 +34,6 @@ class SRFlowNet(nn.Module):
         self.flowUpsamplerNet = \
             FlowUpsamplerNet((self.patch_sz, self.patch_sz, 3), hidden_channels, K,
                              flow_coupling=opt['networks']['generator']['flow']['coupling'], opt=opt)
-        self.force_act_norm_init_until = opt_get(self.opt, ['networks', 'generator', 'flow', 'act_norm_start_step'])
-        self.act_norm_always_init = False
         self.i = 0
         self.dbg_logp = 0
         self.dbg_logdet = 0
@@ -58,23 +56,6 @@ class SRFlowNet(nn.Module):
             z_size = int(self.lr_size // (2 ** (L - 3)))
             z = torch.normal(mean=0, std=heat, size=(batch_size, 3 * 8 * 8 * fac * fac, z_size, z_size))
         return z.to(device)
-
-    def update_for_step(self, step, experiments_path='.'):
-        if self.act_norm_always_init and step > self.force_act_norm_init_until:
-            set_act_norm_always_init = True
-            set_value = False
-            self.act_norm_always_init = False
-        elif not self.act_norm_always_init and step < self.force_act_norm_init_until:
-            set_act_norm_always_init = True
-            set_value = True
-            self.act_norm_always_init = True
-        else:
-            set_act_norm_always_init = False
-        if set_act_norm_always_init:
-            for m in self.modules():
-                from models.archs.srflow_orig.FlowActNorms import _ActNorm
-                if isinstance(m, _ActNorm):
-                    m.force_initialization = set_value
 
     def forward(self, gt=None, lr=None, z=None, eps_std=None, reverse=False, epses=None, reverse_with_grad=False,
                 lr_enc=None,
@@ -170,7 +151,7 @@ class SRFlowNet(nn.Module):
 
     def reverse_flow(self, lr, z, y_onehot, eps_std, epses=None, lr_enc=None, add_gt_noise=True):
         logdet = torch.zeros_like(lr[:, 0, 0, 0])
-        pixels = thops.pixels(lr) * self.flow_scale ** 2
+        pixels = thops.pixels(lr) * self.opt['scale'] ** 2
 
         if add_gt_noise:
             logdet = logdet - float(-np.log(self.quant) * pixels)
