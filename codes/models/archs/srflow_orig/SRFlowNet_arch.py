@@ -166,4 +166,4 @@ class SRFlowNet(nn.Module):
         x, logdet = self.flowUpsamplerNet(rrdbResults=lr_enc, z=z, eps_std=eps_std, reverse=True, epses=epses,
                                           logdet=logdet)
 
-        return x, logdet
+        return x, logdet, lr_enc['out']
