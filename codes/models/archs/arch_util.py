@@ -430,6 +430,44 @@ class ConvGnSilu(nn.Module):
             return x
 
 
+''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. '''
+class ConvBnRelu(nn.Module):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, weight_init_factor=1):
+        super(ConvBnRelu, self).__init__()
+        padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
+        assert kernel_size in padding_map.keys()
+        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        if norm:
+            self.bn = nn.BatchNorm2d(filters_out)
+        else:
+            self.bn = None
+        if activation:
+            self.relu = nn.ReLU()
+        else:
+            self.relu = None
+
+        # Init params.
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.relu else 'linear')
+                m.weight.data *= weight_init_factor
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn:
+            x = self.bn(x)
+        if self.relu:
+            return self.relu(x)
+        else:
+            return x
+
+
 # Simple way to chain multiple conv->act->norms together in an intuitive way.
 class MultiConvBlock(nn.Module):
     def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth, scale_init=1, norm=False, weight_init_factor=1):

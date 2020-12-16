@@ -162,6 +162,10 @@ def define_G(opt, opt_net, scale=None):
     elif which_model == 'spinenet':
         from models.archs.spinenet_arch import SpineNet
         netG = SpineNet(str(opt_net['arch']), in_channels=3, use_input_norm=opt_net['use_input_norm'])
+    elif which_model == 'spinenet_with_logits':
+        from models.archs.spinenet_arch import SpinenetWithLogits
+        netG = SpinenetWithLogits(str(opt_net['arch']), opt_net['output_to_attach'], opt_net['num_labels'],
+                        in_channels=3, use_input_norm=opt_net['use_input_norm'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG

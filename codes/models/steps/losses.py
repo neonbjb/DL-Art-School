@@ -98,8 +98,18 @@ class CrossEntropy(ConfigurableLoss):
         self.ce = nn.CrossEntropyLoss()
 
     def forward(self, _, state):
-        labels = state[self.opt['labels']]
         logits = state[self.opt['logits']]
+        labels = state[self.opt['labels']]
+        if self.opt['rescale']:
+            labels = F.interpolate(labels.type(torch.float), size=logits.shape[2:], mode="nearest").type(torch.long)
+        if 'mask' in self.opt.keys():
+            mask = state[self.opt['mask']]
+            if self.opt['rescale']:
+                mask = F.interpolate(mask, size=logits.shape[2:], mode="nearest")
+            logits = logits * mask
+        if self.opt['swap_channels']:
+            logits = logits.permute(0,2,3,1).contiguous()
+        assert labels.max()+1 <= logits.shape[-1]
         return self.ce(logits.view(-1, logits.size(-1)), labels.view(-1))
 
 

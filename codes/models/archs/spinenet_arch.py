@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.nn.init import kaiming_normal
 
 from torchvision.models.resnet import BasicBlock, Bottleneck
-from models.archs.arch_util import ConvGnSilu
+from models.archs.arch_util import ConvGnSilu, ConvBnSilu, ConvBnRelu
 
 
 def constant_init(module, val, bias=0):
@@ -333,3 +333,28 @@ class SpineNet(nn.Module):
                 output_feat[spec.level] = target_feat
 
         return tuple([self.endpoint_convs[str(level)](output_feat[level]) for level in self.output_level])
+
+
+# Attachs a simple 1x1 conv prediction head to a Spinenet.
+class SpinenetWithLogits(SpineNet):
+    def __init__(self,
+                 arch,
+                 output_to_attach,
+                 num_labels,
+                 in_channels=3,
+                 output_level=[3, 4],
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN', requires_grad=True),
+                 zero_init_residual=True,
+                 activation='relu',
+                 use_input_norm=False,
+                 double_reduce_early=True):
+        super().__init__(arch, in_channels, output_level, conv_cfg, norm_cfg, zero_init_residual, activation, use_input_norm, double_reduce_early)
+        self.output_to_attach = output_to_attach
+        self.tail = nn.Sequential(ConvBnRelu(256, 128, kernel_size=1, activation=True, norm=True, bias=False),
+                                  ConvBnRelu(128, 64, kernel_size=1, activation=True, norm=True, bias=False),
+                                  ConvBnRelu(64, num_labels, kernel_size=1, activation=False, norm=False, bias=True))
+
+    def forward(self, x):
+        fea = super().forward(x)[self.output_to_attach]
+        return self.tail(fea)
