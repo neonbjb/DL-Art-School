@@ -353,7 +353,8 @@ class SpinenetWithLogits(SpineNet):
         self.output_to_attach = output_to_attach
         self.tail = nn.Sequential(ConvBnRelu(256, 128, kernel_size=1, activation=True, norm=True, bias=False),
                                   ConvBnRelu(128, 64, kernel_size=1, activation=True, norm=True, bias=False),
-                                  ConvBnRelu(64, num_labels, kernel_size=1, activation=False, norm=False, bias=True))
+                                  ConvBnRelu(64, num_labels, kernel_size=1, activation=False, norm=False, bias=True),
+                                  nn.Softmax(dim=1))
 
     def forward(self, x):
         fea = super().forward(x)[self.output_to_attach]
