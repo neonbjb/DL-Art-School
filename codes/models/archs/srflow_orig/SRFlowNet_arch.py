@@ -28,7 +28,7 @@ class SRFlowNet(nn.Module):
         hidden_channels = opt_get(opt, ['networks', 'generator','flow', 'hidden_channels'])
         hidden_channels = hidden_channels or 64
         self.RRDB_training = opt_get(self.opt, ['networks', 'generator','train_RRDB'], default=False)
-        self.flow_scale = opt_get(self.opt, ['networks', 'generator', 'flow_scale'], default=opt['scale'])  # <!-- hack to enable RRDB to do 2x scaling while retaining the flow architecture of 4x.
+        self.flow_scale = opt_get(self.opt, ['networks', 'generator', 'flow_scale'], default=opt['scale'])
 
         self.patch_sz = opt_get(self.opt, ['networks', 'generator', 'flow', 'patch_size'], 160)
         self.flowUpsamplerNet = \
