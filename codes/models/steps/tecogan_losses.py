@@ -1,6 +1,6 @@
 from torch.cuda.amp import autocast
 
-from models.archs.stylegan.stylegan2 import gradient_penalty
+from models.archs.stylegan.stylegan2_lucidrains import gradient_penalty
 from models.steps.losses import ConfigurableLoss, GANLoss, extract_params_from_state, get_basic_criterion_for_name
 from models.flownet2.networks.resample2d_package.resample2d import Resample2d
 from models.steps.injectors import Injector

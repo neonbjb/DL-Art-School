@@ -312,7 +312,7 @@ class DiscriminatorGanLoss(ConfigurableLoss):
 
         if self.gradient_penalty:
             # Apply gradient penalty. TODO: migrate this elsewhere.
-            from models.archs.stylegan.stylegan2 import gradient_penalty
+            from models.archs.stylegan.stylegan2_lucidrains import gradient_penalty
             assert len(real) == 1   # Grad penalty doesn't currently support multi-input discriminators.
             gp = gradient_penalty(real[0], d_real)
             self.metrics.append(("gradient_penalty", gp.clone().detach()))

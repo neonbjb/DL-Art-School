@@ -6,8 +6,7 @@ import munch
 import torch
 import torchvision
 from munch import munchify
-import models.archs.stylegan.stylegan2 as stylegan2
-import models.archs.stylegan.stylegan2_unet_disc as stylegan2_unet
+import models.archs.stylegan.stylegan2_lucidrains as stylegan2
 
 import models.archs.fixup_resnet.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
@@ -227,9 +226,6 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
     elif which_model == "stylegan2_discriminator":
         attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
         disc = stylegan2.StyleGan2Discriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'], attn_layers=attn)
-        netD = stylegan2.StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
-    elif which_model == "stylegan2_unet":
-        disc = stylegan2_unet.StyleGan2UnetDiscriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'])
         netD = stylegan2.StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
     elif which_model == "rrdb_disc":
         netD = RRDBNet_arch.RRDBDiscriminator(opt_net['in_nc'], opt_net['nf'], opt_net['nb'], blocks_per_checkpoint=3)
