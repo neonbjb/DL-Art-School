@@ -1,6 +1,5 @@
 # Converts from Tensorflow Stylegan2 weights to weights used by this model.
 # Original source: https://raw.githubusercontent.com/rosinality/stylegan2-pytorch/master/convert_weight.py
-# Adapted to lucidrains' Stylegan implementation.
 #
 # Also doesn't require you to install Tensorflow 1.15 or clone the nVidia repo.
 
@@ -277,7 +276,7 @@ if __name__ == "__main__":
 
     g = g.to(device)
 
-    z = np.random.RandomState(0).randn(n_sample, 512).astype("float32")
+    z = np.random.RandomState(5).randn(n_sample, 512).astype("float32")
 
     with torch.no_grad():
         img_pt, _ = g(
