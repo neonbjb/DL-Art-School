@@ -134,7 +134,7 @@ if __name__ == '__main__':
         'corrupt_before_downsize': True,
         'labeler': {
             'type': 'patch_labels',
-            'label_file': 'F:\\4k6k\\datasets\\ns_images\\512_unsupervised\\categories.json'
+            'label_file': 'F:\\4k6k\\datasets\\ns_images\\512_unsupervised\\categories_new.json'
         }
     }
 
