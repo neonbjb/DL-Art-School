@@ -16,6 +16,8 @@ data/*
 *.pytorch
 *.zip
 *.cu
+*.pt
+*.pth
 
 # template
 
@@ -41,6 +43,7 @@ parts/
 sdist/
 var/
 wheels/
+pretrained/*
 *.egg-info/
 .installed.cfg
 *.egg
