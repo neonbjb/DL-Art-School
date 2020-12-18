@@ -15,8 +15,6 @@ def parse(opt_path, is_train=True):
         print('export CUDA_VISIBLE_DEVICES=' + gpu_list)
 
     opt['is_train'] = is_train
-    if opt['distortion'] == 'sr' or opt['distortion'] == 'downsample':
-        scale = opt['scale']
 
     # datasets
     if 'datasets' in opt.keys():

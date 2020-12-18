@@ -2,7 +2,6 @@
 name: train_div2k_srflow
 use_tb_logger: true
 model: extensibletrainer
-distortion: sr
 scale: 4
 gpu_ids: [0]
 fp16: false
@@ -17,12 +16,10 @@ datasets:
     name: div2k
     mode: single_image_extensible
     paths: /content/div2k   # <-- Put your path here.
-    target_size: 160        # <-- SRFlow trains better with factors of 160 for some reason.
+    target_size: 160
     force_multiple: 1
     scale: 4
-    eval: False
     num_corrupts_per_image: 0
-    strict: false
 
 networks:
   generator:

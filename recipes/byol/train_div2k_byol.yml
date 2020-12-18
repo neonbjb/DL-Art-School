@@ -2,7 +2,6 @@
 name: train_div2k_byol
 use_tb_logger: true
 model: extensibletrainer
-distortion: sr
 scale: 1
 gpu_ids: [0]
 fp16: false
