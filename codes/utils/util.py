@@ -45,7 +45,10 @@ def OrderedYaml():
 
 # Conditionally uses torch's checkpoint functionality if it is enabled in the opt file.
 def checkpoint(fn, *args):
-    enabled = loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in loaded_options.keys() else True
+    if loaded_options is None:
+        enabled = False
+    else:
+        enabled = loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in loaded_options.keys() else True
     if enabled:
         return torch.utils.checkpoint.checkpoint(fn, *args)
     else:
