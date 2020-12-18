@@ -8,7 +8,7 @@ from random import random
 
 import torch
 import torch.nn.functional as F
-import models.steps.losses as L
+import trainer.losses as L
 import numpy as np
 
 from kornia.filters import filter2D

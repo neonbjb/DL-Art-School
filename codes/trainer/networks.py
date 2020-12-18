@@ -125,6 +125,9 @@ def define_G(opt, opt_net, scale=None):
         from models.spinenet_arch import SpinenetWithLogits
         netG = SpinenetWithLogits(str(opt_net['arch']), opt_net['output_to_attach'], opt_net['num_labels'],
                         in_channels=3, use_input_norm=opt_net['use_input_norm'])
+    elif which_model == 'glean':
+        from models.glean.glean import GleanGenerator
+        netG = GleanGenerator(opt_net['nf'], opt_net['pretrained_stylegan'])
     else:
         raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
     return netG
