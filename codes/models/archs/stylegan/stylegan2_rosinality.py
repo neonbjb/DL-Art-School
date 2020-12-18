@@ -33,7 +33,7 @@ def fused_leaky_relu(input, bias=None, negative_slope=0.2, scale=2 ** 0.5):
         rest_dim = [1] * (input.ndim - bias.ndim - 1)
         return (
             F.leaky_relu(
-                input + bias.view(1, bias.shape[0], *rest_dim), negative_slope=0.2
+                input + bias.view(1, bias.shape[0], *rest_dim), negative_slope=negative_slope
             )
             * scale
         )
