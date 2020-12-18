@@ -1,3 +1,7 @@
+# Note this is an attempt to conform the lucidrains stylegan implementation to the official reference spec so that
+# I could use pretrained weights from NVIDIA. It is not currently successful, but that may be due to the weight
+# converter and not the code changes here. Use at your own risk.
+
 import math
 import multiprocessing
 from contextlib import contextmanager, ExitStack

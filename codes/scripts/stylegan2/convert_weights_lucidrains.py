@@ -4,6 +4,12 @@
 #
 # Also doesn't require you to install Tensorflow 1.15 or clone the nVidia repo.
 
+# THIS DOES NOT CURRENTLY WORK.
+# It does transfer all weights from the stylegan model to the lucidrains one, but does not produce correct results.
+# The rosinality script this was stolen from has some "odd" intracacies that may be at cause for this: for example
+# weight "flipping" in the conv layers which I do not understand. It may also be because I botched some of the mods
+# required to make the lucidrains implementation conformant. I'll (maybe) get back to this some day.
+
 import argparse
 import os
 import sys
