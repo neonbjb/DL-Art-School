@@ -1,14 +1,14 @@
 import torch
 from torch import nn
-from switched_conv.switched_conv import BareConvSwitch, compute_attention_specificity, AttentionNorm
+from models.switched_conv.switched_conv import BareConvSwitch, compute_attention_specificity, AttentionNorm
 import torch.nn.functional as F
 import functools
 from collections import OrderedDict
-from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock, \
+from models.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock, \
     SiLU, UpconvBlock, ReferenceJoinBlock
-from switched_conv.switched_conv_util import save_attention_to_image_rgb
+from models.switched_conv.switched_conv_util import save_attention_to_image_rgb
 import os
-from models.archs.spinenet_arch import SpineNet
+from models.spinenet_arch import SpineNet
 import torchvision
 from utils.util import checkpoint
 

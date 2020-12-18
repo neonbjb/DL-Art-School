@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.nn.init import kaiming_normal
 
 from torchvision.models.resnet import BasicBlock, Bottleneck
-from models.archs.arch_util import ConvGnSilu, ConvBnSilu, ConvBnRelu
+from models.arch_util import ConvGnSilu, ConvBnSilu, ConvBnRelu
 
 
 def constant_init(module, val, bias=0):

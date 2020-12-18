@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from data.byol_attachment import reconstructed_shared_regions
-from models.archs.byol.byol_model_wrapper import singleton, EMA, get_module_device, set_requires_grad, \
+from models.byol.byol_model_wrapper import singleton, EMA, get_module_device, set_requires_grad, \
     update_moving_average
 from utils.util import checkpoint
 

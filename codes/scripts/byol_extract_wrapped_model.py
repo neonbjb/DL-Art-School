@@ -1,6 +1,6 @@
 import torch
 
-from models.archs.spinenet_arch import SpineNet
+from models.spinenet_arch import SpineNet
 
 if __name__ == '__main__':
     pretrained_path = '../../experiments/train_sbyol_512unsupervised_restart/models/48000_generator.pth'

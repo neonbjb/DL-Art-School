@@ -5,7 +5,7 @@ import torch.nn as nn
 import torchvision
 
 from utils.util import sequential_checkpoint
-from models.archs.arch_util import ConvGnSilu, make_layer
+from models.arch_util import ConvGnSilu, make_layer
 
 
 class TecoResblock(nn.Module):

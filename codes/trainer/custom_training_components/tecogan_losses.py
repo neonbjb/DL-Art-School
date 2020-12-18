@@ -1,8 +1,8 @@
 from torch.cuda.amp import autocast
 
-from models.archs.stylegan.stylegan2_lucidrains import gradient_penalty
+from models.stylegan.stylegan2_lucidrains import gradient_penalty
 from trainer.losses import ConfigurableLoss, GANLoss, extract_params_from_state, get_basic_criterion_for_name
-from models.archs.flownet2.networks import Resample2d
+from models.flownet2.networks import Resample2d
 from trainer.injectors import Injector
 import torch
 import torch.nn.functional as F

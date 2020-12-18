@@ -1,7 +1,7 @@
 import torch
 from torch import nn as nn
 
-import models.archs.srflow_orig.Permutations
+import models.srflow.Permutations
 
 
 def getConditional(rrdbResults, position):
@@ -44,17 +44,17 @@ class FlowStep(nn.Module):
         self.acOpt = acOpt
 
         # 1. actnorm
-        self.actnorm = models.archs.srflow_orig.FlowActNorms.ActNorm2d(in_channels, actnorm_scale)
+        self.actnorm = models.srflow.FlowActNorms.ActNorm2d(in_channels, actnorm_scale)
 
         # 2. permute
         if flow_permutation == "invconv":
-            self.invconv = models.archs.srflow_orig.Permutations.InvertibleConv1x1(
+            self.invconv = models.srflow.Permutations.InvertibleConv1x1(
                 in_channels, LU_decomposed=LU_decomposed)
 
         # 3. coupling
         if flow_coupling == "CondAffineSeparatedAndCond":
-            self.affine = models.archs.srflow_orig.FlowAffineCouplingsAblation.CondAffineSeparatedAndCond(in_channels=in_channels,
-                                                                                                opt=opt)
+            self.affine = models.srflow.FlowAffineCouplingsAblation.CondAffineSeparatedAndCond(in_channels=in_channels,
+                                                                                               opt=opt)
         elif flow_coupling == "noCoupling":
             pass
         else:

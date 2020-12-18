@@ -8,9 +8,9 @@ import torch.nn.functional as F
 import functools
 from collections import OrderedDict
 
-from models.archs.SwitchedResidualGenerator_arch import HalvingProcessingBlock, ConfigurableSwitchComputer
-from models.archs.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, MultiConvBlock
-from switched_conv.switched_conv import BareConvSwitch, AttentionNorm
+from models.SwitchedResidualGenerator_arch import HalvingProcessingBlock, ConfigurableSwitchComputer
+from models.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, MultiConvBlock
+from models.switched_conv.switched_conv import BareConvSwitch, AttentionNorm
 from utils.util import checkpoint
 
 

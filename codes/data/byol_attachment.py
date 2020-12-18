@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from data import create_dataset
-from models.archs.arch_util import PixelUnshuffle
+from models.arch_util import PixelUnshuffle
 from utils.util import opt_get
 
 

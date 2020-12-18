@@ -13,7 +13,7 @@ import torch
 import numpy as np
 from torchvision import utils
 
-from models.archs.stylegan.stylegan2_rosinality import Generator, Discriminator
+from models.stylegan.stylegan2_rosinality import Generator, Discriminator
 
 
 # Converts from the TF state_dict input provided into the vars originally expected from the rosinality converter.

@@ -1,8 +1,8 @@
 import torch
 from torch import nn as nn
 
-from models.srflow_orig import thops
-from models.archs.srflow_orig.flow import Conv2dZeros, GaussianDiag
+from models.srflow import thops
+from models.srflow.flow import Conv2dZeros, GaussianDiag
 from utils.util import opt_get
 
 

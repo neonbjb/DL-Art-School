@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from models.archs.srflow_orig.FlowActNorms import ActNorm2d
+from models.srflow.FlowActNorms import ActNorm2d
 from . import thops
 
 

@@ -19,7 +19,7 @@ def create_injector(opt_inject, env):
         from trainer.custom_training_components import create_stereoscopic_injector
         return create_stereoscopic_injector(opt_inject, env)
     elif 'igpt' in type:
-        from models.archs.transformers.igpt import gpt2
+        from models.transformers.igpt import gpt2
         return gpt2.create_injector(opt_inject, env)
     elif type == 'generator':
         return ImageGeneratorInjector(opt_inject, env)
@@ -372,7 +372,7 @@ class MultiFrameCombiner(Injector):
         self.in_hq_key = opt['in_hq']
         self.out_lq_key = opt['out']
         self.out_hq_key = opt['out_hq']
-        from models.archs.flownet2.networks import Resample2d
+        from models.flownet2.networks import Resample2d
         self.resampler = Resample2d()
 
     def combine(self, state):

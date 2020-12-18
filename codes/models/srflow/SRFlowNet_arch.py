@@ -4,10 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from models.archs.srflow_orig.RRDBNet_arch import RRDBNet
-from models.archs.srflow_orig.FlowUpsamplerNet import FlowUpsamplerNet
-import models.srflow_orig.thops as thops
-import models.archs.srflow_orig.flow as flow
+from models.srflow.RRDBNet_arch import RRDBNet
+from models.srflow.FlowUpsamplerNet import FlowUpsamplerNet
+import models.srflow.thops as thops
+import models.srflow.flow as flow
 from utils.util import opt_get
 
 

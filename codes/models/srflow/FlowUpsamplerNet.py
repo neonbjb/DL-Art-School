@@ -2,12 +2,12 @@ import numpy as np
 import torch
 from torch import nn as nn
 
-import models.archs.srflow_orig.Split
-from models.archs.srflow_orig import flow
-from models.srflow_orig import thops
-from models.archs.srflow_orig.Split import Split2d
-from models.archs.srflow_orig.glow_arch import f_conv2d_bias
-from models.archs.srflow_orig.FlowStep import FlowStep
+import models.srflow.Split
+from models.srflow import flow
+from models.srflow import thops
+from models.srflow.Split import Split2d
+from models.srflow.glow_arch import f_conv2d_bias
+from models.srflow.FlowStep import FlowStep
 from utils.util import opt_get, checkpoint
 
 
@@ -146,8 +146,8 @@ class FlowUpsamplerNet(nn.Module):
             t = opt_get(opt, ['networks', 'generator','flow', 'split', 'type'], 'Split2d')
 
             if t == 'Split2d':
-                split = models.archs.srflow_orig.Split.Split2d(num_channels=self.C, logs_eps=logs_eps, position=position,
-                                                     cond_channels=cond_channels, consume_ratio=consume_ratio, opt=opt)
+                split = models.srflow.Split.Split2d(num_channels=self.C, logs_eps=logs_eps, position=position,
+                                                    cond_channels=cond_channels, consume_ratio=consume_ratio, opt=opt)
             self.layers.append(split)
             self.output_shapes.append([-1, split.num_channels_pass, H, W])
             self.C = split.num_channels_pass

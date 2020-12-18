@@ -6,16 +6,16 @@ import munch
 import torch
 import torchvision
 from munch import munchify
-import models.archs.stylegan.stylegan2_lucidrains as stylegan2
+import models.stylegan.stylegan2_lucidrains as stylegan2
 
-import models.archs.fixup_resnet.DiscriminatorResnet_arch as DiscriminatorResnet_arch
-import models.archs.RRDBNet_arch as RRDBNet_arch
-import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
-import models.archs.discriminator_vgg_arch as SRGAN_arch
-import models.archs.feature_arch as feature_arch
-from models.archs import srg2_classic
-from models.archs.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
-from models.archs.tecogan.teco_resgen import TecoGen
+import models.fixup_resnet.DiscriminatorResnet_arch as DiscriminatorResnet_arch
+import models.RRDBNet_arch as RRDBNet_arch
+import models.SwitchedResidualGenerator_arch as SwitchedGen_arch
+import models.discriminator_vgg_arch as SRGAN_arch
+import models.feature_arch as feature_arch
+from models import srg2_classic
+from models.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
+from models.tecogan.teco_resgen import TecoGen
 from utils.util import opt_get
 
 logger = logging.getLogger('base')
@@ -30,7 +30,7 @@ def define_G(opt, opt_net, scale=None):
         if which_model == 'RRDBNetBypass':
             block = RRDBNet_arch.RRDBWithBypass
         elif which_model == 'RRDBNetLambda':
-            from models.archs.lambda_rrdb import LambdaRRDB
+            from models.lambda_rrdb import LambdaRRDB
             block = LambdaRRDB
         else:
             block = RRDBNet_arch.RRDB
@@ -62,7 +62,7 @@ def define_G(opt, opt_net, scale=None):
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
     elif which_model == "flownet2":
-        from models.archs.flownet2 import FlowNet2
+        from models.flownet2 import FlowNet2
         ld = 'load_path' in opt_net.keys()
         args = munch.Munch({'fp16': False, 'rgb_max': 1.0, 'checkpoint': not ld})
         netG = FlowNet2(args)
@@ -85,12 +85,12 @@ def define_G(opt, opt_net, scale=None):
         netG = stylegan2.StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
                                             style_depth=opt_net['style_depth'], structure_input=is_structured,
                                             attn_layers=attn)
-    elif which_model == 'srflow_orig':
-        from models.archs.srflow_orig import SRFlowNet_arch
+    elif which_model == 'srflow':
+        from models.srflow import SRFlowNet_arch
         netG = SRFlowNet_arch.SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
                                      K=opt_net['K'], opt=opt)
     elif which_model == 'rrdb_latent_wrapper':
-        from models.archs.srflow_orig.RRDBNet_arch import RRDBLatentWrapper
+        from models.srflow.RRDBNet_arch import RRDBLatentWrapper
         netG = RRDBLatentWrapper(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                                   nf=opt_net['nf'], nb=opt_net['nb'], with_bypass=opt_net['with_bypass'],
                                  blocks=opt_net['blocks_for_latent'], scale=opt_net['scale'], pretrain_rrdb_path=opt_net['pretrain_path'])
@@ -100,29 +100,29 @@ def define_G(opt, opt_net, scale=None):
                                     mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], scale=opt_net['scale'],
                                     headless=True, output_mode=output_mode)
     elif which_model == 'rrdb_srflow':
-        from models.archs.srflow_orig.RRDBNet_arch import RRDBNet
+        from models.srflow.RRDBNet_arch import RRDBNet
         netG = RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
                        nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
                        initial_conv_stride=opt_net['initial_stride'])
     elif which_model == 'igpt2':
-        from models.archs.transformers.igpt.gpt2 import iGPT2
+        from models.transformers.igpt.gpt2 import iGPT2
         netG = iGPT2(opt_net['embed_dim'], opt_net['num_heads'], opt_net['num_layers'], opt_net['num_pixels'] ** 2, opt_net['num_vocab'], centroids_file=opt_net['centroids_file'])
     elif which_model == 'byol':
-        from models.archs.byol.byol_model_wrapper import BYOL
+        from models.byol.byol_model_wrapper import BYOL
         subnet = define_G(opt, opt_net['subnet'])
         netG = BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
                     structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False))
     elif which_model == 'structural_byol':
-        from models.archs.byol.byol_structural import StructuralBYOL
+        from models.byol.byol_structural import StructuralBYOL
         subnet = define_G(opt, opt_net['subnet'])
         netG = StructuralBYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
                               pretrained_state_dict=opt_get(opt_net, ["pretrained_path"]),
                               freeze_until=opt_get(opt_net, ['freeze_until'], 0))
     elif which_model == 'spinenet':
-        from models.archs.spinenet_arch import SpineNet
+        from models.spinenet_arch import SpineNet
         netG = SpineNet(str(opt_net['arch']), in_channels=3, use_input_norm=opt_net['use_input_norm'])
     elif which_model == 'spinenet_with_logits':
-        from models.archs.spinenet_arch import SpinenetWithLogits
+        from models.spinenet_arch import SpinenetWithLogits
         netG = SpinenetWithLogits(str(opt_net['arch']), opt_net['output_to_attach'], opt_net['num_labels'],
                         in_channels=3, use_input_norm=opt_net['use_input_norm'])
     else:

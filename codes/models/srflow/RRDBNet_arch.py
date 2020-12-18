@@ -2,8 +2,8 @@ import functools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import models.archs.srflow_orig.module_util as mutil
-from models.archs.arch_util import default_init_weights, ConvGnSilu, ConvGnLelu
+import models.srflow.module_util as mutil
+from models.arch_util import default_init_weights, ConvGnSilu, ConvGnLelu
 from utils.util import opt_get
 
 

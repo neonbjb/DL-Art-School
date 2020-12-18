@@ -1,4 +1,4 @@
-import models.archs.stylegan.stylegan2_lucidrains as stylegan2
+import models.stylegan.stylegan2_lucidrains as stylegan2
 
 
 def create_stylegan2_loss(opt_loss, env):

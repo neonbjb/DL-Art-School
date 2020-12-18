@@ -9,7 +9,7 @@ from torchvision import transforms
 import torch.nn as nn
 from pathlib import Path
 
-import models.archs.stylegan.stylegan2_lucidrains as sg2
+import models.stylegan.stylegan2_lucidrains as sg2
 
 
 def convert_transparent_to_rgb(image):

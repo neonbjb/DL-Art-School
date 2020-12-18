@@ -13,7 +13,7 @@ import numpy as np
 
 import utils
 from data.image_folder_dataset import ImageFolderDataset
-from models.archs.spinenet_arch import SpineNet
+from models.spinenet_arch import SpineNet
 
 
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved

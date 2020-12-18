@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-from models.archs.RRDBNet_arch import RRDB, RRDBWithBypass
-from models.archs.arch_util import ConvBnLelu, ConvGnLelu, ExpansionBlock, ConvGnSilu, ResidualBlockGN
+from models.RRDBNet_arch import RRDB, RRDBWithBypass
+from models.arch_util import ConvBnLelu, ConvGnLelu, ExpansionBlock, ConvGnSilu, ResidualBlockGN
 import torch.nn.functional as F
-from models.archs.SwitchedResidualGenerator_arch import gather_2d
+from models.SwitchedResidualGenerator_arch import gather_2d
 from utils.util import checkpoint
 
 

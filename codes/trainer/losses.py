@@ -14,7 +14,7 @@ def create_loss(opt_loss, env):
         from trainer.custom_training_components import create_teco_loss
         return create_teco_loss(opt_loss, env)
     elif 'stylegan2_' in type:
-        from models.archs.stylegan import create_stylegan2_loss
+        from models.stylegan import create_stylegan2_loss
         return create_stylegan2_loss(opt_loss, env)
     elif type == 'crossentropy':
         return CrossEntropy(opt_loss, env)
@@ -311,7 +311,7 @@ class DiscriminatorGanLoss(ConfigurableLoss):
 
         if self.gradient_penalty:
             # Apply gradient penalty. TODO: migrate this elsewhere.
-            from models.archs.stylegan.stylegan2_lucidrains import gradient_penalty
+            from models.stylegan.stylegan2_lucidrains import gradient_penalty
             assert len(real) == 1   # Grad penalty doesn't currently support multi-input discriminators.
             gp = gradient_penalty(real[0], d_real)
             self.metrics.append(("gradient_penalty", gp.clone().detach()))

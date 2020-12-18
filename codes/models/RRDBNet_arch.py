@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
-from models.archs.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
+from models.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
 from utils.util import checkpoint, sequential_checkpoint
 
 
