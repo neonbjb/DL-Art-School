@@ -6,9 +6,8 @@ import torchvision
 from torch.cuda.amp import autocast
 
 from data.multiscale_dataset import build_multiscale_patch_index_map
-from models.steps.injectors import Injector
-from models.steps.losses import extract_params_from_state
-from models.steps.tecogan_losses import extract_inputs_index
+from models.injectors import Injector
+from models.losses import extract_params_from_state
 import os.path as osp
 
 

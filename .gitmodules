@@ -8,3 +8,6 @@
 	path = codes/models/flownet2
 	url = https://github.com/neonbjb/flownet2-pytorch.git
 	branch = master
+[submodule "codes/models/archs/flownet2"]
+	path = codes/models/archs/flownet2
+	url = https://github.com/neonbjb/flownet2-pytorch.git

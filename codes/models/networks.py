@@ -10,16 +10,12 @@ import models.archs.stylegan.stylegan2_lucidrains as stylegan2
 
 import models.archs.fixup_resnet.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 import models.archs.RRDBNet_arch as RRDBNet_arch
-import models.archs.SPSR_arch as spsr
-import models.archs.SRResNet_arch as SRResNet_arch
 import models.archs.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.archs.discriminator_vgg_arch as SRGAN_arch
 import models.archs.feature_arch as feature_arch
-import models.archs.rcan as rcan
 from models.archs import srg2_classic
-from models.archs.biggan.biggan_discriminator import BigGanDiscriminator
 from models.archs.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
-from models.archs.teco_resgen import TecoGen
+from models.archs.tecogan.teco_resgen import TecoGen
 from utils.util import opt_get
 
 logger = logging.getLogger('base')
@@ -30,11 +26,7 @@ def define_G(opt, opt_net, scale=None):
         scale = opt['scale']
     which_model = opt_net['which_model_G']
 
-    # image restoration
-    if which_model == 'MSRResNet':
-        netG = SRResNet_arch.MSRResNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                       nf=opt_net['nf'], nb=opt_net['nb'], upscale=opt_net['scale'])
-    elif 'RRDBNet' in which_model:
+    if 'RRDBNet' in which_model:
         if which_model == 'RRDBNetBypass':
             block = RRDBNet_arch.RRDBWithBypass
         elif which_model == 'RRDBNetLambda':
@@ -50,24 +42,6 @@ def define_G(opt, opt_net, scale=None):
                                     mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
                                     output_mode=output_mode, body_block=block, scale=opt_net['scale'], growth_channels=gc,
                                     initial_stride=initial_stride)
-    elif which_model == "multires_rrdb":
-        from models.archs.multi_res_rrdb import MultiResRRDBNet
-        netG = MultiResRRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                               mid_channels=opt_net['nf'], l1_blocks=opt_net['l1'],
-                               l2_blocks=opt_net['l2'], l3_blocks=opt_net['l3'],
-                               growth_channels=opt_net['gc'], scale=opt_net['scale'])
-    elif which_model == "twostep_rrdb":
-        from models.archs.multi_res_rrdb import PixelShufflingSteppedResRRDBNet
-        netG = PixelShufflingSteppedResRRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                               mid_channels=opt_net['nf'], l1_blocks=opt_net['l1'],
-                               l2_blocks=opt_net['l2'],
-                               growth_channels=opt_net['gc'], scale=opt_net['scale'])
-    elif which_model == 'rcan':
-        #args: n_resgroups, n_resblocks, res_scale, reduction, scale, n_feats
-        opt_net['rgb_range'] = 255
-        opt_net['n_colors'] = 3
-        args_obj = munchify(opt_net)
-        netG = rcan.RCAN(args_obj)
     elif which_model == "ConfigurableSwitchedResidualGenerator2":
         netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
                                                                       switch_reductions=opt_net['switch_reductions'],
@@ -87,22 +61,8 @@ def define_G(opt, opt_net, scale=None):
                                                                       initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
                                                                       heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
                                                                       upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
-    elif which_model == 'spsr':
-        netG = spsr.SPSRNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
-                            nb=opt_net['nb'], upscale=opt_net['scale'])
-    elif which_model == 'spsr_net_improved':
-        netG = spsr.SPSRNetSimplified(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'], nf=opt_net['nf'],
-                            nb=opt_net['nb'], upscale=opt_net['scale'])
-    elif which_model == "spsr_switched":
-        netG = spsr.SwitchedSpsr(in_nc=3, nf=opt_net['nf'], upscale=opt_net['scale'], init_temperature=opt_net['temperature'])
-    elif which_model == "spsr7":
-        recurrent = opt_net['recurrent'] if 'recurrent' in opt_net.keys() else False
-        xforms = opt_net['num_transforms'] if 'num_transforms' in opt_net.keys() else 8
-        netG = spsr.Spsr7(in_nc=3, out_nc=3, nf=opt_net['nf'], xforms=xforms, upscale=opt_net['scale'],
-                                 multiplexer_reductions=opt_net['multiplexer_reductions'] if 'multiplexer_reductions' in opt_net.keys() else 3,
-                                 init_temperature=opt_net['temperature'] if 'temperature' in opt_net.keys() else 10, recurrent=recurrent)
     elif which_model == "flownet2":
-        from models.flownet2.models import FlowNet2
+        from models.archs.flownet2 import FlowNet2
         ld = 'load_path' in opt_net.keys()
         args = munch.Munch({'fp16': False, 'rgb_max': 1.0, 'checkpoint': not ld})
         netG = FlowNet2(args)
@@ -148,12 +108,12 @@ def define_G(opt, opt_net, scale=None):
         from models.archs.transformers.igpt.gpt2 import iGPT2
         netG = iGPT2(opt_net['embed_dim'], opt_net['num_heads'], opt_net['num_layers'], opt_net['num_pixels'] ** 2, opt_net['num_vocab'], centroids_file=opt_net['centroids_file'])
     elif which_model == 'byol':
-        from models.byol.byol_model_wrapper import BYOL
+        from models.archs.byol.byol_model_wrapper import BYOL
         subnet = define_G(opt, opt_net['subnet'])
         netG = BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
                     structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False))
     elif which_model == 'structural_byol':
-        from models.byol.byol_structural import StructuralBYOL
+        from models.archs.byol.byol_structural import StructuralBYOL
         subnet = define_G(opt, opt_net['subnet'])
         netG = StructuralBYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
                               pretrained_state_dict=opt_get(opt_net, ["pretrained_path"]),
@@ -206,8 +166,6 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
         #state_dict = torch.hub.load_state_dict_from_url('https://download.pytorch.org/models/resnext50_32x4d-7cdf4587.pth', progress=True)
         #netD.load_state_dict(state_dict, strict=False)
         netD.fc = torch.nn.Linear(512 * 4, 1)
-    elif which_model == 'biggan_resnet':
-        netD = BigGanDiscriminator(D_activation=torch.nn.LeakyReLU(negative_slope=.2))
     elif which_model == 'discriminator_pix':
         netD = SRGAN_arch.Discriminator_VGG_PixLoss(in_nc=opt_net['in_nc'], nf=opt_net['nf'])
     elif which_model == "discriminator_unet":

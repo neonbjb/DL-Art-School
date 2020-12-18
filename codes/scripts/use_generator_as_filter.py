@@ -8,14 +8,11 @@ import os
 import utils
 from models.ExtensibleTrainer import ExtensibleTrainer
 from models.networks import define_F
-from models.steps.losses import FeatureLoss
 from utils import options as option
 import utils.util as util
 from data import create_dataset, create_dataloader
 from tqdm import tqdm
 import torch
-import torchvision
-
 
 if __name__ == "__main__":
     bin_path = "f:\\binned"

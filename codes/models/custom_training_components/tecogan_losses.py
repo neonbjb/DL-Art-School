@@ -1,15 +1,15 @@
 from torch.cuda.amp import autocast
 
 from models.archs.stylegan.stylegan2_lucidrains import gradient_penalty
-from models.steps.losses import ConfigurableLoss, GANLoss, extract_params_from_state, get_basic_criterion_for_name
-from models.flownet2.networks.resample2d_package.resample2d import Resample2d
-from models.steps.injectors import Injector
+from models.losses import ConfigurableLoss, GANLoss, extract_params_from_state, get_basic_criterion_for_name
+from models.archs.flownet2.networks import Resample2d
+from models.injectors import Injector
 import torch
 import torch.nn.functional as F
 import os
 import os.path as osp
 import torchvision
-import torch.distributed as dist
+
 
 def create_teco_loss(opt, env):
     type = opt['type']

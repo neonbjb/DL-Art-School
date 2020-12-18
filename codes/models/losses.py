@@ -6,13 +6,12 @@ from models.loss import GANLoss
 import random
 import functools
 import torch.nn.functional as F
-import numpy as np
 
 
 def create_loss(opt_loss, env):
     type = opt_loss['type']
     if 'teco_' in type:
-        from models.steps.tecogan_losses import create_teco_loss
+        from models.custom_training_components.tecogan_losses import create_teco_loss
         return create_teco_loss(opt_loss, env)
     elif 'stylegan2_' in type:
         from models.archs.stylegan import create_stylegan2_loss

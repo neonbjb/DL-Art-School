@@ -3,22 +3,20 @@ import random
 import torch.nn
 from torch.cuda.amp import autocast
 
-from models.archs.SPSR_arch import ImageGradientNoPadding
-from models.archs.pytorch_ssim import SSIM
 from utils.weight_scheduler import get_scheduler_for_opt
-from models.steps.losses import extract_params_from_state
+from models.losses import extract_params_from_state
 
 # Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
 def create_injector(opt_inject, env):
     type = opt_inject['type']
     if 'teco_' in type:
-        from models.steps.tecogan_losses import create_teco_injector
+        from models.custom_training_components import create_teco_injector
         return create_teco_injector(opt_inject, env)
     elif 'progressive_' in type:
-        from models.steps.progressive_zoom import create_progressive_zoom_injector
+        from models.custom_training_components import create_progressive_zoom_injector
         return create_progressive_zoom_injector(opt_inject, env)
     elif 'stereoscopic_' in type:
-        from models.steps.stereoscopic import create_stereoscopic_injector
+        from models.custom_training_components import create_stereoscopic_injector
         return create_stereoscopic_injector(opt_inject, env)
     elif 'igpt' in type:
         from models.archs.transformers.igpt import gpt2
@@ -29,8 +27,6 @@ def create_injector(opt_inject, env):
         return DiscriminatorInjector(opt_inject, env)
     elif type == 'scheduled_scalar':
         return ScheduledScalarInjector(opt_inject, env)
-    elif type == 'img_grad':
-        return ImageGradientInjector(opt_inject, env)
     elif type == 'add_noise':
         return AddNoiseInjector(opt_inject, env)
     elif type == 'greyscale':
@@ -47,14 +43,10 @@ def create_injector(opt_inject, env):
         return ForEachInjector(opt_inject, env)
     elif type == 'constant':
         return ConstantInjector(opt_inject, env)
-    elif type == 'fft':
-        return ImageFftInjector(opt_inject, env)
     elif type == 'extract_indices':
         return IndicesExtractor(opt_inject, env)
     elif type == 'random_shift':
         return RandomShiftInjector(opt_inject, env)
-    elif type == 'psnr':
-        return PsnrInjector(opt_inject, env)
     elif type == 'batch_rotate':
         return BatchRotateInjector(opt_inject, env)
     elif type == 'sr_diffs':
@@ -132,16 +124,6 @@ class DiscriminatorInjector(Injector):
             new_state[self.output] = results
 
         return new_state
-
-
-# Creates an image gradient from [in] and injects it into [out]
-class ImageGradientInjector(Injector):
-    def __init__(self, opt, env):
-        super(ImageGradientInjector, self).__init__(opt, env)
-        self.img_grad_fn = ImageGradientNoPadding().to(env['device'])
-
-    def forward(self, state):
-        return {self.opt['out']: self.img_grad_fn(state[self.opt['in']])}
 
 
 # Injects a scalar that is modulated with a specified schedule. Useful for increasing or decreasing the influence
@@ -320,37 +302,6 @@ class ConstantInjector(Injector):
         return { self.opt['out']: out }
 
 
-class ImageFftInjector(Injector):
-    def __init__(self, opt, env):
-        super(ImageFftInjector, self).__init__(opt, env)
-        self.is_forward = opt['forward']  # Whether to compute a forward FFT or backward.
-        self.eps = 1e-100
-
-    def forward(self, state):
-        if self.forward:
-            fftim = torch.rfft(state[self.input], signal_ndim=2, normalized=True)
-            b, f, h, w, c = fftim.shape
-            fftim = fftim.permute(0,1,4,2,3).reshape(b,-1,h,w)
-            # Normalize across spatial dimension
-            mean = torch.mean(fftim, dim=(0,1))
-            fftim = fftim - mean
-            std = torch.std(fftim, dim=(0,1))
-            fftim = (fftim + self.eps) / std
-            return {self.output: fftim,
-                    '%s_std' % (self.output,): std,
-                    '%s_mean' % (self.output,): mean}
-        else:
-            b, f, h, w = state[self.input].shape
-            # First, de-normalize the FFT.
-            mean = state['%s_mean' % (self.input,)]
-            std = state['%s_std' % (self.input,)]
-            fftim = state[self.input] * std + mean - self.eps
-            # Second, recover the FFT dimensions from the given filters.
-            fftim = fftim.reshape(b, f // 2, 2, h, w).permute(0,1,3,4,2)
-            im = torch.irfft(fftim, signal_ndim=2, normalized=True)
-            return {self.output: im}
-
-
 class IndicesExtractor(Injector):
     def __init__(self, opt, env):
         super(IndicesExtractor, self).__init__(opt, env)
@@ -372,21 +323,6 @@ class RandomShiftInjector(Injector):
     def forward(self, state):
         img = state[self.input]
         return {self.output: img}
-
-
-class PsnrInjector(Injector):
-    def __init__(self, opt, env):
-        super(PsnrInjector, self).__init__(opt, env)
-        self.ssim = SSIM(size_average=False, raw=True)
-        self.scale = opt['output_scale_divisor']
-        self.exp = opt['exponent'] if 'exponent' in opt.keys() else 1
-
-    def forward(self, state):
-        img1, img2 = state[self.input[0]], state[self.input[1]]
-        ssim = self.ssim(img1, img2)
-        areal_se = torch.nn.functional.interpolate(ssim, scale_factor=1/self.scale,
-                                                   mode="area")
-        return {self.output: areal_se}
 
 
 class BatchRotateInjector(Injector):
@@ -436,7 +372,7 @@ class MultiFrameCombiner(Injector):
         self.in_hq_key = opt['in_hq']
         self.out_lq_key = opt['out']
         self.out_hq_key = opt['out_hq']
-        from models.flownet2.networks.resample2d_package.resample2d import Resample2d
+        from models.archs.flownet2.networks import Resample2d
         self.resampler = Resample2d()
 
     def combine(self, state):

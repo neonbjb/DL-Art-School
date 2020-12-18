@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import torchvision
-from models.steps.injectors import Injector
+from models.injectors import Injector
 from utils.util import checkpoint
 
 
