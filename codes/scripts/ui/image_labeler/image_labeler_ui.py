@@ -37,7 +37,7 @@ def update_mode_label():
 # Handles the "change mode" hotkey. Changes the classification label being targeted.
 def change_mode(event):
     global mode, pending_labels
-    mode += 1
+    mode = (mode + 1) % len(labeler.str_labels)
     update_mode_label()
 
 
@@ -88,7 +88,7 @@ def next_batch():
     scale = hq.shape[-1] // res.shape[-1]
 
     # These are the confidence bounds. They apply to a post-softmax output. They are currently fixed.
-    conf_lower = .8
+    conf_lower = .4
     conf_upper = 1
     valid_res = ((res > conf_lower) * (res < conf_upper)) * 1.0  # This results in a tensor of 0's where tensors are outside of the confidence bound, 1's where inside.
 
@@ -96,8 +96,10 @@ def next_batch():
     batch_sz = hq.shape[0]
     while cur_img < batch_sz:  # Note: cur_img can (intentionally) be changed outside of this loop.
         # Build a random permutation for every image patch in the image. We will search for patches that fall within the confidence bound and yield them.
-        #permutation = torch.randperm(res.shape[-1] * res.shape[-2])
-        for p in range(res.shape[-1]*res.shape[-2]):
+        permutation = torch.randperm(res.shape[-1] * res.shape[-2])
+        for p in permutation:
+            p = p.item()
+        #for p in range(res.shape[-1]*res.shape[-2]):
             # Reconstruct a top & left coordinate.
             t = p // res.shape[-1]
             l = p % res.shape[-1]
