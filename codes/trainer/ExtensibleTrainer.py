@@ -5,12 +5,12 @@ import torch
 from torch.nn.parallel import DataParallel
 import torch.nn as nn
 
-import models.lr_scheduler as lr_scheduler
-import models.networks as networks
-from models.base_model import BaseModel
-from models.injectors import create_injector
-from models.steps import ConfigurableStep
-from models.experiments.experiments import get_experiment_for_name
+import trainer.lr_scheduler as lr_scheduler
+import trainer.networks as networks
+from trainer.base_model import BaseModel
+from trainer.injectors import create_injector
+from trainer.steps import ConfigurableStep
+from trainer.experiments.experiments import get_experiment_for_name
 import torchvision.utils as utils
 
 logger = logging.getLogger('base')

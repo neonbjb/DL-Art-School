@@ -11,7 +11,7 @@ import torchvision.transforms.functional as F
 from PIL import Image
 from tqdm import tqdm
 
-from models.ExtensibleTrainer import ExtensibleTrainer
+from trainer.ExtensibleTrainer import ExtensibleTrainer
 from utils import options as option
 import utils.util as util
 from data import create_dataloader

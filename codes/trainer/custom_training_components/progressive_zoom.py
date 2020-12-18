@@ -6,8 +6,8 @@ import torchvision
 from torch.cuda.amp import autocast
 
 from data.multiscale_dataset import build_multiscale_patch_index_map
-from models.injectors import Injector
-from models.losses import extract_params_from_state
+from trainer.injectors import Injector
+from trainer.losses import extract_params_from_state
 import os.path as osp
 
 
@@ -130,7 +130,7 @@ class ProgressiveGeneratorInjector(Injector):
             lbl = 'generator_recurrent'
         else:
             lbl = 'generator_regular'
-        base_path = osp.join(self.env['base_path'], "..", "visual_dbg", lbl, str(self.env['step']))
+        base_path = osp.join(self.env['base_path'], "../../models", "visual_dbg", lbl, str(self.env['step']))
         os.makedirs(base_path, exist_ok=True)
         ind = 1
         for i, o in zip(chain_inputs, chain_outputs):

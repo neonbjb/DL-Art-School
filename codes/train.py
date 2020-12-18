@@ -7,11 +7,11 @@ from tqdm import tqdm
 
 import torch
 from data.data_sampler import DistIterSampler
-from models.eval import create_evaluator
+from trainer.eval import create_evaluator
 
 from utils import util, options as option
 from data import create_dataloader, create_dataset
-from models.ExtensibleTrainer import ExtensibleTrainer
+from trainer.ExtensibleTrainer import ExtensibleTrainer
 from time import time
 
 def init_dist(backend, **kwargs):

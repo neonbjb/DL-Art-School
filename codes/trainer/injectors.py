@@ -4,19 +4,19 @@ import torch.nn
 from torch.cuda.amp import autocast
 
 from utils.weight_scheduler import get_scheduler_for_opt
-from models.losses import extract_params_from_state
+from trainer.losses import extract_params_from_state
 
 # Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
 def create_injector(opt_inject, env):
     type = opt_inject['type']
     if 'teco_' in type:
-        from models.custom_training_components import create_teco_injector
+        from trainer.custom_training_components import create_teco_injector
         return create_teco_injector(opt_inject, env)
     elif 'progressive_' in type:
-        from models.custom_training_components import create_progressive_zoom_injector
+        from trainer.custom_training_components import create_progressive_zoom_injector
         return create_progressive_zoom_injector(opt_inject, env)
     elif 'stereoscopic_' in type:
-        from models.custom_training_components import create_stereoscopic_injector
+        from trainer.custom_training_components import create_stereoscopic_injector
         return create_stereoscopic_injector(opt_inject, env)
     elif 'igpt' in type:
         from models.archs.transformers.igpt import gpt2

@@ -3,8 +3,8 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
-import models.networks as networks
-import models.lr_scheduler as lr_scheduler
+import trainer.networks as networks
+import trainer.lr_scheduler as lr_scheduler
 from .base_model import BaseModel
 
 logger = logging.getLogger('base')

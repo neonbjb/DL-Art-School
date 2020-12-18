@@ -3,7 +3,8 @@ import torch
 from torch import nn as nn
 
 import models.archs.srflow_orig.Split
-from models.archs.srflow_orig import flow, thops
+from models.archs.srflow_orig import flow
+from models.srflow_orig import thops
 from models.archs.srflow_orig.Split import Split2d
 from models.archs.srflow_orig.glow_arch import f_conv2d_bias
 from models.archs.srflow_orig.FlowStep import FlowStep

@@ -6,8 +6,8 @@ import argparse
 import os
 
 import utils
-from models.ExtensibleTrainer import ExtensibleTrainer
-from models.networks import define_F
+from trainer.ExtensibleTrainer import ExtensibleTrainer
+from trainer.networks import define_F
 from utils import options as option
 import utils.util as util
 from data import create_dataset, create_dataloader

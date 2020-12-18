@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast
 
-from models.loss import GANLoss
+from trainer.loss import GANLoss
 import random
 import functools
 import torch.nn.functional as F
@@ -11,7 +11,7 @@ import torch.nn.functional as F
 def create_loss(opt_loss, env):
     type = opt_loss['type']
     if 'teco_' in type:
-        from models.custom_training_components.tecogan_losses import create_teco_loss
+        from trainer.custom_training_components import create_teco_loss
         return create_teco_loss(opt_loss, env)
     elif 'stylegan2_' in type:
         from models.archs.stylegan import create_stylegan2_loss
@@ -152,9 +152,9 @@ class FeatureLoss(ConfigurableLoss):
         super(FeatureLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
-        import models.networks
-        self.netF = models.networks.define_F(which_model=opt['which_model_F'],
-                             load_path=opt['load_path'] if 'load_path' in opt.keys() else None).to(self.env['device'])
+        import trainer.networks
+        self.netF = trainer.networks.define_F(which_model=opt['which_model_F'],
+                                              load_path=opt['load_path'] if 'load_path' in opt.keys() else None).to(self.env['device'])
         if not env['opt']['dist']:
             self.netF = torch.nn.parallel.DataParallel(self.netF, device_ids=env['opt']['gpu_ids'])
 
@@ -178,9 +178,9 @@ class InterpretedFeatureLoss(ConfigurableLoss):
         super(InterpretedFeatureLoss, self).__init__(opt, env)
         self.opt = opt
         self.criterion = get_basic_criterion_for_name(opt['criterion'], env['device'])
-        import models.networks
-        self.netF_real = models.networks.define_F(which_model=opt['which_model_F']).to(self.env['device'])
-        self.netF_gen = models.networks.define_F(which_model=opt['which_model_F'], load_path=opt['load_path']).to(self.env['device'])
+        import trainer.networks
+        self.netF_real = trainer.networks.define_F(which_model=opt['which_model_F']).to(self.env['device'])
+        self.netF_gen = trainer.networks.define_F(which_model=opt['which_model_F'], load_path=opt['load_path']).to(self.env['device'])
         if not env['opt']['dist']:
             self.netF_real = torch.nn.parallel.DataParallel(self.netF_real)
             self.netF_gen = torch.nn.parallel.DataParallel(self.netF_gen)

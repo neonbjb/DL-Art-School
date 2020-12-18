@@ -1,14 +1,8 @@
-import os
-
 import torch
-import os.path as osp
-import torchvision
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import models.eval.evaluator as evaluator
-from pytorch_fid import fid_score
-
+import trainer.eval.evaluator as evaluator
 
 # Evaluate how close to true Gaussian a flow network predicts in a "normal" pass given a LQ/HQ image pair.
 from data.image_folder_dataset import ImageFolderDataset

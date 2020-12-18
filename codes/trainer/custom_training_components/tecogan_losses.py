@@ -1,9 +1,9 @@
 from torch.cuda.amp import autocast
 
 from models.archs.stylegan.stylegan2_lucidrains import gradient_penalty
-from models.losses import ConfigurableLoss, GANLoss, extract_params_from_state, get_basic_criterion_for_name
+from trainer.losses import ConfigurableLoss, GANLoss, extract_params_from_state, get_basic_criterion_for_name
 from models.archs.flownet2.networks import Resample2d
-from models.injectors import Injector
+from trainer.injectors import Injector
 import torch
 import torch.nn.functional as F
 import os
@@ -156,7 +156,7 @@ class RecurrentImageGeneratorSequenceInjector(Injector):
     def produce_teco_visual_debugs(self, gen_input, gen_recurrent, it):
         if self.env['rank'] > 0:
             return
-        base_path = osp.join(self.env['base_path'], "..", "visual_dbg", "teco_geninput", str(self.env['step']))
+        base_path = osp.join(self.env['base_path'], "../../models", "visual_dbg", "teco_geninput", str(self.env['step']))
         os.makedirs(base_path, exist_ok=True)
         torchvision.utils.save_image(gen_input.float(), osp.join(base_path, "%s_img.png" % (it,)))
         torchvision.utils.save_image(gen_recurrent.float(), osp.join(base_path, "%s_recurrent.png" % (it,)))
@@ -345,7 +345,7 @@ class TecoGanLoss(ConfigurableLoss):
     def produce_teco_visual_debugs(self, sext, lbl, it):
         if self.env['rank'] > 0:
             return
-        base_path = osp.join(self.env['base_path'], "..", "visual_dbg", "teco_sext", str(self.env['step']), lbl)
+        base_path = osp.join(self.env['base_path'], "../../models", "visual_dbg", "teco_sext", str(self.env['step']), lbl)
         os.makedirs(base_path, exist_ok=True)
         lbls = ['img_a', 'img_b', 'img_c', 'flow_a', 'flow_b', 'flow_c']
         for i in range(6):
@@ -378,7 +378,7 @@ class PingPongLoss(ConfigurableLoss):
     def produce_teco_visual_debugs(self, imglist):
         if self.env['rank'] > 0:
             return
-        base_path = osp.join(self.env['base_path'], "..", "visual_dbg", "teco_pingpong", str(self.env['step']))
+        base_path = osp.join(self.env['base_path'], "../../models", "visual_dbg", "teco_pingpong", str(self.env['step']))
         os.makedirs(base_path, exist_ok=True)
         cnt = imglist.shape[1]
         for i in range(cnt):
@@ -388,7 +388,7 @@ class PingPongLoss(ConfigurableLoss):
     def produce_teco_visual_debugs2(self, imga, imgb, i):
         if self.env['rank'] > 0:
             return
-        base_path = osp.join(self.env['base_path'], "..", "visual_dbg", "teco_pingpong", str(self.env['step']))
+        base_path = osp.join(self.env['base_path'], "../../models", "visual_dbg", "teco_pingpong", str(self.env['step']))
         os.makedirs(base_path, exist_ok=True)
         torchvision.utils.save_image(imga.float(), osp.join(base_path, "%s_a.png" % (i, )))
         torchvision.utils.save_image(imgb.float(), osp.join(base_path, "%s_b.png" % (i, )))

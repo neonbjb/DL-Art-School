@@ -2,7 +2,7 @@ import argparse
 import functools
 import torch
 from utils import options as option
-from models.networks import define_G
+from trainer.networks import define_G
 
 
 class TracedModule:

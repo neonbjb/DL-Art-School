@@ -2,7 +2,6 @@ import argparse
 import logging
 import math
 import os
-import random
 from glob import glob
 
 import torch
@@ -14,9 +13,8 @@ from tqdm import tqdm
 import utils.options as option
 
 import utils
-from data import create_dataset, create_dataloader
 from data.image_corruptor import ImageCorruptor
-from models.ExtensibleTrainer import ExtensibleTrainer
+from trainer.ExtensibleTrainer import ExtensibleTrainer
 from utils import util
 
 

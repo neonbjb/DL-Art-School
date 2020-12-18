@@ -5,7 +5,7 @@ import os.path as osp
 import torchvision
 from torch.utils.data import BatchSampler
 
-import models.eval.evaluator as evaluator
+import trainer.eval.evaluator as evaluator
 from pytorch_fid import fid_score
 
 
@@ -32,9 +32,9 @@ class SrStyleTransferEvaluator(evaluator.Evaluator):
 
     def perform_eval(self):
         embedding_generator = self.env['generators'][self.embedding_generator]
-        fid_fake_path = osp.join(self.env['base_path'], "..", "fid_fake", str(self.env["step"]))
+        fid_fake_path = osp.join(self.env['base_path'], "../../models", "fid_fake", str(self.env["step"]))
         os.makedirs(fid_fake_path, exist_ok=True)
-        fid_real_path = osp.join(self.env['base_path'], "..", "fid_real", str(self.env["step"]))
+        fid_real_path = osp.join(self.env['base_path'], "../../models", "fid_real", str(self.env["step"]))
         os.makedirs(fid_real_path, exist_ok=True)
         counter = 0
         for batch in self.sampler:

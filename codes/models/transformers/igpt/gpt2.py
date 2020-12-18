@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from models.injectors import Injector
+from trainer.injectors import Injector
 from utils.util import checkpoint
 
 

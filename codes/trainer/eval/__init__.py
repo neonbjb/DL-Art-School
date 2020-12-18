@@ -1,6 +1,6 @@
-from models.eval.flow_gaussian_nll import FlowGaussianNll
-from models.eval.sr_style import SrStyleTransferEvaluator
-from models.eval.style import StyleTransferEvaluator
+from trainer.eval.flow_gaussian_nll import FlowGaussianNll
+from trainer.eval.sr_style import SrStyleTransferEvaluator
+from trainer.eval import StyleTransferEvaluator
 
 
 def create_evaluator(model, opt_eval, env):

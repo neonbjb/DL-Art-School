@@ -1,7 +1,7 @@
 import torch
 from torch import nn as nn
 
-from models.archs.srflow_orig import thops
+from models.srflow_orig import thops
 
 
 class _ActNorm(nn.Module):

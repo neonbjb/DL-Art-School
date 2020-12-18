@@ -1,9 +1,7 @@
 import os.path as osp
 import logging
-import shutil
 import time
 import argparse
-from collections import OrderedDict
 
 import os
 
@@ -12,15 +10,10 @@ import torchvision
 import utils
 import utils.options as option
 import utils.util as util
-from data.util import bgr2ycbcr
-import models.archs.SwitchedResidualGenerator_arch as srg
-from models.ExtensibleTrainer import ExtensibleTrainer
-from switched_conv.switched_conv_util import save_attention_to_image, save_attention_to_image_rgb
-from switched_conv.switched_conv import compute_attention_specificity
+from trainer.ExtensibleTrainer import ExtensibleTrainer
 from data import create_dataset, create_dataloader
 from tqdm import tqdm
 import torch
-import models.networks as networks
 
 if __name__ == "__main__":
     #### options

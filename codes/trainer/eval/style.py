@@ -3,7 +3,7 @@ import os
 import torch
 import os.path as osp
 import torchvision
-import models.eval.evaluator as evaluator
+import trainer.eval.evaluator as evaluator
 from pytorch_fid import fid_score
 
 
@@ -18,7 +18,7 @@ class StyleTransferEvaluator(evaluator.Evaluator):
         self.gen_output_index = opt_eval['gen_index'] if 'gen_index' in opt_eval.keys() else 0
 
     def perform_eval(self):
-        fid_fake_path = osp.join(self.env['base_path'], "..", "fid", str(self.env["step"]))
+        fid_fake_path = osp.join(self.env['base_path'], "../../models", "fid", str(self.env["step"]))
         os.makedirs(fid_fake_path, exist_ok=True)
         counter = 0
         for i in range(self.batches_per_eval):

@@ -5,7 +5,7 @@ import utils
 import utils.options as option
 import utils.util as util
 from data import create_dataset, create_dataloader
-from models.ExtensibleTrainer import ExtensibleTrainer
+from trainer.ExtensibleTrainer import ExtensibleTrainer
 
 
 class PretrainedImagePatchClassifier:
