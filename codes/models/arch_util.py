@@ -366,7 +366,7 @@ class ConvGnLelu(nn.Module):
         else:
             self.gn = None
         if activation:
-            self.lelu = nn.LeakyReLU(negative_slope=.1)
+            self.lelu = nn.LeakyReLU(negative_slope=.2)
         else:
             self.lelu = None
 
