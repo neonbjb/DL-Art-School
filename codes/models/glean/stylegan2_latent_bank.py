@@ -45,22 +45,21 @@ class Stylegan2LatentBank(nn.Module):
         out = self.bank.input(latent_vectors[:, 0])  # The input here is only used to fetch the batch size.
         out = self.bank.conv1(out, latent_vectors[:, 0], noise=None)
 
-        i, k = 1, 0
+        k = 0
         decoder_outputs = []
         for conv1, conv2 in zip(self.bank.convs[::2], self.bank.convs[1::2]):
             if k < len(self.fusion_blocks):
                 out = torch.cat([convolutional_features[-k-1], out], dim=1)
                 out = self.fusion_blocks[k](out)
 
-            out = conv1(out, latent_vectors[:, i], noise=None)
-            out = conv2(out, latent_vectors[:, i + 1], noise=None)
+            out = conv1(out, latent_vectors[:, k], noise=None)
+            out = conv2(out, latent_vectors[:, k], noise=None)
 
             if k >= self.decoder_start:
                 decoder_outputs.append(out)
             if k >= self.total_levels:
                 break
 
-            i += 2
             k += 1
 
         return decoder_outputs

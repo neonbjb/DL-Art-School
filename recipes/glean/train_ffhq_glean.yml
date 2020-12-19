@@ -90,23 +90,23 @@ steps:
     losses:
       pix:
         type: pix
-        weight: .05
-        criterion: l1
+        weight: 1
+        criterion: l2
         real: hq
         fake: gen
       feature:
         type: feature
         after: 5000
         which_model_F: vgg
-        criterion: l1
-        weight: 1
+        criterion: l2
+        weight: .01
         real: hq
         fake: gen
       gan_gen_img:
         after: 10000
         type: generator_gan
         gan_type: gan
-        weight: .02
+        weight: .01
         noise: .004
         discriminator: feature_discriminator
         fake: gen
