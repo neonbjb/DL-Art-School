@@ -28,6 +28,10 @@ class ChunkWithReference:
             if tile_id in centers.keys():
                 center, tile_width = centers[tile_id]
             elif self.strict:
+                print("Could not find the given tile id in the accompanying centers.pt. This generally means that "
+                      "centers.pt was overwritten at some point e.g. by duplicate data. If you don't care about tile "
+                      "centers, consider passing strict=false to the dataset options. (Note: you must re-build your"
+                      "caches for this setting change to take effect.)")
                 raise FileNotFoundError(tile_id, self.tiles[item])
             else:
                 center = torch.tensor([128, 128], dtype=torch.long)

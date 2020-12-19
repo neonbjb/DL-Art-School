@@ -50,7 +50,7 @@ class BaseUnsupervisedImageDataset(data.Dataset):
         # Indexing this dataset is tricky. Aid it by having a list of starting indices for each chunk.
         start = 0
         self.starting_indices = []
-        for c in chunks:
+        for c in self.chunks:
             self.starting_indices.append(start)
             start += len(c)
         self.len = start

@@ -19,12 +19,12 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\images\youtube\\4k_quote_unquote\\images_1'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\youtube_massive'
+    opt['input_folder'] = 'F:\\4k6k\\datasets\\images\youtube\\images_cook'
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\youtube_massive_cook'
     opt['crop_sz'] = [512, 1024, 2048]  # the size of each sub-image
-    opt['step'] = [512, 1024, 2048]  # step of the sliding crop window
+    opt['step'] = [256, 512, 1024]  # step of the sliding crop window
     opt['exclusions'] = [[],[],[]] # image names matching these terms wont be included in the processing.
-    opt['thres_sz'] = 256  # size threshold
+    opt['thres_sz'] = 128  # size threshold
     opt['resize_final_img'] = [.5, .25, .125]
     opt['only_resize'] = False
     opt['vertical_split'] = False
