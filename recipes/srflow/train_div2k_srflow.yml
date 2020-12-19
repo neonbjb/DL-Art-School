@@ -24,12 +24,12 @@ datasets:
 networks:
   generator:
     type: generator
-    which_model_G: srflow_orig
+    which_model_G: srflow
     nf: 64
     nb: 23
     K: 16
     scale: 4
-    initial_stride: 2
+    initial_stride: 1
     flow_scale: 4
     train_RRDB: false    # <-- Start false. After some time, ~20k-50k steps, set to true. TODO: automate this.
     pretrain_rrdb: ../experiments/pretrained_rrdb.pth  # <-- Insert path to your pretrained RRDB here.
