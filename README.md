@@ -2,34 +2,53 @@
 
 Send your Pytorch model to art class!
 
-This repository is both a framework and a set of tools for training deep neural networks that create images. It started as a branch of the [open-mmlab](https://github.com/open-mmlab) project developed by [Multimedia Laboratory, CUHK](http://mmlab.ie.cuhk.edu.hk) but has been almost completely re-written at every level.
+This repository is both a framework and a set of tools for training deep neural networks that create images. It started 
+as a branch of the [open-mmlab](https://github.com/open-mmlab) project developed by [Multimedia Laboratory, CUHK](http://mmlab.ie.cuhk.edu.hk) 
+but has been almost completely re-written at every level.
 
 ## Why do we need another training framework
 
-These are a dime a dozen, no doubt. DL Art School (*DLAS*) differentiates itself by being configuration driven. You write the model code (specifically, a torch.nn.Module) and (possibly) some losses, then you cobble together a config file written in yaml that tells DLAS how to train it. Swapping model architectures is simple and often requires no changes to actual code. This effectively enables you to run multiple concurrent experiments that use the same codebase, as well as retain backwards compatibility for past experiments.
+These are a dime a dozen, no doubt. DL Art School (*DLAS*) differentiates itself by being configuration driven. You write 
+the model code (specifically, a torch.nn.Module) and (possibly) some losses, then you cobble together a config file written 
+in yaml that tells DLAS how to train it. Swapping model architectures and tuning hyper-parameters is simple and often 
+requires no changes to actual code. You also don't need to remember complex command line incantations. This effectively 
+enables you to run multiple concurrent experiments that use the same codebase, as well as retain backwards compatibility 
+for past experiments.
 
-Training effective generators often means juggling multiple loss functions. As a result, DLAS' configuraion language is specifically designed to make it easy to support large number of losses and networks that interact with each other. As an example: some GANs I have trained in this framework consist of more than 15 losses and use 2 separate discriminators and require no bespoke code.
+Training effective generators often means juggling multiple loss functions. As a result, DLAS' configuration language is 
+specifically designed to make it easy to support large number of losses and networks that interact with each other. As an 
+example: some GANs I have trained in this framework consist of more than 15 losses and use 2 separate discriminators and 
+require no bespoke code.
 
-Generators are also notorious GPU memory hogs. I have spent substantial time streamlining the training framework to support gradient checkpointing and FP16. DLAS also supports "mega batching", where multiple forward passes contribute to a single backward pass. Most models can be trained on midrange GPUs with 8-11GB of memory.
+Generators are also notorious GPU memory hogs. I have spent substantial time streamlining the training framework to support 
+gradient checkpointing and FP16. DLAS also supports "mega batching", where multiple forward passes contribute to a single 
+backward pass. Most models can be trained on midrange GPUs with 8-11GB of memory.
 
-The final value-added feature is interpretability. Tensorboard logging operates out of the box with no custom code. Intermediate images from within the training pipeline can be intermittently surfaced as normal PNG files so you can see what your network is up to. Validation passes are also cached as images so you can view how your network improves over time.
+The final value-added feature is interpretability. Tensorboard logging operates out of the box with no custom code. 
+Intermediate images from within the training pipeline can be intermittently surfaced as normal PNG files so you can 
+see what your network is up to. Validation passes are also cached as images so you can view how your network improves 
+over time.
 
 ## Modeling Capabilities
 
-DLAS was built with extensibly in mind. One of the reasons I'm putting in the effort to better document this code is the incredible ease with which I have been able to train entirely new model types with no changes to the core training code.
+DLAS was built with extensibility in mind. One of the reasons I'm putting in the effort to better document this code is the 
+incredible ease with which I have been able to train entirely new model types with no changes to the core training code.
 
-I intend to fill out the sections below with sample configurations which can be used to train different architectures. You will need to bring your own data.
+I intend to fill out the sections below with sample configurations which can be used to train different architectures. 
+You will need to bring your own data.
 
 ### Super-resolution
-TBC..
--  Pixel-based SR (SRCNN, RCAN, PANet, etc)
--  GAN-based SR (ESRGAN)
--  Multi-GAN SR (SPSR)
--  Video SR (TecoGAN)
-
-### Optical Flow & 3D
+-  [GAN-based SR (ESRGAN)](https://github.com/neonbjb/DL-Art-School/tree/gan_lab/recipes/esrgan)
+- [SRFlow](https://github.com/neonbjb/DL-Art-School/tree/gan_lab/recipes/srflow)
+- [GLEAN](https://github.com/neonbjb/DL-Art-School/tree/gan_lab/recipes/glean)
+-  Video SR (TecoGAN) (*documentation TBC*)
 
 ### Style Transfer
+* Stylegan2 (*documentation TBC*)
+
+### Latent development
+* [BYOL](https://github.com/neonbjb/DL-Art-School/tree/gan_lab/recipes/byol)
+* iGPT (*documentation TBC*)
 
 ## Dependencies and Installation
 
