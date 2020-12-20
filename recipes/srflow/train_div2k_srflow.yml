@@ -1,12 +1,11 @@
-#### general settings
 name: train_div2k_srflow
-use_tb_logger: true
 model: extensibletrainer
 scale: 4
 gpu_ids: [0]
 fp16: false
 start_step: -1
-checkpointing_enabled: true
+checkpointing_enabled: true # <-- Gradient checkpointing. Enable for huge GPU memory savings. Disable for distributed training.
+use_tb_logger: true
 wandb: false
 
 datasets:

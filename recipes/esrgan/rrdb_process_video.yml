@@ -1,0 +1,69 @@
+name: video_process
+suffix: ~  # add suffix to saved images
+model: extensibletrainer
+scale: 4
+gpu_ids: [0]
+fp16: true
+minivid_crf: 12  # Defines the 'crf' output video quality parameter fed to FFMPEG
+frames_per_mini_vid: 360  # How many frames to process before generating a small video segment. Used to reduce number of images you must store to convert an entire video.
+minivid_start_no: 360
+recurrent_mode: false
+
+dataset:
+  n_workers: 1
+  name: myvideo
+  video_file: <your path> # <-- Path to your video file here. any format supported by ffmpeg works.
+  frame_rate: 30  # Set to the frame rate of your video.
+  start_at_seconds: 0  # Set this if you want to start somewhere other than the beginning of the video.
+  end_at_seconds: 5000  # Set to the time you want to stop at.
+  batch_size: 1  # Set to the number of frames to convert at once. Larger batches provide a modest performance increase.
+  vertical_splits: 1 # Used for 3d binocular videos. Leave at 1.
+  force_multiple: 1
+
+#### network structures
+networks:
+  generator:
+    type: generator
+    which_model_G: RRDBNet
+    in_nc: 3
+    out_nc: 3
+    initial_stride: 1
+    nf: 64
+    nb: 23
+    scale: 4
+    blocks_per_checkpoint: 3
+
+#### path
+path:
+  pretrain_model_generator: <your path> # <-- Set your generator path here.
+
+steps:
+  generator:
+    training: generator
+    generator: generator
+
+    # Optimizer params. Not used, but currently required to initialize ExtensibleTrainer, even in eval mode.
+    lr: !!float 5e-6
+    weight_decay: 0
+    beta1: 0.9
+    beta2: 0.99
+
+    injectors:
+      gen_inj:
+        type: generator
+        generator: generator
+        in: lq
+        out: gen
+
+# Train section is required, even though we are just evaluating.
+train:
+  niter: 500000
+  warmup_iter: -1
+  mega_batch_factor: 1
+  val_freq: 500
+  default_lr_scheme: MultiStepLR
+  gen_lr_steps: [20000, 40000, 80000, 100000, 140000, 180000]
+  lr_gamma: 0.5
+
+eval:
+  output_state: gen
