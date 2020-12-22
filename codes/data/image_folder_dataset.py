@@ -82,11 +82,19 @@ class ImageFolderDataset:
     def synthesize_lq(self, hs):
         h, w, _ = hs[0].shape
         ls = []
+        local_scale = self.scale
         if self.corrupt_before_downsize:
-            hs = [h.copy() for h in hs]
+            # You can downsize to a specified scale, then corrupt, then continue the downsize further using this option.
+            if 'corrupt_before_downsize_factor' in self.opt.keys():
+                special_factor = self.opt['corrupt_before_downsize_factor']
+                hs = [cv2.resize(h_, (h // special_factor, w // special_factor), interpolation=cv2.INTER_AREA) for h_ in hs]
+                local_scale = local_scale // special_factor
+            else:
+                hs = [h.copy() for h in hs]
             hs = self.corruptor.corrupt_images(hs)
         for hq in hs:
-            ls.append(cv2.resize(hq, (h // self.scale, w // self.scale), interpolation=cv2.INTER_AREA))
+            h, w, _ = hq.shape
+            ls.append(cv2.resize(hq, (h // local_scale, w // local_scale), interpolation=cv2.INTER_AREA))
         # Corrupt the LQ image (only in eval mode)
         if not self.corrupt_before_downsize:
             ls = self.corruptor.corrupt_images(ls)
