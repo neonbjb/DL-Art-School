@@ -146,7 +146,7 @@ def create_interpolation_video(gen, lq, output_file, latents1, latents2, steps=1
     for i in range(steps):
         proportion = i / (steps-1)
         lats = linear_interpolation(latents1, latents2, proportion)
-        hr, _ = gen(lr=lq,
+        hr, _, _ = gen(lr=lq,
                     z=lats[0],
                     reverse=True,
                     epses=lats,
@@ -179,9 +179,9 @@ if __name__ == "__main__":
     gen = model.networks['generator']
     gen.eval()
 
-    mode = "restore"  # temperature | restore | latent_transfer | feed_through
-    #imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\adrianna\\val2\\lr\\*"
-    imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\*"
+    mode = "feed_through"  # temperature | restore | latent_transfer | feed_through
+    imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\adrianna\\val2\\lr\\*"
+    #imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\*"
     #imgs_to_resample_pattern = "F:\\4k6k\\datasets\\ns_images\\imagesets\\images-half\\*lanette*"
     scale = 2
     resample_factor = 2  # When != 1, the HR image is upsampled by this factor using a bicubic to get the local latents. E.g. set this to '2' to get 2x upsampling.

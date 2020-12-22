@@ -216,8 +216,8 @@ class Trainer:
                 val_tqdm = tqdm(self.val_loader)
                 for val_data in val_tqdm:
                     idx += 1
-                    for b in range(len(val_data['GT_path'])):
-                        img_name = os.path.splitext(os.path.basename(val_data['GT_path'][b]))[0]
+                    for b in range(len(val_data['HQ_path'])):
+                        img_name = os.path.splitext(os.path.basename(val_data['HQ_path'][b]))[0]
                         img_dir = os.path.join(opt['path']['val_images'], img_name)
 
                         util.mkdir(img_dir)
