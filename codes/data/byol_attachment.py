@@ -35,6 +35,9 @@ class ByolDatasetWrapper(Dataset):
         super().__init__()
         self.wrapped_dataset = create_dataset(opt['dataset'])
         self.cropped_img_size = opt['crop_size']
+        self.key1 = opt_get(opt, ['key1'], 'hq')
+        self.key2 = opt_get(opt, ['key2'], 'lq')
+
         augmentations = [ \
             RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8),
             augs.RandomGrayscale(p=0.2),
@@ -49,7 +52,7 @@ class ByolDatasetWrapper(Dataset):
 
     def __getitem__(self, item):
         item = self.wrapped_dataset[item]
-        item.update({'aug1': self.aug(item['hq']).squeeze(dim=0), 'aug2': self.aug(item['lq']).squeeze(dim=0)})
+        item.update({'aug1': self.aug(item[self.key1]).squeeze(dim=0), 'aug2': self.aug(item[self.key2]).squeeze(dim=0)})
         return item
 
     def __len__(self):

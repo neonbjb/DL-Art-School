@@ -113,7 +113,10 @@ def read_img(env, path, size=None, rgb=False):
     """read image by cv2 or from lmdb or from a buffer (in which case path=buffer)
     return: Numpy float32, HWC, BGR, [0,1]"""
     if env is None:  # img
-        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        # Indirect open then process to support unicode files.
+        stream = open(path, "rb")
+        bytes = bytearray(stream.read())
+        img = cv2.imdecode(np.asarray(bytes, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
     elif env is 'lmdb':
         img = _read_img_lmdb(env, path, size)
     elif env is 'buffer':

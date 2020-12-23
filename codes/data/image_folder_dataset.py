@@ -22,6 +22,9 @@ class ImageFolderDataset:
         self.scale = opt['scale']
         self.paths = opt['paths']
         self.corrupt_before_downsize = opt['corrupt_before_downsize'] if 'corrupt_before_downsize' in opt.keys() else False
+        self.fetch_alt_image = opt['fetch_alt_image']  # If specified, this dataset will attempt to find a second image
+                                                       # from the same video source. Search for 'fetch_alt_image' for more info.
+        self.skip_lq = opt['skip_lq']
         assert (self.target_hq_size // self.scale) % self.multiple == 0  # If we dont throw here, we get some really obscure errors.
         if not isinstance(self.paths, list):
             self.paths = [self.paths]
@@ -110,13 +113,56 @@ class ImageFolderDataset:
             dim = hq.shape[0]
 
         hs = self.resize_hq([hq])
-        ls = self.synthesize_lq(hs)
+        if not self.skip_lq:
+            ls = self.synthesize_lq(hs)
 
         # Convert to torch tensor
         hq = torch.from_numpy(np.ascontiguousarray(np.transpose(hs[0], (2, 0, 1)))).float()
-        lq = torch.from_numpy(np.ascontiguousarray(np.transpose(ls[0], (2, 0, 1)))).float()
+        if not self.skip_lq:
+            lq = torch.from_numpy(np.ascontiguousarray(np.transpose(ls[0], (2, 0, 1)))).float()
 
-        out_dict = {'lq': lq, 'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item]}
+        out_dict = {'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item]}
+        if not self.skip_lq:
+            out_dict['lq'] = lq
+
+        if self.fetch_alt_image:
+            # This works by assuming a specific filename structure as would produced by ffmpeg. ex:
+            # 'Candied Walnutsxjktqhr_SYc.webm_00000478.jpg` and
+            # 'Candied Walnutsxjktqhr_SYc.webm_00000479.jpg` and
+            # 'Candied Walnutsxjktqhr_SYc.webm_00000480.jpg`
+            # The basic format is `<anything>%08d.<extension>`. This logic parses off that 8 digit number. If it is
+            # not found, the 'alt_image' returned is just the current image. If it is found, the algorithm searches for
+            # an image one number higher. If it is found - it is returned in the 'alt_hq' and 'alt_lq' keys, else the
+            # current image is put in those keys.
+
+            imname_parts = self.image_paths[item]
+            while '.jpg.jpg' in imname_parts:
+                imname_parts = imname_parts.replace(".jpg.jpg", ".jpg")  # Hack workaround to my own bug.
+            imname_parts = imname_parts.split('.')
+            if len(imname_parts) >= 2 and len(imname_parts[-2]) > 8:
+                try:
+                    imnumber = int(imname_parts[-2][-8:])
+                    # When we're dealing with images in the 1M range, it's straight up faster to attempt to just open
+                    # the file rather than searching the path list. Let the exception handler below do its work.
+                    next_img = self.image_paths[item].replace(str(imnumber), str(imnumber+1))
+                    alt_hq = util.read_img(None, next_img, rgb=True)
+                    alt_hq = self.resize_hq([alt_hq])
+                    alt_hq = torch.from_numpy(np.ascontiguousarray(np.transpose(alt_hq[0], (2, 0, 1)))).float()
+                    if not self.skip_lq:
+                        alt_lq = self.synthesize_lq(alt_hq)
+                        alt_lq = torch.from_numpy(np.ascontiguousarray(np.transpose(alt_lq[0], (2, 0, 1)))).float()
+                except:
+                    alt_hq = hq
+                    if not self.skip_lq:
+                        alt_lq = lq
+            else:
+                alt_hq = hq
+                if not self.skip_lq:
+                    alt_lq = lq
+            out_dict['alt_hq'] = alt_hq
+            if not self.skip_lq:
+                out_dict['alt_lq'] = alt_lq
+
         if self.labeler:
             base_file = self.image_paths[item].replace(self.paths[0], "")
             while base_file.startswith("\\"):
@@ -131,19 +177,20 @@ class ImageFolderDataset:
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\512_unsupervised\\'],
+        'paths': ['F:\\4k6k\\datasets\\images\\youtube\\4k_quote_unquote\\images'],
         'weights': [1],
-        'target_size': 512,
+        'target_size': 256,
         'force_multiple': 32,
         'scale': 2,
         'fixed_corruptions': ['jpeg-broad', 'gaussian_blur'],
         'random_corruptions': ['noise-5', 'none'],
         'num_corrupts_per_image': 1,
         'corrupt_before_downsize': True,
-        'labeler': {
-            'type': 'patch_labels',
-            'label_file': 'F:\\4k6k\\datasets\\ns_images\\512_unsupervised\\categories_new.json'
-        }
+        'fetch_alt_image': True,
+        #'labeler': {
+        #    'type': 'patch_labels',
+        #    'label_file': 'F:\\4k6k\\datasets\\ns_images\\512_unsupervised\\categories_new.json'
+        #}
     }
 
     ds = ImageFolderDataset(opt)
@@ -152,11 +199,11 @@ if __name__ == '__main__':
     for i in range(0, len(ds)):
         o = ds[random.randint(0, len(ds)-1)]
         hq = o['hq']
-        masked = (o['labels_mask'] * .5 + .5) * hq
+        #masked = (o['labels_mask'] * .5 + .5) * hq
         import torchvision
         torchvision.utils.save_image(hq.unsqueeze(0), "debug/%i_hq.png" % (i,))
-        #torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_masked.png" % (i,))
-        if len(o['labels'].unique()) > 1:
-            randlbl = np.random.choice(o['labels'].unique()[1:])
-            moremask = hq * ((1*(o['labels'] == randlbl))*.5+.5)
-            torchvision.utils.save_image(moremask.unsqueeze(0), "debug/%i_%s.png" % (i, o['label_strings'][randlbl]))
+        torchvision.utils.save_image(o['alt_hq'].unsqueeze(0), "debug/%i_hq_alt.png" % (i,))
+        #if len(o['labels'].unique()) > 1:
+        #    randlbl = np.random.choice(o['labels'].unique()[1:])
+        #    moremask = hq * ((1*(o['labels'] == randlbl))*.5+.5)
+        #    torchvision.utils.save_image(moremask.unsqueeze(0), "debug/%i_%s.png" % (i, o['label_strings'][randlbl]))

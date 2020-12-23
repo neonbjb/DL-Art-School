@@ -148,7 +148,7 @@ class NetWrapper(nn.Module):
         if self.structural_mlp:
             projector = StructuralMLP(hidden.shape, self.projection_size, self.projection_hidden_size)
         else:
-            _, dim = hidden.shape
+            _, dim = hidden.flatten(1,-1).shape
             projector = MLP(dim, self.projection_size, self.projection_hidden_size)
         return projector.to(hidden)
 
