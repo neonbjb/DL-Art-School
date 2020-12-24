@@ -111,7 +111,8 @@ def define_G(opt, opt_net, scale=None):
         from models.byol.byol_model_wrapper import BYOL
         subnet = define_G(opt, opt_net['subnet'])
         netG = BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
-                    structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False))
+                    structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False),
+                    do_augmentation=opt_get(opt_net, ['gpu_augmentation'], False))
     elif which_model == 'structural_byol':
         from models.byol.byol_structural import StructuralBYOL
         subnet = define_G(opt, opt_net['subnet'])

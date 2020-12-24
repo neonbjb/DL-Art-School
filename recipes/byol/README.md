@@ -16,19 +16,31 @@ It is implemented via two wrappers:
 Thanks to the excellent implementation from lucidrains, this wrapping process makes training your
 network on unsupervised datasets extremely easy.
 
-Note: My intent is to adapt BYOL for use on structured models - e.g. models that do *not* collapse
-the latent into a flat map. Stay tuned for that..
+The DLAS version improves on lucidrains implementation adding some important training details, such as
+a custom LARS optimizer implementation that aligns with the recommendations from the paper. By moving augmentation
+to the dataset level, additional augmentation options are unlocked - like being able to take two similar video frames
+as the image pair.
 
 # Training BYOL
 
 In this directory, you will find a sample training config for training BYOL on DIV2K. You will
-likely want to insert your own model architecture first. Exchange out spinenet for your
-model architecture and change the `hidden_layer` parameter to a layer from your network
-that you want the BYOL model wrapper to hook into. 
-
-*hint: Your network architecture (including layer names) is printed out when running train.py
-against your network.*
+likely want to insert your own model architecture first.
 
 Run the trainer by:
 
 `python train.py -opt train_div2k_byol.yml`
+
+BYOL is data hungry, as most unsupervised training methods are. You'll definitely want to provide
+your own dataset - DIV2K is here as an example only. 
+
+## Using your own model
+
+Training your own model on this BYOL implementation is trivial:
+1. Add your nn.Module model implementation to the models/ directory.
+2. Register your model with `trainer/networks.py` as a generator. This file tells DLAS how to build your model from
+   a set of configuration options.
+3. Copy the sample training config. Change the `subnet` and `hidden_layer` params.
+4. Run your config with `python train.py -opt <your_config>`.
+
+*hint: Your network architecture (including layer names) is printed out when running train.py
+against your network.*
