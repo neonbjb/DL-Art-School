@@ -99,7 +99,6 @@ class ExtensibleTrainer(BaseModel):
         else:
             self.schedulers = []
 
-
         # Wrap networks in distributed shells.
         dnets = []
         all_networks = [g for g in self.netsG.values()] + [d for d in self.netsD.values()]
@@ -318,6 +317,10 @@ class ExtensibleTrainer(BaseModel):
         for net_name, net in self.networks.items():
             if hasattr(net.module, "get_debug_values"):
                 log.update(net.module.get_debug_values(step, net_name))
+
+        # Log learning rate (from first param group) too.
+        for o in self.optimizers:
+            log['learning_rate_%s' % (o._config['network'],)] = o.param_groups[0]['lr']
         return log
 
     def get_current_visuals(self, need_GT=True):

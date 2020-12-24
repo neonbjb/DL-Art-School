@@ -66,6 +66,16 @@ class ConfigurableStep(Module):
         for net_name, net, opt_config in zip(training, nets, opt_configs):
             optim_params = []
             for k, v in net.named_parameters():  # can optimize for a part of the model
+                # Make some inference about these parameters, which can be used by some optimizers to treat certain
+                # parameters differently. For example, it is considered good practice to not do weight decay on
+                # BN & bias parameters. TODO: process the module tree instead of the parameter tree to accomplish the
+                # same thing, but in a more effective way.
+                if k.endswith(".bias"):
+                    v.is_bias = True
+                if k.endswith(".weight"):
+                    v.is_weight = True
+                if ".bn" in k or '.batchnorm' in k or '.bnorm' in k:
+                    v.is_bn = True
                 if v.requires_grad:
                     optim_params.append(v)
                 else:
@@ -76,9 +86,12 @@ class ConfigurableStep(Module):
                 opt = torch.optim.Adam(optim_params, lr=opt_config['lr'],
                                        weight_decay=opt_config['weight_decay'],
                                        betas=(opt_config['beta1'], opt_config['beta2']))
-            elif self.step_opt['optimizer'] == 'novograd':
-                opt = NovoGrad(optim_params, lr=opt_config['lr'], weight_decay=opt_config['weight_decay'],
-                                       betas=(opt_config['beta1'], opt_config['beta2']))
+            elif self.step_opt['optimizer'] == 'lars':
+                from trainer.optimizers.larc import LARC
+                from trainer.optimizers.sgd import SGDNoBiasMomentum
+                optSGD = SGDNoBiasMomentum(optim_params, lr=opt_config['lr'], momentum=opt_config['momentum'],
+                                           weight_decay=opt_config['weight_decay'])
+                opt = LARC(optSGD, trust_coefficient=opt_config['lars_coefficient'])
             opt._config = opt_config  # This is a bit seedy, but we will need these configs later.
             opt._config['network'] = net_name
             self.optimizers.append(opt)

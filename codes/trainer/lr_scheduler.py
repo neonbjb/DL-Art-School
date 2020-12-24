@@ -8,6 +8,10 @@ from torch.optim.lr_scheduler import _LRScheduler
 def get_scheduler_for_name(name, optimizers, scheduler_opt):
     schedulers = []
     for o in optimizers:
+        # Hack to support LARC, which wraps an underlying optimizer.
+        if hasattr(o, 'optim'):
+            o = o.optim
+
         if name == 'MultiStepLR':
             sched = MultiStepLR_Restart(o, scheduler_opt['gen_lr_steps'],
                                              restarts=scheduler_opt['restarts'],
@@ -21,7 +25,7 @@ def get_scheduler_for_name(name, optimizers, scheduler_opt):
                                              scheduler_opt['lr_gamma'])
         elif name == 'CosineAnnealingLR_Restart':
             sched = CosineAnnealingLR_Restart(
-                        o, scheduler_opt['T_period'], eta_min=scheduler_opt['eta_min'],
+                        o, scheduler_opt['T_period'], scheduler_opt['warmup'], eta_min=scheduler_opt['eta_min'],
                         restarts=scheduler_opt['restarts'], weights=scheduler_opt['restart_weights'])
         else:
             raise NotImplementedError('Scheduler not available')
@@ -86,7 +90,8 @@ class MultiStepLR_Restart(_LRScheduler):
 
 
 class CosineAnnealingLR_Restart(_LRScheduler):
-    def __init__(self, optimizer, T_period, restarts=None, weights=None, eta_min=0, last_epoch=-1):
+    def __init__(self, optimizer, T_period, warmup=0, restarts=None, weights=None, eta_min=0, last_epoch=-1):
+        self.warmup = warmup
         self.T_period = T_period
         self.T_max = self.T_period[0]  # current T period
         self.eta_min = eta_min
@@ -99,26 +104,27 @@ class CosineAnnealingLR_Restart(_LRScheduler):
         super(CosineAnnealingLR_Restart, self).__init__(optimizer, last_epoch)
 
     def get_lr(self):
-        if self.last_epoch == 0:
+        step = self.last_epoch - self.warmup
+        if step <= 0:
             return self.base_lrs
-        elif self.last_epoch in self.restarts:
-            self.last_restart = self.last_epoch
-            self.T_max = self.T_period[self.restarts.index(self.last_epoch) + 1]
-            weight = self.restart_weights[self.restarts.index(self.last_epoch)]
+        elif step in self.restarts:
+            self.last_restart = step
+            self.T_max = self.T_period[self.restarts.index(step) + 1]
+            weight = self.restart_weights[self.restarts.index(step)]
             return [group['initial_lr'] * weight for group in self.optimizer.param_groups]
-        elif (self.last_epoch - self.last_restart - 1 - self.T_max) % (2 * self.T_max) == 0:
+        elif (step - self.last_restart - 1 - self.T_max) % (2 * self.T_max) == 0:
             return [
                 group['lr'] + (base_lr - self.eta_min) * (1 - math.cos(math.pi / self.T_max)) / 2
                 for base_lr, group in zip(self.base_lrs, self.optimizer.param_groups)
             ]
-        return [(1 + math.cos(math.pi * (self.last_epoch - self.last_restart) / self.T_max)) /
-                (1 + math.cos(math.pi * ((self.last_epoch - self.last_restart) - 1) / self.T_max)) *
+        return [(1 + math.cos(math.pi * (step - self.last_restart) / self.T_max)) /
+                (1 + math.cos(math.pi * ((step - self.last_restart) - 1) / self.T_max)) *
                 (group['lr'] - self.eta_min) + self.eta_min
                 for group in self.optimizer.param_groups]
 
 
 if __name__ == "__main__":
-    optimizer = torch.optim.Adam([torch.zeros(3, 64, 3, 3)], lr=2e-4, weight_decay=0,
+    optimizer = torch.optim.Adam([torch.zeros(3, 64, 3, 3)], lr=.2, weight_decay=0,
                                  betas=(0.9, 0.99))
     ##############################
     # MultiStepLR_Restart
@@ -153,11 +159,11 @@ if __name__ == "__main__":
     restart_weights = [1]
 
     ## four
-    T_period = [250000, 250000, 250000, 250000]
-    restarts = [250000, 500000, 750000]
-    restart_weights = [1, 1, 1]
+    T_period = [80000, 80000, 80000, 80000]
+    restarts = [100000, 200000]
+    restart_weights = [.5, .25]
 
-    scheduler = CosineAnnealingLR_Restart(optimizer, T_period, eta_min=1e-7, restarts=restarts,
+    scheduler = CosineAnnealingLR_Restart(optimizer, T_period, warmup=100000, eta_min=.01, restarts=restarts,
                                           weights=restart_weights)
 
     ##############################

@@ -207,6 +207,8 @@ class BYOL(nn.Module):
     def _get_target_encoder(self):
         target_encoder = copy.deepcopy(self.online_encoder)
         set_requires_grad(target_encoder, False)
+        for p in target_encoder.parameters():
+            p.DO_NOT_TRAIN = True
         return target_encoder
 
     def reset_moving_average(self):
@@ -217,6 +219,9 @@ class BYOL(nn.Module):
         assert self.use_momentum, 'you do not need to update the moving average, since you have turned off momentum for the target encoder'
         assert self.target_encoder is not None, 'target encoder has not been created yet'
         update_moving_average(self.target_ema_updater, self.target_encoder, self.online_encoder)
+
+    def get_debug_values(self, step, __):
+        return {'target_ema_beta': self.target_ema_updater.beta}
 
     def forward(self, image_one, image_two):
         online_proj_one = self.online_encoder(image_one)
