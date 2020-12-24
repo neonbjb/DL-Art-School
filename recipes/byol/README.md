@@ -30,8 +30,8 @@ Run the trainer by:
 
 `python train.py -opt train_div2k_byol.yml`
 
-BYOL is data hungry, as most unsupervised training methods are. You'll definitely want to provide
-your own dataset - DIV2K is here as an example only. 
+BYOL is data hungry, as most unsupervised training methods are. If you're providing your own dataset, make sure it is
+the hundreds of K-images or more!
 
 ## Using your own model
 
