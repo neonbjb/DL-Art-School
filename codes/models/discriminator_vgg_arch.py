@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
 
-from models.RRDBNet_arch import RRDB, RRDBWithBypass
 from models.arch_util import ConvBnLelu, ConvGnLelu, ExpansionBlock, ConvGnSilu, ResidualBlockGN
 import torch.nn.functional as F
-from models.SwitchedResidualGenerator_arch import gather_2d
 from utils.util import checkpoint
 
 
@@ -519,6 +517,7 @@ class RefDiscriminatorVgg128(nn.Module):
     def forward(self, x, ref, ref_center_point):
         ref = self.ref_head(ref)
         ref_center_point = ref_center_point // 16
+        from models.SwitchedResidualGenerator_arch import gather_2d
         ref_vector = gather_2d(ref, ref_center_point)
         ref_vector = self.ref_linear(ref_vector)
 

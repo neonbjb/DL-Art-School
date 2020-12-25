@@ -17,6 +17,7 @@ from torch import nn
 from torch.autograd import grad as torch_grad
 from vector_quantize_pytorch import VectorQuantize
 
+from trainer.networks import register_model
 from utils.util import checkpoint
 
 try:
@@ -893,3 +894,12 @@ class StyleGan2PathLengthLoss(L.ConfigurableLoss):
 
         self.pl_mean = self.pl_length_ma.update_average(self.pl_mean, avg_pl_length)
         return 0
+
+
+@register_model
+def register_stylegan2_lucidrains(opt_net, opt):
+    is_structured = opt_net['structured'] if 'structured' in opt_net.keys() else False
+    attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
+    return StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
+                                        style_depth=opt_net['style_depth'], structure_input=is_structured,
+                                        attn_layers=attn)

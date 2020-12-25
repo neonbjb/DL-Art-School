@@ -8,6 +8,7 @@ from models.srflow.RRDBNet_arch import RRDBNet
 from models.srflow.FlowUpsamplerNet import FlowUpsamplerNet
 import models.srflow.thops as thops
 import models.srflow.flow as flow
+from trainer.networks import register_model
 from utils.util import opt_get
 
 
@@ -166,3 +167,9 @@ class SRFlowNet(nn.Module):
                                           logdet=logdet)
 
         return x, logdet, lr_enc['out']
+
+
+@register_model
+def register_srflow(opt_net, opt):
+    return SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
+                             K=opt_net['K'], opt=opt)

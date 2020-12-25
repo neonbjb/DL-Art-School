@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from trainer.injectors import Injector
+from trainer.networks import register_model
 from utils.util import checkpoint
 
 
@@ -147,3 +148,8 @@ class iGPT2(nn.Module):
 
         return logits, x
 
+
+@register_model
+def register_igpt2(opt_net, opt):
+    return iGPT2(opt_net['embed_dim'], opt_net['num_heads'], opt_net['num_layers'], opt_net['num_pixels'] ** 2,
+          opt_net['num_vocab'], centroids_file=opt_net['centroids_file'])

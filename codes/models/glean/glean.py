@@ -10,6 +10,7 @@ from models.arch_util import ConvGnLelu
 # Produces a convolutional feature (`f`) and a reduced feature map with double the filters.
 from models.glean.stylegan2_latent_bank import Stylegan2LatentBank
 from models.stylegan.stylegan2_rosinality import EqualLinear
+from trainer.networks import register_model
 from utils.util import checkpoint, sequential_checkpoint
 
 
@@ -108,3 +109,8 @@ class GleanGenerator(nn.Module):
         rrdb_fea, conv_fea, latents = self.encoder(x)
         latent_bank_fea = self.latent_bank(conv_fea, latents)
         return self.decoder(rrdb_fea, latent_bank_fea)
+
+
+@register_model
+def register_glean(opt_net, opt):
+    return GleanGenerator(opt_net['nf'], opt_net['pretrained_stylegan'])

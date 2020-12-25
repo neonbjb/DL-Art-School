@@ -1,140 +1,79 @@
 import functools
+import importlib
 import logging
+import pkgutil
+import sys
 from collections import OrderedDict
+from inspect import isfunction, getmembers
 
-import munch
 import torch
 import torchvision
-from munch import munchify
-import models.stylegan.stylegan2_lucidrains as stylegan2
 
-import models.fixup_resnet.DiscriminatorResnet_arch as DiscriminatorResnet_arch
-import models.RRDBNet_arch as RRDBNet_arch
-import models.SwitchedResidualGenerator_arch as SwitchedGen_arch
 import models.discriminator_vgg_arch as SRGAN_arch
 import models.feature_arch as feature_arch
-from models import srg2_classic
+import models.fixup_resnet.DiscriminatorResnet_arch as DiscriminatorResnet_arch
 from models.stylegan.Discriminator_StyleGAN import StyleGanDiscriminator
-from models.tecogan.teco_resgen import TecoGen
-from utils.util import opt_get
 
 logger = logging.getLogger('base')
 
-# Generator
-def define_G(opt, opt_net, scale=None):
-    if scale is None:
-        scale = opt['scale']
-    which_model = opt_net['which_model_G']
 
-    if 'RRDBNet' in which_model:
-        if which_model == 'RRDBNetBypass':
-            block = RRDBNet_arch.RRDBWithBypass
-        elif which_model == 'RRDBNetLambda':
-            from models.lambda_rrdb import LambdaRRDB
-            block = LambdaRRDB
-        else:
-            block = RRDBNet_arch.RRDB
-        additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
-        output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
-        gc = opt_net['gc'] if 'gc' in opt_net.keys() else 32
-        initial_stride = opt_net['initial_stride'] if 'initial_stride' in opt_net.keys() else 1
-        netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
-                                    output_mode=output_mode, body_block=block, scale=opt_net['scale'], growth_channels=gc,
-                                    initial_stride=initial_stride)
-    elif which_model == "ConfigurableSwitchedResidualGenerator2":
-        netG = SwitchedGen_arch.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
-                                                                      switch_reductions=opt_net['switch_reductions'],
-                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
-                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
-                                                                      transformation_filters=opt_net['transformation_filters'], attention_norm=opt_net['attention_norm'],
-                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
-                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'],
-                                                                      for_video=opt_net['for_video'])
-    elif which_model == "srg2classic":
-        netG = srg2_classic.ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'], switch_filters=opt_net['switch_filters'],
-                                                                      switch_reductions=opt_net['switch_reductions'],
-                                                                      switch_processing_layers=opt_net['switch_processing_layers'], trans_counts=opt_net['trans_counts'],
-                                                                      trans_kernel_sizes=opt_net['trans_kernel_sizes'], trans_layers=opt_net['trans_layers'],
-                                                                      transformation_filters=opt_net['transformation_filters'],
-                                                                      initial_temp=opt_net['temperature'], final_temperature_step=opt_net['temperature_final_step'],
-                                                                      heightened_temp_min=opt_net['heightened_temp_min'], heightened_final_step=opt_net['heightened_final_step'],
-                                                                      upsample_factor=scale, add_scalable_noise_to_transforms=opt_net['add_noise'])
-    elif which_model == "flownet2":
-        from models.flownet2 import FlowNet2
-        ld = 'load_path' in opt_net.keys()
-        args = munch.Munch({'fp16': False, 'rgb_max': 1.0, 'checkpoint': not ld})
-        netG = FlowNet2(args)
-        if ld:
-            sd = torch.load(opt_net['load_path'])
-            netG.load_state_dict(sd['state_dict'])
-    elif which_model == "backbone_encoder":
-        netG = SwitchedGen_arch.BackboneEncoder(pretrained_backbone=opt_net['pretrained_spinenet'])
-    elif which_model == "backbone_encoder_no_ref":
-        netG = SwitchedGen_arch.BackboneEncoderNoRef(pretrained_backbone=opt_net['pretrained_spinenet'])
-    elif which_model == "backbone_encoder_no_head":
-        netG = SwitchedGen_arch.BackboneSpinenetNoHead()
-    elif which_model == "backbone_resnet":
-        netG = SwitchedGen_arch.BackboneResnet()
-    elif which_model == "tecogen":
-        netG = TecoGen(opt_net['nf'], opt_net['scale'])
-    elif which_model == 'stylegan2':
-        is_structured = opt_net['structured'] if 'structured' in opt_net.keys() else False
-        attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
-        netG = stylegan2.StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
-                                            style_depth=opt_net['style_depth'], structure_input=is_structured,
-                                            attn_layers=attn)
-    elif which_model == 'srflow':
-        from models.srflow import SRFlowNet_arch
-        netG = SRFlowNet_arch.SRFlowNet(in_nc=3, out_nc=3, nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
-                                     K=opt_net['K'], opt=opt)
-    elif which_model == 'rrdb_latent_wrapper':
-        from models.srflow.RRDBNet_arch import RRDBLatentWrapper
-        netG = RRDBLatentWrapper(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                                  nf=opt_net['nf'], nb=opt_net['nb'], with_bypass=opt_net['with_bypass'],
-                                 blocks=opt_net['blocks_for_latent'], scale=opt_net['scale'], pretrain_rrdb_path=opt_net['pretrain_path'])
-    elif which_model == 'rrdb_centipede':
-        output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
-        netG = RRDBNet_arch.RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                    mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], scale=opt_net['scale'],
-                                    headless=True, output_mode=output_mode)
-    elif which_model == 'rrdb_srflow':
-        from models.srflow.RRDBNet_arch import RRDBNet
-        netG = RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
-                       nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
-                       initial_conv_stride=opt_net['initial_stride'])
-    elif which_model == 'igpt2':
-        from models.transformers.igpt.gpt2 import iGPT2
-        netG = iGPT2(opt_net['embed_dim'], opt_net['num_heads'], opt_net['num_layers'], opt_net['num_pixels'] ** 2, opt_net['num_vocab'], centroids_file=opt_net['centroids_file'])
-    elif which_model == 'byol':
-        from models.byol.byol_model_wrapper import BYOL
-        subnet = define_G(opt, opt_net['subnet'])
-        netG = BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
-                    structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False),
-                    do_augmentation=opt_get(opt_net, ['gpu_augmentation'], False))
-    elif which_model == 'structural_byol':
-        from models.byol.byol_structural import StructuralBYOL
-        subnet = define_G(opt, opt_net['subnet'])
-        netG = StructuralBYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
-                              pretrained_state_dict=opt_get(opt_net, ["pretrained_path"]),
-                              freeze_until=opt_get(opt_net, ['freeze_until'], 0))
-    elif which_model == 'spinenet':
-        from models.spinenet_arch import SpineNet
-        netG = SpineNet(str(opt_net['arch']), in_channels=3, use_input_norm=opt_net['use_input_norm'])
-    elif which_model == 'spinenet_with_logits':
-        from models.spinenet_arch import SpinenetWithLogits
-        netG = SpinenetWithLogits(str(opt_net['arch']), opt_net['output_to_attach'], opt_net['num_labels'],
-                        in_channels=3, use_input_norm=opt_net['use_input_norm'])
-    elif which_model == 'resnet52':
-        from models.resnet_with_checkpointing import resnet50
-        netG = resnet50(pretrained=opt_net['pretrained'])
-    elif which_model == 'glean':
-        from models.glean.glean import GleanGenerator
-        netG = GleanGenerator(opt_net['nf'], opt_net['pretrained_stylegan'])
+class RegisteredModelNameError(Exception):
+    def __init__(self, name_error):
+        super().__init__(f'Registered DLAS modules must start with `register_`. Incorrect registration: {name_error}')
+
+
+# Decorator that allows API clients to show DLAS how to build a nn.Module from an opt dict.
+# Functions with this decorator should have a specific naming format:
+# `register_<name>` where <name> is the name that will be used in configuration files to reference this model.
+# Functions with this decorator are expected to take a single argument:
+# - opt: A dict with the configuration options for building the module.
+# They should return:
+# - A torch.nn.Module object for the model being defined.
+def register_model(func):
+    if func.__name__.startswith("register_"):
+        func._dlas_model_name = func.__name__[9:]
+        assert func._dlas_model_name
     else:
-        raise NotImplementedError('Generator model [{:s}] not recognized'.format(which_model))
-    return netG
+        raise RegisteredModelNameError(func.__name__)
+    func._dlas_registered_model = True
+    return func
+
+
+def find_registered_model_fns(base_path='models'):
+    found_fns = {}
+    module_iter = pkgutil.walk_packages([base_path])
+    for mod in module_iter:
+        if mod.ispkg:
+            EXCLUSION_LIST = ['flownet2']
+            if mod.name not in EXCLUSION_LIST:
+                found_fns.update(find_registered_model_fns(f'{base_path}/{mod.name}'))
+        else:
+            mod_name = f'{base_path}/{mod.name}'.replace('/', '.')
+            importlib.import_module(mod_name)
+            for mod_fn in getmembers(sys.modules[mod_name], isfunction):
+                if hasattr(mod_fn[1], "_dlas_registered_model"):
+                    found_fns[mod_fn[1]._dlas_model_name] = mod_fn[1]
+    return found_fns
+
+
+class CreateModelError(Exception):
+    def __init__(self, name, available):
+        super().__init__(f'Could not find the specified model name: {name}. Tip: If your model is in a'
+                         f' subdirectory, that directory must contain an __init__.py to be scanned. Available models:'
+                         f'{available}')
+
+
+def create_model(opt, opt_net, scale=None):
+    which_model = opt_net['which_model']
+    # For backwards compatibility.
+    if not which_model:
+        which_model = opt_net['which_model_G']
+    if not which_model:
+        which_model = opt_net['which_model_D']
+    registered_fns = find_registered_model_fns()
+    if which_model not in registered_fns.keys():
+        raise CreateModelError(which_model, list(registered_fns.keys()))
+    return registered_fns[which_model](opt_net, opt)
 
 
 class GradDiscWrapper(torch.nn.Module):

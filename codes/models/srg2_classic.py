@@ -11,6 +11,7 @@ from collections import OrderedDict
 from models.SwitchedResidualGenerator_arch import HalvingProcessingBlock, ConfigurableSwitchComputer
 from models.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, MultiConvBlock
 from models.switched_conv.switched_conv import BareConvSwitch, AttentionNorm
+from trainer.networks import register_model
 from utils.util import checkpoint
 
 
@@ -204,3 +205,19 @@ class Interpolate(nn.Module):
     def forward(self, x):
         return F.interpolate(x, scale_factor=self.factor, mode=self.mode)
 
+@register_model
+def register_srg2classic(opt_net, opt):
+    return ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'],
+                                                        switch_filters=opt_net['switch_filters'],
+                                                        switch_reductions=opt_net['switch_reductions'],
+                                                        switch_processing_layers=opt_net['switch_processing_layers'],
+                                                        trans_counts=opt_net['trans_counts'],
+                                                        trans_kernel_sizes=opt_net['trans_kernel_sizes'],
+                                                        trans_layers=opt_net['trans_layers'],
+                                                        transformation_filters=opt_net['transformation_filters'],
+                                                        initial_temp=opt_net['temperature'],
+                                                        final_temperature_step=opt_net['temperature_final_step'],
+                                                        heightened_temp_min=opt_net['heightened_temp_min'],
+                                                        heightened_final_step=opt_net['heightened_final_step'],
+                                                        upsample_factor=scale,
+                                                        add_scalable_noise_to_transforms=opt_net['add_noise'])

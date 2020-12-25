@@ -3,6 +3,7 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/codes/models/flownet2" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/codes/models/switched_conv" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/codes/switched_conv" vcs="Git" />
   </component>
 </project>

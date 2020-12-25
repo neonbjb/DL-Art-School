@@ -10,7 +10,8 @@ from kornia import filters
 from torch import nn
 
 from data.byol_attachment import RandomApply
-from utils.util import checkpoint
+from trainer.networks import register_model, create_model
+from utils.util import checkpoint, opt_get
 
 
 def default(val, def_val):
@@ -269,3 +270,11 @@ class BYOL(nn.Module):
 
         loss = loss_one + loss_two
         return loss.mean()
+
+
+@register_model
+def register_byol(opt_net, opt):
+    subnet = create_model(opt, opt_net['subnet'])
+    return BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
+                structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False),
+                do_augmentation=opt_get(opt_net, ['gpu_augmentation'], False))

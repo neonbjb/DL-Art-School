@@ -1,16 +1,18 @@
-import torch
-from torch import nn
-from models.switched_conv.switched_conv import BareConvSwitch, compute_attention_specificity, AttentionNorm
-import torch.nn.functional as F
 import functools
-from collections import OrderedDict
-from models.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, ConvGnLelu, MultiConvBlock, \
-    SiLU, UpconvBlock, ReferenceJoinBlock
-from models.switched_conv.switched_conv_util import save_attention_to_image_rgb
 import os
-from models.spinenet_arch import SpineNet
+from collections import OrderedDict
+
+import torch
+import torch.nn.functional as F
 import torchvision
+from torch import nn
+
+from models.arch_util import ConvBnLelu, ConvGnSilu, ExpansionBlock, ExpansionBlock2, MultiConvBlock
+from models.switched_conv.switched_conv import BareConvSwitch, compute_attention_specificity, AttentionNorm
+from models.switched_conv.switched_conv_util import save_attention_to_image_rgb
+from trainer.networks import register_model
 from utils.util import checkpoint
+
 
 # VGG-style layer with Conv(stride2)->BN->Activation->Conv->BN->Activation
 # Doubles the input filter count.
@@ -259,142 +261,6 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
-
-
-# This class encapsulates an encoder based on an object detection network backbone whose purpose is to generated a
-# structured embedding encoding what is in an image patch. This embedding can then be used to perform structured
-# alterations to the underlying image.
-#
-# Caveat: Since this uses a pre-defined (and potentially pre-trained) SpineNet backbone, it has a minimum-supported
-# image size, which is 128x128. In order to use 64x64 patches, you must set interpolate_first=True. though this will
-# degrade quality.
-class BackboneEncoder(nn.Module):
-    def __init__(self, interpolate_first=True, pretrained_backbone=None):
-        super(BackboneEncoder, self).__init__()
-        self.interpolate_first = interpolate_first
-
-        # Uses dual spinenets, one for the input patch and the other for the reference image.
-        self.patch_spine = SpineNet('49', in_channels=3, use_input_norm=True)
-        self.ref_spine = SpineNet('49', in_channels=3, use_input_norm=True)
-
-        self.merge_process1 = ConvGnSilu(512, 512, kernel_size=1, activation=True, norm=False, bias=True)
-        self.merge_process2 = ConvGnSilu(512, 384, kernel_size=1, activation=True, norm=True, bias=False)
-        self.merge_process3 = ConvGnSilu(384, 256, kernel_size=1, activation=False, norm=False, bias=True)
-
-        if pretrained_backbone is not None:
-            loaded_params = torch.load(pretrained_backbone)
-            self.ref_spine.load_state_dict(loaded_params['state_dict'], strict=True)
-            self.patch_spine.load_state_dict(loaded_params['state_dict'], strict=True)
-
-    # Returned embedding will have been reduced in size by a factor of 8 (4 if interpolate_first=True).
-    # Output channels are always 256.
-    # ex, 64x64 input with interpolate_first=True will result in tensor of shape [bx256x16x16]
-    def forward(self, x, ref, ref_center_point):
-        if self.interpolate_first:
-            x = F.interpolate(x, scale_factor=2, mode="bicubic")
-            # Don't interpolate ref - assume it is fed in at the proper resolution.
-            # ref = F.interpolate(ref, scale_factor=2, mode="bicubic")
-
-        # [ref] will have a 'mask' channel which we cannot use with pretrained spinenet.
-        ref = ref[:, :3, :, :]
-        ref_emb = self.ref_spine(ref)[0]
-        ref_code = gather_2d(ref_emb, ref_center_point // 8)  # Divide by 8 to bring the center point to the correct location.
-
-        patch = self.patch_spine(x)[0]
-        ref_code_expanded = ref_code.view(-1, 256, 1, 1).repeat(1, 1, patch.shape[2], patch.shape[3])
-        combined = self.merge_process1(torch.cat([patch, ref_code_expanded], dim=1))
-        combined = self.merge_process2(combined)
-        combined = self.merge_process3(combined)
-
-        return combined
-
-
-class BackboneEncoderNoRef(nn.Module):
-    def __init__(self, interpolate_first=True, pretrained_backbone=None):
-        super(BackboneEncoderNoRef, self).__init__()
-        self.interpolate_first = interpolate_first
-
-        self.patch_spine = SpineNet('49', in_channels=3, use_input_norm=True)
-
-        if pretrained_backbone is not None:
-            loaded_params = torch.load(pretrained_backbone)
-            self.patch_spine.load_state_dict(loaded_params['state_dict'], strict=True)
-
-    # Returned embedding will have been reduced in size by a factor of 8 (4 if interpolate_first=True).
-    # Output channels are always 256.
-    # ex, 64x64 input with interpolate_first=True will result in tensor of shape [bx256x16x16]
-    def forward(self, x):
-        if self.interpolate_first:
-            x = F.interpolate(x, scale_factor=2, mode="bicubic")
-
-        patch = self.patch_spine(x)[0]
-        return patch
-
-
-class BackboneSpinenetNoHead(nn.Module):
-    def __init__(self):
-        super(BackboneSpinenetNoHead, self).__init__()
-        # Uses dual spinenets, one for the input patch and the other for the reference image.
-        self.patch_spine = SpineNet('49', in_channels=3, use_input_norm=False, double_reduce_early=False)
-        self.ref_spine = SpineNet('49', in_channels=4, use_input_norm=False, double_reduce_early=False)
-
-        self.merge_process1 = ConvGnSilu(512, 512, kernel_size=1, activation=True, norm=False, bias=True)
-        self.merge_process2 = ConvGnSilu(512, 384, kernel_size=1, activation=True, norm=True, bias=False)
-        self.merge_process3 = ConvGnSilu(384, 256, kernel_size=1, activation=False, norm=False, bias=True)
-
-    def forward(self, x, ref, ref_center_point):
-        ref_emb = self.ref_spine(ref)[0]
-        ref_code = gather_2d(ref_emb, ref_center_point // 4)  # Divide by 8 to bring the center point to the correct location.
-
-        patch = self.patch_spine(x)[0]
-        ref_code_expanded = ref_code.view(-1, 256, 1, 1).repeat(1, 1, patch.shape[2], patch.shape[3])
-        combined = self.merge_process1(torch.cat([patch, ref_code_expanded], dim=1))
-        combined = self.merge_process2(combined)
-        combined = self.merge_process3(combined)
-        return combined
-
-
-class ResBlock(nn.Module):
-    def __init__(self, nf, downsample):
-        super(ResBlock, self).__init__()
-        nf_int = nf * 2
-        nf_out = nf * 2 if downsample else nf
-        stride = 2 if downsample else 1
-        self.c1 = ConvGnSilu(nf, nf_int, kernel_size=3, bias=False, activation=True, norm=True)
-        self.c2 = ConvGnSilu(nf_int, nf_int, stride=stride, kernel_size=3, bias=False, activation=True, norm=True)
-        self.c3 = ConvGnSilu(nf_int, nf_out, kernel_size=3, bias=False, activation=False, norm=True)
-        if downsample:
-            self.downsample = ConvGnSilu(nf, nf_out, kernel_size=1, stride=stride, bias=False, activation=False, norm=True)
-        else:
-            self.downsample = None
-        self.act = SiLU()
-
-    def forward(self, x):
-        identity = x
-        branch = self.c1(x)
-        branch = self.c2(branch)
-        branch = self.c3(branch)
-
-        if self.downsample:
-            identity = self.downsample(identity)
-        return self.act(identity + branch)
-
-
-class BackboneResnet(nn.Module):
-    def __init__(self):
-        super(BackboneResnet, self).__init__()
-        self.initial_conv = ConvGnSilu(3, 64, kernel_size=7, bias=True, activation=False, norm=False)
-        self.sequence = nn.Sequential(
-            ResBlock(64, downsample=False),
-            ResBlock(64, downsample=True),
-            ResBlock(128, downsample=False),
-            ResBlock(128, downsample=True),
-            ResBlock(256, downsample=False),
-            ResBlock(256, downsample=False))
-
-    def forward(self, x):
-        fea = self.initial_conv(x)
-        return self.sequence(fea)
 
 
 # Computes a linear latent by performing processing on the reference image and returning the filters of a single point,
@@ -706,3 +572,23 @@ class ConfigurableSwitchedResidualGenerator2(nn.Module):
             val["switch_%i_specificity" % (i,)] = means[i]
             val["switch_%i_histogram" % (i,)] = hists[i]
         return val
+
+@register_model
+def register_ConfigurableSwitchedResidualGenerator2(opt_net, opt):
+     return ConfigurableSwitchedResidualGenerator2(switch_depth=opt_net['switch_depth'],
+                                                            switch_filters=opt_net['switch_filters'],
+                                                            switch_reductions=opt_net['switch_reductions'],
+                                                            switch_processing_layers=opt_net[
+                                                                'switch_processing_layers'],
+                                                            trans_counts=opt_net['trans_counts'],
+                                                            trans_kernel_sizes=opt_net['trans_kernel_sizes'],
+                                                            trans_layers=opt_net['trans_layers'],
+                                                            transformation_filters=opt_net['transformation_filters'],
+                                                            attention_norm=opt_net['attention_norm'],
+                                                            initial_temp=opt_net['temperature'],
+                                                            final_temperature_step=opt_net['temperature_final_step'],
+                                                            heightened_temp_min=opt_net['heightened_temp_min'],
+                                                            heightened_final_step=opt_net['heightened_final_step'],
+                                                            upsample_factor=scale,
+                                                            add_scalable_noise_to_transforms=opt_net['add_noise'],
+                                                            for_video=opt_net['for_video'])

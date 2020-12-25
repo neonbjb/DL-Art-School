@@ -57,7 +57,7 @@ class ExtensibleTrainer(BaseModel):
                 new_net = None
             if net['type'] == 'generator':
                 if new_net is None:
-                    new_net = networks.define_G(opt, net, opt['scale']).to(self.device)
+                    new_net = networks.create_model(opt, net, opt['scale']).to(self.device)
                 self.netsG[name] = new_net
             elif net['type'] == 'discriminator':
                 if new_net is None:

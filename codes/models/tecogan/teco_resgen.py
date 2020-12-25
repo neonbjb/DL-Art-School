@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torchvision
 
+from trainer.networks import register_model
 from utils.util import sequential_checkpoint
 from models.arch_util import ConvGnSilu, make_layer
 
@@ -71,3 +72,8 @@ class TecoGen(nn.Module):
 
     def get_debug_values(self, step, net_name):
         return {'branch_std': self.join.std()}
+
+
+@register_model
+def register_tecogen(opt_net, opt):
+    return TecoGen(opt_net['nf'], opt_net['scale'])

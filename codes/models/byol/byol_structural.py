@@ -7,6 +7,7 @@ from torch import nn
 from data.byol_attachment import reconstructed_shared_regions
 from models.byol.byol_model_wrapper import singleton, EMA, get_module_device, set_requires_grad, \
     update_moving_average
+from trainer.networks import create_model, register_model
 from utils.util import checkpoint
 
 # loss function
@@ -179,3 +180,10 @@ class StructuralBYOL(nn.Module):
         enc = self.online_encoder(image)
         proj = self.online_predictor(enc)
         return enc, proj
+
+@register_model
+def register_structural_byol(opt_net, opt):
+    subnet = create_model(opt, opt_net['subnet'])
+    return StructuralBYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
+                          pretrained_state_dict=opt_get(opt_net, ["pretrained_path"]),
+                          freeze_until=opt_get(opt_net, ['freeze_until'], 0))

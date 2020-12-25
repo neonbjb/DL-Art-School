@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import models.srflow.module_util as mutil
 from models.arch_util import default_init_weights, ConvGnSilu, ConvGnLelu
+from trainer.networks import register_model
 from utils.util import opt_get
 
 
@@ -240,3 +241,18 @@ class RRDBLatentWrapper(nn.Module):
         fea = torch.cat(blocklist, dim=1)
         fea = self.postprocess(fea)
         return fea
+
+
+@register_model
+def register_rrdb_latent_wrapper(opt_net, opt):
+    return RRDBLatentWrapper(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                             nf=opt_net['nf'], nb=opt_net['nb'], with_bypass=opt_net['with_bypass'],
+                             blocks=opt_net['blocks_for_latent'], scale=opt_net['scale'],
+                             pretrain_rrdb_path=opt_net['pretrain_path'])
+
+
+@register_model
+def register_rrdb_srflow(opt_net, opt):
+    return RRDBNet(in_nc=opt_net['in_nc'], out_nc=opt_net['out_nc'],
+                       nf=opt_net['nf'], nb=opt_net['nb'], scale=opt_net['scale'],
+                       initial_conv_stride=opt_net['initial_stride'])

@@ -7,6 +7,7 @@ from torch.nn.init import kaiming_normal
 
 from torchvision.models.resnet import BasicBlock, Bottleneck
 from models.arch_util import ConvGnSilu, ConvBnSilu, ConvBnRelu
+from trainer.networks import register_model
 
 
 def constant_init(module, val, bias=0):
@@ -359,3 +360,13 @@ class SpinenetWithLogits(SpineNet):
     def forward(self, x):
         fea = super().forward(x)[self.output_to_attach]
         return self.tail(fea)
+
+@register_model
+def register_spinenet(opt_net, opt):
+    return SpineNet(str(opt_net['arch']), in_channels=3, use_input_norm=opt_net['use_input_norm'])
+
+
+@register_model
+def register_spinenet_with_logits(opt_net, opt):
+    return SpinenetWithLogits(str(opt_net['arch']), opt_net['output_to_attach'], opt_net['num_labels'],
+                              in_channels=3, use_input_norm=opt_net['use_input_norm'])

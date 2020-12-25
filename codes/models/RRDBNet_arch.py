@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torchvision
 
 from models.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
+from trainer.networks import register_model
 from utils.util import checkpoint, sequential_checkpoint
 
 
@@ -370,3 +371,27 @@ class RRDBDiscriminator(nn.Module):
         if self.pred_ is not None:
             self.pred_ = F.sigmoid(self.pred_)
             torchvision.utils.save_image(self.pred_.cpu().float(), os.path.join(path, "%i_predictions.png" % (step,)))
+
+
+@register_model
+def register_RRDBNetBypass(opt_net, opt):
+    additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
+    output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
+    gc = opt_net['gc'] if 'gc' in opt_net.keys() else 32
+    initial_stride = opt_net['initial_stride'] if 'initial_stride' in opt_net.keys() else 1
+    return RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                                mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
+                                output_mode=output_mode, body_block=RRDBWithBypass, scale=opt_net['scale'], growth_channels=gc,
+                                initial_stride=initial_stride)
+
+
+@register_model
+def register_RRDBNet(opt_net, opt):
+    additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
+    output_mode = opt_net['output_mode'] if 'output_mode' in opt_net.keys() else 'hq_only'
+    gc = opt_net['gc'] if 'gc' in opt_net.keys() else 32
+    initial_stride = opt_net['initial_stride'] if 'initial_stride' in opt_net.keys() else 1
+    return RRDBNet(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
+                                mid_channels=opt_net['nf'], num_blocks=opt_net['nb'], additive_mode=additive_mode,
+                                output_mode=output_mode, body_block=RRDB, scale=opt_net['scale'], growth_channels=gc,
+                                initial_stride=initial_stride)

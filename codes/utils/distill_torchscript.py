@@ -2,7 +2,7 @@ import argparse
 import functools
 import torch
 from utils import options as option
-from trainer.networks import define_G
+from trainer.networks import create_model
 
 
 class TracedModule:
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
 
-    netG = define_G(opt)
+    netG = create_model(opt)
     dummyInput = torch.rand(1,3,32,32)
 
     mode = 'onnx'
