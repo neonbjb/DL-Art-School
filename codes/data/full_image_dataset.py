@@ -325,7 +325,7 @@ class FullImageDataset(data.Dataset):
 
         d = {'lq': img_LQ, 'hq': img_GT, 'gt_fullsize_ref': gt_fullsize_ref, 'lq_fullsize_ref': lq_fullsize_ref,
              'lq_center': lq_center, 'gt_center': gt_center,
-             'LQ_path': LQ_path, 'GT_path': full_path}
+             'LQ_path': LQ_path, 'HQ_path': full_path}
         return d
 
     def __len__(self):
