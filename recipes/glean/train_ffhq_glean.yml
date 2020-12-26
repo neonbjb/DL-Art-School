@@ -24,7 +24,7 @@ networks:
     type: generator
     which_model_G: glean
     nf: 64
-    pretrained_stylegan: ../experiments/stylegan2-ffhq-config-f.pth
+    latent_bank_pretrained_weights: ../experiments/stylegan2-ffhq-config-f.pth
 
   feature_discriminator:
     type: discriminator

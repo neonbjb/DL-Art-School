@@ -193,4 +193,8 @@ def wide_resnet101_2(pretrained=False, progress=True, **kwargs):
 
 @register_model
 def register_resnet52(opt_net, opt):
-    return resnet50(pretrained=opt_net['pretrained'])
+    model = resnet50(pretrained=opt_net['pretrained'])
+    if opt_net['custom_head_logits']:
+        model.fc = nn.Linear(512 * 4, opt_net['custom_head_logits'])
+    return model
+

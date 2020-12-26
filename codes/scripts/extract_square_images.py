@@ -13,15 +13,15 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 8
+    opt['n_thread'] = 4
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\512_unsupervised']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\256_unsupervised'
-    opt['imgsize'] = 256
+    opt['input_folder'] = ['F:\\4k6k\\datasets\\images\\youtube\\images']
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\ge_full_1024'
+    opt['imgsize'] = 1024
     #opt['bottom_crop'] = 120
 
     save_folder = opt['save_folder']
@@ -61,7 +61,7 @@ class TiledDataset(data.Dataset):
 
         h, w, c = img.shape
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < 512:
+        if min(h,w) < 1024:
             return None
 
         # We must convert the image into a square.
