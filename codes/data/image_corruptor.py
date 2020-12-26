@@ -9,12 +9,12 @@ from io import BytesIO
 # options.
 class ImageCorruptor:
     def __init__(self, opt):
+        self.blur_scale = opt['corruption_blur_scale'] if 'corruption_blur_scale' in opt.keys() else 1
         self.fixed_corruptions = opt['fixed_corruptions'] if 'fixed_corruptions' in opt.keys() else []
         self.num_corrupts = opt['num_corrupts_per_image'] if 'num_corrupts_per_image' in opt.keys() else 0
         if self.num_corrupts == 0:
             return
         self.random_corruptions = opt['random_corruptions'] if 'random_corruptions' in opt.keys() else []
-        self.blur_scale = opt['corruption_blur_scale'] if 'corruption_blur_scale' in opt.keys() else 1
 
     def corrupt_images(self, imgs):
         if self.num_corrupts == 0 and not self.fixed_corruptions:
@@ -77,7 +77,7 @@ class ImageCorruptor:
             scale = 2
             if 'lq_resampling4x' == aug:
                 scale = 4
-            interpolation_modes = [cv2.INTER_AREA, cv2.INTER_NEAREST, cv2.INTER_CUBIC, cv2.INTER_LINEAR, cv2.INTER_LANCZOS4]
+            interpolation_modes = [cv2.INTER_NEAREST, cv2.INTER_CUBIC, cv2.INTER_LINEAR, cv2.INTER_LANCZOS4]
             mode = rand_int % len(interpolation_modes)
             # Downsample first, then upsample using the random mode.
             img = cv2.resize(img, dsize=(img.shape[1]//scale, img.shape[0]//scale), interpolation=cv2.INTER_NEAREST)

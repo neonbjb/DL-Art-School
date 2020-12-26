@@ -1,6 +1,8 @@
+import os
 import random
 
 import torch.nn
+import torchvision
 from torch.cuda.amp import autocast
 
 from utils.weight_scheduler import get_scheduler_for_opt
@@ -53,6 +55,10 @@ def create_injector(opt_inject, env):
         return SrDiffsInjector(opt_inject, env)
     elif type == 'multiframe_combiner':
         return MultiFrameCombiner(opt_inject, env)
+    elif type == 'mix_and_label':
+        return MixAndLabelInjector(opt_inject, env)
+    elif type == 'save_images':
+        return SaveImages(opt_inject, env)
     else:
         raise NotImplementedError
 
@@ -409,3 +415,48 @@ class MultiFrameCombiner(Injector):
             return self.combine(state)
         else:
             raise NotImplementedError
+
+
+# Combines data from multiple different sources and mixes them along the batch dimension. Labels are then emitted
+# according to how the mixing was performed.
+class MixAndLabelInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.out_labels = opt['out_labels']
+
+    def forward(self, state):
+        input_tensors = [state[i] for i in self.input]
+        num_inputs = len(input_tensors)
+        bs = input_tensors[0].shape[0]
+        labels = torch.randint(0, num_inputs, (bs,), device=input_tensors[0].device)
+        # Still don't know of a good way to do this in torch.. TODO make it better..
+        res = []
+        for b in range(bs):
+            res.append(input_tensors[labels[b]][b, :, :, :])
+        output = torch.stack(res, dim=0)
+        return { self.out_labels: labels, self.output: output }
+
+
+# Doesn't inject. Rather saves images that meet a specified criteria. Useful for performing classification filtering
+# using ExtensibleTrainer.
+class SaveImages(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.logits = opt['logits']
+        self.target = opt['target']
+        self.thresh = opt['threshold']
+        self.index = 0
+        self.run_id = random.randint(0, 999999)
+        self.savedir = opt['savedir']
+        os.makedirs(self.savedir, exist_ok=True)
+        self.softmax = torch.nn.Softmax(dim=1)
+
+    def forward(self, state):
+        logits = self.softmax(state[self.logits])
+        images = state[self.input]
+        bs = images.shape[0]
+        for b in range(bs):
+            if logits[b][self.target] > self.thresh:
+                torchvision.utils.save_image(images[b], os.path.join(self.savedir, f'{self.run_id}_{self.index}.jpg'))
+                self.index += 1
+        return {}
