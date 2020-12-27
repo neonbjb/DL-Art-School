@@ -3,6 +3,7 @@ import itertools
 import random
 
 import cv2
+import kornia
 import numpy as np
 import torch
 import os
@@ -25,6 +26,7 @@ class ImageFolderDataset:
         self.fetch_alt_image = opt['fetch_alt_image']  # If specified, this dataset will attempt to find a second image
                                                        # from the same video source. Search for 'fetch_alt_image' for more info.
         self.skip_lq = opt['skip_lq']
+        self.disable_flip = opt['disable_flip']
         assert (self.target_hq_size // self.scale) % self.multiple == 0  # If we dont throw here, we get some really obscure errors.
         if not isinstance(self.paths, list):
             self.paths = [self.paths]
@@ -108,6 +110,9 @@ class ImageFolderDataset:
 
     def __getitem__(self, item):
         hq = util.read_img(None, self.image_paths[item], rgb=True)
+        if not self.disable_flip and random.random() < .5:
+            hq = hq[:, ::-1, :]
+
         if self.labeler:
             assert hq.shape[0] == hq.shape[1]  # This just has not been accomodated yet.
             dim = hq.shape[0]
