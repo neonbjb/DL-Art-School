@@ -8,7 +8,7 @@ import torch.nn as nn
 import trainer.lr_scheduler as lr_scheduler
 import trainer.networks as networks
 from trainer.base_model import BaseModel
-from trainer.injectors import create_injector
+from trainer.inject import create_injector
 from trainer.steps import ConfigurableStep
 from trainer.experiments.experiments import get_experiment_for_name
 import torchvision.utils as utils

@@ -2,7 +2,7 @@ import torch
 from torch.cuda.amp import autocast
 from models.flownet2.networks import Resample2d
 from models.flownet2 import flow2img
-from trainer.injectors import Injector
+from trainer.inject import Injector
 
 
 def create_stereoscopic_injector(opt, env):

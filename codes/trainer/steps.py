@@ -6,7 +6,7 @@ import logging
 from trainer.losses import create_loss
 import torch
 from collections import OrderedDict
-from trainer.injectors import create_injector
+from trainer.inject import create_injector
 from utils.util import recursively_detach
 
 logger = logging.getLogger('base')
