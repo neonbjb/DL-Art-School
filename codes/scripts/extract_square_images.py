@@ -19,9 +19,9 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\images\\youtube\\images']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\ge_full_1024'
-    opt['imgsize'] = 1024
+    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset4']
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\256_unsupervised_new'
+    opt['imgsize'] = 256
     #opt['bottom_crop'] = 120
 
     save_folder = opt['save_folder']
@@ -52,6 +52,7 @@ class TiledDataset(data.Dataset):
             print("Error with ", path)
             return None
         if len(img.shape) == 2:
+            print("Skipping due to greyscale")
             return None
 
         # Perform explicit crops first. These are generally used to get rid of watermarks so we dont even want to
@@ -61,7 +62,8 @@ class TiledDataset(data.Dataset):
 
         h, w, c = img.shape
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < 1024:
+        if min(h,w) < 256:
+            print("Skipping due to threshold")
             return None
 
         # We must convert the image into a square.
@@ -70,13 +72,7 @@ class TiledDataset(data.Dataset):
         img = img[(h - dim) // 2:dim + (h - dim) // 2, (w - dim) // 2:dim + (w - dim) // 2, :]
         img = cv2.resize(img, (self.opt['imgsize'], self.opt['imgsize']), interpolation=cv2.INTER_AREA)
 
-        # I was having some issues with unicode filenames with cv2. Hence using PIL.
-        # cv2.imwrite(osp.join(self.opt['save_folder'], basename + ".jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
-
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = (img * 255).astype(np.uint8)
-        img = Image.fromarray(img)
-        img.save(osp.join(self.opt['save_folder'], basename + ".jpg"), "JPEG", quality=self.opt['compression_level'], optimize=True)
+        cv2.imwrite(osp.join(self.opt['save_folder'], basename + ".jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
         return None
 
     def __len__(self):

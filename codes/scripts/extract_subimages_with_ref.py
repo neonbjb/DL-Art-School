@@ -13,19 +13,19 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 7
+    opt['n_thread'] = 4
     opt['compression_level'] = 90  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\images\youtube\\images_cook'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\youtube_massive_cook'
-    opt['crop_sz'] = [512, 1024, 2048]  # the size of each sub-image
-    opt['step'] = [256, 512, 1024]  # step of the sliding crop window
+    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\images'
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\512_with_ref_new'
+    opt['crop_sz'] = [1024, 2048]  # the size of each sub-image
+    opt['step'] = [700, 1200]  # step of the sliding crop window
     opt['exclusions'] = [[],[],[]] # image names matching these terms wont be included in the processing.
-    opt['thres_sz'] = 128  # size threshold
-    opt['resize_final_img'] = [.5, .25, .125]
+    opt['thres_sz'] = 256  # size threshold
+    opt['resize_final_img'] = [.5, .25]
     opt['only_resize'] = False
     opt['vertical_split'] = False
     opt['input_image_max_size_before_being_halved'] = 5500  # As described, images larger than this dimensional size will be halved before anything else is done.
@@ -245,7 +245,7 @@ class TiledDataset(data.Dataset):
             for exc in exclusions:
                 if exc in path:
                     excluded = True
-                    break;
+                    break
             if excluded:
                 continue
             results.extend(self.get_for_scale(img, crop_sz, step, resize_factor, ref_resize_factor))
@@ -262,6 +262,7 @@ def extract_single(opt, writer):
     dataset = TiledDataset(opt)
     dataloader = data.DataLoader(dataset, num_workers=opt['n_thread'], collate_fn=identity)
     tq = tqdm(dataloader)
+    i = 0
     for spl_imgs in tq:
         if spl_imgs is None:
             continue
@@ -272,7 +273,8 @@ def extract_single(opt, writer):
             imgs, path = imgs
             if imgs is None or len(imgs) <= 1:
                 continue
-            path = path + "_" + lbl
+            path = f'{path}_{lbl}_{i}'
+            i += 1
             ref_id = writer.write_reference_image(imgs[0], path)
             for tile in imgs[1:]:
                 writer.write_tile_image(ref_id, tile)
