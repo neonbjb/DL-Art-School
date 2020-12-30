@@ -72,6 +72,14 @@ class ConfigurableLoss(nn.Module):
     def forward(self, net, state):
         raise NotImplementedError
 
+    def is_stateful(self) -> bool:
+        """
+        Losses can inject into the state too. useful for when a loss computation can be used by another loss.
+        if this is true, the forward pass must return (loss, new_state). If false (the default), forward() only returns
+        the loss value.
+        """
+        return False
+
     def extra_metrics(self):
         return self.metrics
 
@@ -270,7 +278,9 @@ class DiscriminatorGanLoss(ConfigurableLoss):
         if self.gradient_penalty:
             [r.requires_grad_() for r in real]
         fake = extract_params_from_state(self.opt['fake'], state)
+        new_state = {}
         fake = [f.detach() for f in fake]
+        new_state = {}
         if self.noise:
             nreal = []
             nfake = []
@@ -313,12 +323,20 @@ class DiscriminatorGanLoss(ConfigurableLoss):
             # Apply gradient penalty. TODO: migrate this elsewhere.
             from models.stylegan.stylegan2_lucidrains import gradient_penalty
             assert len(real) == 1   # Grad penalty doesn't currently support multi-input discriminators.
-            gp = gradient_penalty(real[0], d_real)
+            gp, gp_structure = gradient_penalty(real[0], d_real, return_structured_grads=True)
             self.metrics.append(("gradient_penalty", gp.clone().detach()))
             loss = loss + gp
             self.metrics.append(("gradient_penalty", gp))
+            # The gp_structure is a useful visual debugging tool to see what areas of the generated image the disc is paying attention to.
+            gpimg = (gp_structure / (torch.std(gp_structure, dim=(-1, -2), keepdim=True) * 2)) \
+                              - torch.mean(gp_structure, dim=(-1, -2), keepdim=True) + .5
+            new_state['%s_%s_gp_structure_img' % (self.opt['fake'], self.opt['real'])] = gpimg
 
-        return loss
+        return loss, new_state
+
+    # This loss is stateful because it injects a debugging result from the GP term when enabled.
+    def is_stateful(self) -> bool:
+        return True
 
 
 # Computes a loss created by comparing the output of a generator to the output from the same generator when fed an

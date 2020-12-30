@@ -123,13 +123,10 @@ class ConfigurableStep(Module):
     # chunked tensors. Use grad_accum_step to dereference these steps. Should return a dict of tensors that later
     # steps might use. These tensors are automatically detached and accumulated into chunks.
     def do_forward_backward(self, state, grad_accum_step, amp_loss_id, train=True):
-        new_state = {}
-
-        # Prepare a de-chunked state dict which will be used for the injectors & losses.
-        local_state = {}
+        local_state = {}  # <-- Will store the entire local state to be passed to injectors & losses.
+        new_state = {}  # <-- Will store state values created by this step for returning to ExtensibleTrainer.
         for k, v in state.items():
             local_state[k] = v[grad_accum_step]
-        local_state.update(new_state)
         local_state['train_nets'] = str(self.get_networks_trained())
 
         # Some losses compute backward() internally. Accommodate this by stashing the amp_loss_id in env.
@@ -164,7 +161,12 @@ class ConfigurableStep(Module):
                    'before' in loss.opt.keys() and self.env['step'] > loss.opt['before'] or \
                    'every' in loss.opt.keys() and self.env['step'] % loss.opt['every'] != 0:
                     continue
-                l = loss(self.get_network_for_name(self.step_opt['training']), local_state)
+                if loss.is_stateful():
+                    l, lstate = loss(self.get_network_for_name(self.step_opt['training']), local_state)
+                    local_state.update(lstate)
+                    new_state.update(lstate)
+                else:
+                    l = loss(self.get_network_for_name(self.step_opt['training']), local_state)
                 total_loss += l * self.weights[loss_name]
                 # Record metrics.
                 if isinstance(l, torch.Tensor):

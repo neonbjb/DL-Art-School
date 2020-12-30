@@ -230,7 +230,12 @@ class ExtensibleTrainer(BaseModel):
             # Push the detached new state tensors into the state map for use with the next step.
             for k, v in new_states.items():
                 # State is immutable to reduce complexity. Overwriting existing state keys is not supported.
-                assert k not in state.keys()
+                class OverwrittenStateError(Exception):
+                    def __init__(self, k, keys):
+                        super().__init__(f'Attempted to overwrite state key: {k}.  The state should be considered '
+                                         f'immutable and keys should not be overwritten. Current keys: {keys}')
+                if k in state.keys():
+                    raise OverwrittenStateError(k, list(state.keys()))
                 state[k] = v
 
             if train_step:
