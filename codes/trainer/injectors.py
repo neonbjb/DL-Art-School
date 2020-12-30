@@ -446,9 +446,13 @@ class SaveImages(Injector):
         self.target = opt['target']
         self.thresh = opt['threshold']
         self.index = 0
+        self.rindex = 0
         self.run_id = random.randint(0, 999999)
         self.savedir = opt['savedir']
         os.makedirs(self.savedir, exist_ok=True)
+        self.rejectdir = opt['negatives']
+        if self.rejectdir:
+            os.makedirs(self.rejectdir, exist_ok=True)
         self.softmax = torch.nn.Softmax(dim=1)
 
     def forward(self, state):
@@ -459,4 +463,7 @@ class SaveImages(Injector):
             if logits[b][self.target] > self.thresh:
                 torchvision.utils.save_image(images[b], os.path.join(self.savedir, f'{self.run_id}_{self.index}.jpg'))
                 self.index += 1
+            elif self.rejectdir:
+                torchvision.utils.save_image(images[b], os.path.join(self.rejectdir, f'{self.run_id}_{self.rindex}.jpg'))
+                self.rindex += 1
         return {}

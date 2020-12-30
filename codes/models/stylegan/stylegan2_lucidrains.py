@@ -859,7 +859,7 @@ class StyleGan2DivergenceLoss(L.ConfigurableLoss):
 
             # Apply gradient penalty. TODO: migrate this elsewhere.
             if self.env['step'] % self.gp_frequency == 0:
-                from models.archs.stylegan.stylegan2_lucidrains import gradient_penalty
+                from models.stylegan.stylegan2_lucidrains import gradient_penalty
                 gp = gradient_penalty(real_input, real)
                 self.metrics.append(("gradient_penalty", gp.clone().detach()))
                 divergence_loss = divergence_loss + gp
@@ -880,11 +880,11 @@ class StyleGan2PathLengthLoss(L.ConfigurableLoss):
     def forward(self, net, state):
         w_styles = state[self.w_styles]
         gen = state[self.gen]
-        from models.archs.stylegan.stylegan2_lucidrains import calc_pl_lengths
+        from models.stylegan.stylegan2_lucidrains import calc_pl_lengths
         pl_lengths = calc_pl_lengths(w_styles, gen)
         avg_pl_length = np.mean(pl_lengths.detach().cpu().numpy())
 
-        from models.archs.stylegan.stylegan2_lucidrains import is_empty
+        from models.stylegan.stylegan2_lucidrains import is_empty
         if not is_empty(self.pl_mean):
             pl_loss = ((pl_lengths - self.pl_mean) ** 2).mean()
             if not torch.isnan(pl_loss):
