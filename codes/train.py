@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 import torch
 from data.data_sampler import DistIterSampler
-from trainer.eval import create_evaluator
+from trainer.eval.evaluator import create_evaluator
 
 from utils import util, options as option
 from data import create_dataloader, create_dataset
@@ -293,7 +293,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_mi1_rrdb4x_6bl_opt.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_mi1_rrdb4x_23bl_opt.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()

@@ -29,7 +29,7 @@ def format_injector_name(name):
     return name.replace("_injector", "")
 
 
-# Works by loading all python modules in the injectors/ directory. The end result of this will be that the Injector.__subclasses__()
+# Works by loading all python modules in the injectors/ directory and sniffing out subclasses of Injector.
 # field will be properly populated.
 def find_registered_injectors(base_path="trainer/injectors"):
     module_iter = pkgutil.walk_packages([base_path])

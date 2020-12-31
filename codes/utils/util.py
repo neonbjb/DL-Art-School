@@ -55,7 +55,10 @@ def checkpoint(fn, *args):
         return fn(*args)
 
 def sequential_checkpoint(fn, partitions, *args):
-    enabled = loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in loaded_options.keys() else True
+    if loaded_options is None:
+        enabled = False
+    else:
+        enabled = loaded_options['checkpointing_enabled'] if 'checkpointing_enabled' in loaded_options.keys() else True
     if enabled:
         return torch.utils.checkpoint.checkpoint_sequential(fn, partitions, *args)
     else:
