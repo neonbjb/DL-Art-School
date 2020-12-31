@@ -50,7 +50,6 @@ if __name__ == '__main__':
         'force_multiple': 32,
         'scale': 2,
         'eval': False,
-        'strict': False,
         'fixed_corruptions': ['jpeg-broad', 'gaussian_blur'],
         'random_corruptions': ['noise-5', 'none'],
         'num_corrupts_per_image': 1,

@@ -119,7 +119,7 @@ class ImageCorruptor:
                     raise NotImplementedError("specified jpeg corruption doesn't exist")
                 # JPEG compression
                 qf = (rand_int % range + lo)
-                # cv2's jpeg compression is "odd". It introduces artifacts. Use PIL instead.
+                # Use PIL to perform a mock compression to a data buffer, then swap back to cv2.
                 img = (img * 255).astype(np.uint8)
                 img = Image.fromarray(img)
                 buffer = BytesIO()
