@@ -11,7 +11,7 @@ munch
 tqdm
 scp
 tensorboard
-pytorch_fid
+pytorch_fid==0.1.1
 kornia
 linear_attention_transformer
 vector_quantize_pytorch

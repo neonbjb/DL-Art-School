@@ -5,6 +5,9 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 
+from trainer.networks import register_model
+from utils.util import opt_get
+
 
 class BlurLayer(nn.Module):
     def __init__(self, kernel=None, normalize=True, flip=False, stride=1):
@@ -373,3 +376,8 @@ class StyleGanDiscriminator(nn.Module):
             raise KeyError("Unknown structure: ", self.structure)
 
         return scores_out
+
+
+@register_model
+def register_stylegan_vgg(opt_net, opt):
+    return StyleGanDiscriminator(opt_get(opt_net, ['image_size'], 128))

@@ -18,7 +18,7 @@ from torch.autograd import grad as torch_grad
 from vector_quantize_pytorch import VectorQuantize
 
 from trainer.networks import register_model
-from utils.util import checkpoint
+from utils.util import checkpoint, opt_get
 
 try:
     from apex import amp
@@ -763,7 +763,7 @@ class DiscriminatorBlock(nn.Module):
 
 class StyleGan2Discriminator(nn.Module):
     def __init__(self, image_size, network_capacity=16, fq_layers=[], fq_dict_size=256, attn_layers=[],
-                 transparent=False, fmap_max=512, input_filters=3):
+                 transparent=False, fmap_max=512, input_filters=3, quantize=False, do_checkpointing=False):
         super().__init__()
         num_layers = int(log2(image_size) - 1)
 
@@ -789,12 +789,16 @@ class StyleGan2Discriminator(nn.Module):
 
             attn_blocks.append(attn_fn)
 
-            quantize_fn = PermuteToFrom(VectorQuantize(out_chan, fq_dict_size)) if num_layer in fq_layers else None
-            quantize_blocks.append(quantize_fn)
+            if quantize:
+                quantize_fn = PermuteToFrom(VectorQuantize(out_chan, fq_dict_size)) if num_layer in fq_layers else None
+                quantize_blocks.append(quantize_fn)
+            else:
+                quantize_blocks.append(None)
 
         self.blocks = nn.ModuleList(blocks)
         self.attn_blocks = nn.ModuleList(attn_blocks)
         self.quantize_blocks = nn.ModuleList(quantize_blocks)
+        self.do_checkpointing = do_checkpointing
 
         chan_last = filters[-1]
         latent_dim = 2 * 2 * chan_last
@@ -811,7 +815,10 @@ class StyleGan2Discriminator(nn.Module):
         quantize_loss = torch.zeros(1).to(x)
 
         for (block, attn_block, q_block) in zip(self.blocks, self.attn_blocks, self.quantize_blocks):
-            x = block(x)
+            if self.do_checkpointing:
+                x = checkpoint(block, x)
+            else:
+                x = block(x)
 
             if exists(attn_block):
                 x = attn_block(x)
@@ -862,7 +869,6 @@ class StyleGan2DivergenceLoss(L.ConfigurableLoss):
 
             # Apply gradient penalty. TODO: migrate this elsewhere.
             if self.env['step'] % self.gp_frequency == 0:
-                from models.stylegan.stylegan2_lucidrains import gradient_penalty
                 gp = gradient_penalty(real_input, real)
                 self.metrics.append(("gradient_penalty", gp.clone().detach()))
                 divergence_loss = divergence_loss + gp
@@ -877,17 +883,14 @@ class StyleGan2PathLengthLoss(L.ConfigurableLoss):
         self.w_styles = opt['w_styles']
         self.gen = opt['gen']
         self.pl_mean = None
-        from models.archs.stylegan.stylegan2_lucidrains import EMA
         self.pl_length_ma = EMA(.99)
 
     def forward(self, net, state):
         w_styles = state[self.w_styles]
         gen = state[self.gen]
-        from models.stylegan.stylegan2_lucidrains import calc_pl_lengths
         pl_lengths = calc_pl_lengths(w_styles, gen)
         avg_pl_length = np.mean(pl_lengths.detach().cpu().numpy())
 
-        from models.stylegan.stylegan2_lucidrains import is_empty
         if not is_empty(self.pl_mean):
             pl_loss = ((pl_lengths - self.pl_mean) ** 2).mean()
             if not torch.isnan(pl_loss):
@@ -906,3 +909,12 @@ def register_stylegan2_lucidrains(opt_net, opt):
     return StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
                                         style_depth=opt_net['style_depth'], structure_input=is_structured,
                                         attn_layers=attn)
+
+
+@register_model
+def register_stylegan2_discriminator(opt_net, opt):
+    attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
+    disc = StyleGan2Discriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'], attn_layers=attn,
+                                  do_checkpointing=opt_get(opt_net, ['do_checkpointing'], False),
+                                  quantize=opt_get(opt_net, ['quantize'], False))
+    return StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])

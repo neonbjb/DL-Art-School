@@ -37,13 +37,15 @@ class ByolDatasetWrapper(Dataset):
         self.cropped_img_size = opt['crop_size']
         self.key1 = opt_get(opt, ['key1'], 'hq')
         self.key2 = opt_get(opt, ['key2'], 'lq')
+        for_sr = opt_get(opt, ['for_sr'], False)  # When set, color alterations and blurs are disabled.
 
         augmentations = [ \
-            RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8),
-            augs.RandomGrayscale(p=0.2),
             augs.RandomHorizontalFlip(),
-            RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1),
             augs.RandomResizedCrop((self.cropped_img_size, self.cropped_img_size))]
+        if not for_sr:
+            augmentations.extend([RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8),
+                                  augs.RandomGrayscale(p=0.2),
+                                  RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1)])
         if opt['normalize']:
             # The paper calls for normalization. Most datasets/models in this repo don't use this.
             # Recommend setting true if you want to train exactly like the paper.
