@@ -48,7 +48,7 @@ class SrFidEvaluator(evaluator.Evaluator):
                 torchvision.utils.save_image(hq_gen_hf_applied[b], osp.join(fid_fake_path, "%i_.png" % (counter)))
                 counter += 1
 
-        return {"fid": fid_score.calculate_fid_given_paths([self.fid_real_samples, fid_fake_path], self.batch_sz, True,
+        return {"sr_fid": fid_score.calculate_fid_given_paths([self.fid_real_samples, fid_fake_path], self.batch_sz, True,
                                                            2048)}
 
 
