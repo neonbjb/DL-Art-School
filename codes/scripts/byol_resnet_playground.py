@@ -26,7 +26,7 @@ from utils.options import dict_to_nonedict
 def structural_euc_dist(x, y):
     diff = torch.square(x - y)
     sum = torch.sum(diff, dim=-1)
-    return torch.mean(torch.sqrt(sum))
+    return torch.sqrt(sum)
 
 
 def cosine_similarity(x, y):
@@ -87,43 +87,15 @@ def register_hook(net, layer_name):
     layer.register_forward_hook(_hook)
 
 
-def create_latent_database(model, model_index=0):
-    batch_size = 32
-    num_workers = 1
-    output_path = '../../results/byol_resnet_latents/'
-
-    os.makedirs(output_path, exist_ok=True)
-    dataloader = get_image_folder_dataloader(batch_size, num_workers)
-    id = 0
-    dict_count = 1
-    latent_dict = {}
-    all_paths = []
-    for batch in tqdm(dataloader):
-        hq = batch['hq'].to('cuda')
-        latent = model(hq)[model_index]   # BYOL trainer only trains the '4' output, which is indexed at [1]. Confusing.
-        for b in range(latent.shape[0]):
-            im_path = batch['HQ_path'][b]
-            all_paths.append(im_path)
-            latent_dict[id] = latent[b].detach().cpu()
-            if (id+1) % 1000 == 0:
-                print("Saving checkpoint..")
-                torch.save(latent_dict, os.path.join(output_path, "latent_dict_%i.pth" % (dict_count,)))
-                latent_dict = {}
-                torch.save(all_paths, os.path.join(output_path, "all_paths.pth"))
-                dict_count += 1
-            id += 1
-
-
-
 def get_latent_for_img(model, img):
     img_t = ToTensor()(Image.open(img)).to('cuda').unsqueeze(0)
     _, _, h, w = img_t.shape
     # Center crop img_t and resize to 224.
     d = min(h, w)
     dh, dw = (h-d)//2, (w-d)//2
-    if dh == 0:
+    if dw != 0:
         img_t = img_t[:, :, :, dw:-dw]
-    else:
+    elif dh != 0:
         img_t = img_t[:, :, dh:-dh, :]
     img_t = torch.nn.functional.interpolate(img_t, size=(224, 224), mode="area")
     model(img_t)
@@ -134,36 +106,42 @@ def get_latent_for_img(model, img):
 def find_similar_latents(model, compare_fn=structural_euc_dist):
     global layer_hooked_value
 
-    img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\yui_xx.jpg'
+    img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\poon.jpg'
     #img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\nicky_xx.jpg'
     output_path = '../../results/byol_resnet_similars'
     os.makedirs(output_path, exist_ok=True)
-    imglatent = get_latent_for_img(model, img)
-    _, c, h, w = imglatent.shape
+    imglatent = get_latent_for_img(model, img).squeeze().unsqueeze(0)
+    _, c = imglatent.shape
 
-    batch_size = 32
-    num_workers = 1
+    batch_size = 128
+    num_workers = 8
     dataloader = get_image_folder_dataloader(batch_size, num_workers)
     id = 0
+    output_batch = 1
     results = []
+    result_paths = []
     for batch in tqdm(dataloader):
         hq = batch['hq'].to('cuda')
         model(hq)
-        latent = layer_hooked_value
-        for b in range(latent.shape[0]):
-            im_path = batch['HQ_path'][b]
-            results.append((im_path, compare_fn(imglatent, latent[b].unsqueeze(0)).item()))
-            id += 1
-        if id > 2000:
-            break
-    results.sort(key=lambda x: x[1])
-    for i in range(50):
-        mag = results[i][1]
-        shutil.copy(results[i][0], os.path.join(output_path, f'{i}_{mag}.jpg'))
+        latent = layer_hooked_value.clone().squeeze()
+        compared = compare_fn(imglatent.repeat(latent.shape[0], 1), latent)
+        results.append(compared.cpu())
+        result_paths.extend(batch['HQ_path'])
+        id += batch_size
+        if id > 10000:
+            k = 500
+            results = torch.cat(results, dim=0)
+            vals, inds = torch.topk(results, k, largest=False)
+            for i in inds:
+                mag = int(results[i].item() * 1000)
+                shutil.copy(result_paths[i], os.path.join(output_path, f'{mag:05}_{output_batch}_{i}.jpg'))
+            results = []
+            result_paths = []
+            id = 0
 
 
 if __name__ == '__main__':
-    pretrained_path = '../../experiments/resnet_byol_diffframe_69k.pth'
+    pretrained_path = '../../experiments/resnet_byol_diffframe_85k.pth'
     model = resnet50(pretrained=False).to('cuda')
     sd = torch.load(pretrained_path)
     resnet_sd = {}

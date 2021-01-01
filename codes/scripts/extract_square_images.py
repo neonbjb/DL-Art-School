@@ -19,9 +19,9 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imgset4']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\256_unsupervised_new'
-    opt['imgsize'] = 256
+    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\vixen\\vix_cropped']
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\video_512_cropped'
+    opt['imgsize'] = 512
     #opt['bottom_crop'] = 120
 
     save_folder = opt['save_folder']
@@ -45,7 +45,7 @@ class TiledDataset(data.Dataset):
     def get(self, index):
         path = self.images[index]
         basename = osp.basename(path)
-        img = data_util.read_img(None, path)
+        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
         # Greyscale not supported.
         if img is None:
@@ -62,7 +62,7 @@ class TiledDataset(data.Dataset):
 
         h, w, c = img.shape
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < 256:
+        if min(h,w) < 512:
             print("Skipping due to threshold")
             return None
 
@@ -71,7 +71,6 @@ class TiledDataset(data.Dataset):
         # Crop the image so that only the center is left, since this is often the most salient part of the image.
         img = img[(h - dim) // 2:dim + (h - dim) // 2, (w - dim) // 2:dim + (w - dim) // 2, :]
         img = cv2.resize(img, (self.opt['imgsize'], self.opt['imgsize']), interpolation=cv2.INTER_AREA)
-
         cv2.imwrite(osp.join(self.opt['save_folder'], basename + ".jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
         return None
 
