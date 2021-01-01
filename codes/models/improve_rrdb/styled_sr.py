@@ -9,7 +9,7 @@ from models.RRDBNet_arch import RRDB
 from models.arch_util import ConvGnLelu, default_init_weights
 from models.stylegan.stylegan2_lucidrains import StyleVectorizer, GeneratorBlock, Conv2DMod, leaky_relu, Blur
 from trainer.networks import register_model
-from utils.util import checkpoint
+from utils.util import checkpoint, opt_get
 
 
 class EncoderRRDB(nn.Module):
@@ -35,10 +35,10 @@ class EncoderRRDB(nn.Module):
 
 
 class StyledSrEncoder(nn.Module):
-    def __init__(self, fea_out=256):
+    def __init__(self, fea_out=256, initial_stride=1):
         super().__init__()
         # Current assumes fea_out=256.
-        self.initial_conv = ConvGnLelu(3, 32, kernel_size=7, norm=False, activation=False, bias=True)
+        self.initial_conv = ConvGnLelu(3, 32, kernel_size=7, stride=initial_stride, norm=False, activation=False, bias=True)
         self.rrdbs = nn.ModuleList([
            EncoderRRDB(32),
            EncoderRRDB(64),
@@ -56,7 +56,7 @@ class StyledSrEncoder(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, image_size, latent_dim, transparent=False, start_level=3, upsample_levels=2):
+    def __init__(self, image_size, latent_dim, initial_stride=1, start_level=3, upsample_levels=2):
         super().__init__()
         total_levels = upsample_levels + 1  # The first level handles the raw encoder output and doesn't upsample.
         self.image_size = image_size
@@ -75,7 +75,7 @@ class Generator(nn.Module):
             8,    # 1024x1024
         ]
 
-        self.encoder = StyledSrEncoder(filters[start_level])
+        self.encoder = StyledSrEncoder(filters[start_level], initial_stride)
 
         in_out_pairs = list(zip(filters[:-1], filters[1:]))
         self.blocks = nn.ModuleList([])
@@ -88,8 +88,7 @@ class Generator(nn.Module):
                 in_chan,
                 out_chan,
                 upsample=not_first,
-                upsample_rgb=not_last,
-                rgba=transparent
+                upsample_rgb=not_last
             )
             self.blocks.append(block)
 
@@ -108,10 +107,10 @@ class Generator(nn.Module):
 
 
 class StyledSrGenerator(nn.Module):
-    def __init__(self, image_size, latent_dim=512, style_depth=8, lr_mlp=.1):
+    def __init__(self, image_size, initial_stride=1, latent_dim=512, style_depth=8, lr_mlp=.1):
         super().__init__()
         self.vectorizer = StyleVectorizer(latent_dim, style_depth, lr_mul=lr_mlp)
-        self.gen = Generator(image_size=image_size, latent_dim=latent_dim)
+        self.gen = Generator(image_size=image_size, latent_dim=latent_dim, initial_stride=initial_stride)
         self.mixed_prob = .9
         self._init_weights()
 
@@ -160,5 +159,5 @@ if __name__ == '__main__':
 
 
 @register_model
-def register_opt_styled_sr(opt_net, opt):
-    return StyledSrGenerator(128)
+def register_styled_sr(opt_net, opt):
+    return StyledSrGenerator(128, initial_stride=opt_get(opt_net, ['initial_stride'], 1))

@@ -129,10 +129,10 @@ def define_D_net(opt_net, img_sz=None, wrap=False):
         netD = SRGAN_arch.PsnrApproximator(nf=opt_net['nf'], input_img_factor=img_sz / 128)
     elif which_model == "stylegan2_discriminator":
         attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
-        disc = stylegan2.StyleGan2Discriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'], attn_layers=attn)
-        netD = stylegan2.StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
-    elif which_model == "rrdb_disc":
-        netD = RRDBNet_arch.RRDBDiscriminator(opt_net['in_nc'], opt_net['nf'], opt_net['nb'], blocks_per_checkpoint=3)
+        from models.stylegan.stylegan2_lucidrains import StyleGan2Discriminator
+        disc = StyleGan2Discriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'], attn_layers=attn)
+        from models.stylegan.stylegan2_lucidrains import StyleGan2Augmentor
+        netD = StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
     return netD
