@@ -64,7 +64,13 @@ class ConfigurableStep(Module):
         training = [training]
         self.optimizers = []
         for net_name, net, opt_config in zip(training, nets, opt_configs):
-            optim_params = []
+            # Configs can organize parameters by-group and specify different learning rates for each group. This only
+            # works in the model specifically annotates which parameters belong in which group using PARAM_GROUP.
+            optim_params = {'default': {'params': [], 'lr': opt_config['lr']}}
+            if 'param_groups' in opt_config.keys():
+                for k, pg in opt_config['param_groups'].items():
+                    optim_params[k] = {'params': [], 'lr': pg['lr']}
+
             for k, v in net.named_parameters():  # can optimize for a part of the model
                 # Make some inference about these parameters, which can be used by some optimizers to treat certain
                 # parameters differently. For example, it is considered good practice to not do weight decay on
@@ -76,14 +82,23 @@ class ConfigurableStep(Module):
                     v.is_weight = True
                 if ".bn" in k or '.batchnorm' in k or '.bnorm' in k:
                     v.is_bn = True
+                # Some models can specify some parameters to be in different groups.
+                param_group = "default"
+                if hasattr(v, 'PARAM_GROUP'):
+                    if v.PARAM_GROUP in optim_params.keys():
+                        param_group = v.PARAM_GROUP
+                    else:
+                        logger.warning(f'Model specifies a custom param group {v.PARAM_GROUP} which is not configured. '
+                                       f'The same LR will be used for all parameters.')
+
                 if v.requires_grad:
-                    optim_params.append(v)
+                    optim_params[param_group]['params'].append(v)
                 else:
                     if self.env['rank'] <= 0:
                         logger.warning('Params [{:s}] will not optimize.'.format(k))
 
             if 'optimizer' not in self.step_opt.keys() or self.step_opt['optimizer'] == 'adam':
-                opt = torch.optim.Adam(optim_params, lr=opt_config['lr'],
+                opt = torch.optim.Adam(list(optim_params.values()),
                                        weight_decay=opt_config['weight_decay'],
                                        betas=(opt_config['beta1'], opt_config['beta2']))
             elif self.step_opt['optimizer'] == 'lars':

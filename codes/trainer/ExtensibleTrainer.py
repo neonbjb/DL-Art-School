@@ -325,7 +325,8 @@ class ExtensibleTrainer(BaseModel):
 
         # Log learning rate (from first param group) too.
         for o in self.optimizers:
-            log['learning_rate_%s' % (o._config['network'],)] = o.param_groups[0]['lr']
+            for pgi, pg in enumerate(o.param_groups):
+                log['learning_rate_%s_%i' % (o._config['network'], pgi)] = pg['lr']
         return log
 
     def get_current_visuals(self, need_GT=True):

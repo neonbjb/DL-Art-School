@@ -89,6 +89,7 @@ class Trainer:
             seed = random.randint(1, 10000)
         if self.rank <= 0:
             self.logger.info('Random seed: {}'.format(seed))
+        seed += self.rank  # Different multiprocessing instances should behave differently.
         util.set_random_seed(seed)
 
         torch.backends.cudnn.benchmark = True
@@ -293,7 +294,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_byol_discriminator_diffimage.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_exd_imgsetext_rrdb_bigboi_512.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
