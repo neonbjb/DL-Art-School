@@ -209,7 +209,8 @@ class ExtensibleTrainer(BaseModel):
                     if 'after' in self.opt['networks'][name].keys() and step < self.opt['networks'][name]['after']:
                         net_enabled = False
                     for p in net.parameters():
-                        if p.dtype != torch.int64 and p.dtype != torch.bool and not hasattr(p, "DO_NOT_TRAIN"):
+                        do_not_train_flag = hasattr(p, "DO_NOT_TRAIN") or (hasattr(p, "DO_NOT_TRAIN_UNTIL") and step < p.DO_NOT_TRAIN_UNTIL)
+                        if p.dtype != torch.int64 and p.dtype != torch.bool and not do_not_train_flag:
                             p.requires_grad = net_enabled
                         else:
                             p.requires_grad = False
@@ -357,6 +358,8 @@ class ExtensibleTrainer(BaseModel):
                     if self.rank <= 0:
                         logger.info('Loading model for [%s]' % (load_path,))
                     self.load_network(load_path, net, self.opt['path']['strict_load'])
+                if hasattr(net.module, 'network_loaded'):
+                    net.module.network_loaded()
 
     def save(self, iter_step):
         for name, net in self.networks.items():

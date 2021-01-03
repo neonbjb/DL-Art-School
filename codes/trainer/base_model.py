@@ -58,6 +58,7 @@ class BaseModel():
 
     def update_learning_rate(self, cur_iter, warmup_iter=-1):
         for scheduler in self.schedulers:
+            scheduler.last_epoch = cur_iter
             scheduler.step()
         # set up warm-up learning rate
         if cur_iter < warmup_iter:

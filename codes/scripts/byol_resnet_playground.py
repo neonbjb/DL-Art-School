@@ -106,7 +106,7 @@ def get_latent_for_img(model, img):
 def find_similar_latents(model, compare_fn=structural_euc_dist):
     global layer_hooked_value
 
-    img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\poon.jpg'
+    img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\adrianna_xx.jpg'
     #img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\nicky_xx.jpg'
     output_path = '../../results/byol_resnet_similars'
     os.makedirs(output_path, exist_ok=True)
@@ -141,7 +141,7 @@ def find_similar_latents(model, compare_fn=structural_euc_dist):
 
 
 if __name__ == '__main__':
-    pretrained_path = '../../experiments/resnet_byol_diffframe_85k.pth'
+    pretrained_path = '../../experiments/resnet_byol_diffframe_115k.pth'
     model = resnet50(pretrained=False).to('cuda')
     sd = torch.load(pretrained_path)
     resnet_sd = {}
