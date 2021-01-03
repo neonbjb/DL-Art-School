@@ -96,6 +96,16 @@ class ExtensibleTrainer(BaseModel):
             for s in self.steps:
                 def_opt.extend(s.get_optimizers_with_default_scheduler())
             self.schedulers = lr_scheduler.get_scheduler_for_name(train_opt['default_lr_scheme'], def_opt, train_opt)
+
+            # Set the starting step count for the scheduler.
+            start_step = 0
+            if 'force_start_step' in opt.keys():
+                start_step = opt['force_start_step']
+            elif 'start_step' in opt.keys():
+                start_step = opt['start_step']
+            if start_step != 0:
+                for sched in self.schedulers:
+                    sched.last_epoch = start_step
         else:
             self.schedulers = []
 

@@ -104,7 +104,7 @@ class ConfigurableStep(Module):
             elif self.step_opt['optimizer'] == 'lars':
                 from trainer.optimizers.larc import LARC
                 from trainer.optimizers.sgd import SGDNoBiasMomentum
-                optSGD = SGDNoBiasMomentum(optim_params, lr=opt_config['lr'], momentum=opt_config['momentum'],
+                optSGD = SGDNoBiasMomentum(list(optim_params.values()), lr=opt_config['lr'], momentum=opt_config['momentum'],
                                            weight_decay=opt_config['weight_decay'])
                 opt = LARC(optSGD, trust_coefficient=opt_config['lars_coefficient'])
             opt._config = opt_config  # This is a bit seedy, but we will need these configs later.

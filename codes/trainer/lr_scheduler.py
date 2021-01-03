@@ -159,11 +159,11 @@ if __name__ == "__main__":
     restart_weights = [1]
 
     ## four
-    T_period = [80000, 80000, 80000, 80000]
-    restarts = [100000, 200000]
-    restart_weights = [.5, .25]
+    T_period = [25000, 25000]
+    restarts = [252000]
+    restart_weights = [.5]
 
-    scheduler = CosineAnnealingLR_Restart(optimizer, T_period, warmup=100000, eta_min=.01, restarts=restarts,
+    scheduler = CosineAnnealingLR_Restart(optimizer, T_period, warmup=227000, eta_min=.01, restarts=restarts,
                                           weights=restart_weights)
 
     ##############################
