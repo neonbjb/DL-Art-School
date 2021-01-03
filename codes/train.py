@@ -151,6 +151,7 @@ class Trainer:
             self.start_epoch = 0
         if 'force_start_step' in opt.keys():
             self.current_step = opt['force_start_step']
+        opt['current_step'] = self.current_step
 
     def do_step(self, train_data):
         if self._profile:
