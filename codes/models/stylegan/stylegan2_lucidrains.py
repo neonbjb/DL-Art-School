@@ -811,6 +811,7 @@ class StyleGan2Discriminator(nn.Module):
         self.flatten = Flatten()
         if mlp:
             self.to_logit = nn.Sequential(nn.Linear(latent_dim, 100),
+                                          leaky_relu(),
                                           nn.Linear(100, 1))
         else:
             self.to_logit = nn.Linear(latent_dim, 1)

@@ -168,7 +168,7 @@ class Discriminator_VGG_128_GN(nn.Module):
 
 
 @register_model
-def register_discriminator_vgg_128(opt_net, opt):
+def register_discriminator_vgg_128_gn(opt_net, opt):
     return Discriminator_VGG_128_GN(in_nc=opt_net['in_nc'], nf=opt_net['nf'],
                                     input_img_factor=opt_net['image_size'] / 128,
                                     extra_conv=opt_get(opt_net, ['extra_conv'], False),
