@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 from models.RRDBNet_arch import RRDB
 from models.arch_util import ConvGnLelu, default_init_weights
-from models.stylegan.stylegan2_lucidrains import StyleVectorizer, GeneratorBlock, Conv2DMod, leaky_relu, Blur
+from models.styled_sr.stylegan2_base import StyleVectorizer, GeneratorBlock, Conv2DMod, leaky_relu, Blur
 from trainer.networks import register_model
 from utils.util import checkpoint, opt_get
 
