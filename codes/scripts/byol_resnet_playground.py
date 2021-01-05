@@ -103,10 +103,30 @@ def get_latent_for_img(model, img):
     return latent
 
 
+def produce_latent_dict(model):
+    batch_size = 32
+    num_workers = 4
+    dataloader = get_image_folder_dataloader(batch_size, num_workers)
+    id = 0
+    paths = []
+    latents = []
+    for batch in tqdm(dataloader):
+        hq = batch['hq'].to('cuda')
+        model(hq)
+        l = layer_hooked_value.cpu().split(1, dim=0)
+        latents.extend(l)
+        paths.extend(batch['HQ_path'])
+        id += batch_size
+        if id > 1000:
+            print("Saving checkpoint..")
+            torch.save((latents, paths), 'results.pth')
+            id = 0
+
+
 def find_similar_latents(model, compare_fn=structural_euc_dist):
     global layer_hooked_value
 
-    img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\adrianna_xx.jpg'
+    img = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test\\80692045.jpg.jpg'
     #img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\nicky_xx.jpg'
     output_path = '../../results/byol_resnet_similars'
     os.makedirs(output_path, exist_ok=True)
@@ -153,4 +173,5 @@ if __name__ == '__main__':
     register_hook(model, 'avgpool')
 
     with torch.no_grad():
-        find_similar_latents(model, structural_euc_dist)
+        #find_similar_latents(model, structural_euc_dist)
+        produce_latent_dict(model)
