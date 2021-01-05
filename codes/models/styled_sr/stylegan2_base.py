@@ -6,8 +6,12 @@ import torch
 import torch.nn.functional as F
 from kornia.filters import filter2D
 from linear_attention_transformer import ImageLinearAttention
-from torch import nn
+from torch import nn, Tensor
 from torch.autograd import grad as torch_grad
+from torch.nn import Parameter, init
+from torch.nn.modules.conv import _ConvNd
+
+from models.styled_sr.transfer_primitives import TransferLinear
 
 assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
 
@@ -196,10 +200,9 @@ def slerp(val, low, high):
     res = (torch.sin((1.0 - val) * omega) / so).unsqueeze(1) * low + (torch.sin(val * omega) / so).unsqueeze(1) * high
     return res
 
-# stylegan2 classes
 
 class EqualLinear(nn.Module):
-    def __init__(self, in_dim, out_dim, lr_mul=1, bias=True):
+    def __init__(self, in_dim, out_dim, lr_mul=1, bias=True, transfer_mode=False):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_dim, in_dim))
         if bias:
@@ -207,17 +210,28 @@ class EqualLinear(nn.Module):
 
         self.lr_mul = lr_mul
 
+        self.transfer_mode = transfer_mode
+        if transfer_mode:
+            self.transfer_scale = nn.Parameter(torch.ones(out_features, in_features))
+            self.transfer_scale.FOR_TRANSFER_LEARNING = True
+            self.transfer_shift = nn.Parameter(torch.zeros(out_features, in_features))
+            self.transfer_shift.FOR_TRANSFER_LEARNING = True
+
     def forward(self, input):
-        return F.linear(input, self.weight * self.lr_mul, bias=self.bias * self.lr_mul)
+        if self.transfer_mode:
+            weight = self.weight * self.transfer_scale + self.transfer_shift
+        else:
+            weight = self.weight
+        return F.linear(input, weight * self.lr_mul, bias=self.bias * self.lr_mul)
 
 
 class StyleVectorizer(nn.Module):
-    def __init__(self, emb, depth, lr_mul=0.1):
+    def __init__(self, emb, depth, lr_mul=0.1, transfer_mode=False):
         super().__init__()
 
         layers = []
         for i in range(depth):
-            layers.extend([EqualLinear(emb, emb, lr_mul), leaky_relu()])
+            layers.extend([EqualLinear(emb, emb, lr_mul, transfer_mode=transfer_mode), leaky_relu()])
 
         self.net = nn.Sequential(*layers)
 
@@ -227,13 +241,13 @@ class StyleVectorizer(nn.Module):
 
 
 class RGBBlock(nn.Module):
-    def __init__(self, latent_dim, input_channel, upsample, rgba=False):
+    def __init__(self, latent_dim, input_channel, upsample, rgba=False, transfer_mode=False):
         super().__init__()
         self.input_channel = input_channel
         self.to_style = nn.Linear(latent_dim, input_channel)
 
         out_filters = 3 if not rgba else 4
-        self.conv = Conv2DMod(input_channel, out_filters, 1, demod=False)
+        self.conv = Conv2DMod(input_channel, out_filters, 1, demod=False, transfer_mode=transfer_mode)
 
         self.upsample = nn.Sequential(
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
@@ -307,25 +321,11 @@ class EqualLR:
 
 def equal_lr(module, name='weight'):
     EqualLR.apply(module, name)
-
     return module
 
 
-class EqualConv2d(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-
-        conv = nn.Conv2d(*args, **kwargs)
-        conv.weight.data.normal_()
-        conv.bias.data.zero_()
-        self.conv = equal_lr(conv)
-
-    def forward(self, input):
-        return self.conv(input)
-
-
 class Conv2DMod(nn.Module):
-    def __init__(self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, **kwargs):
+    def __init__(self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, transfer_mode=False, **kwargs):
         super().__init__()
         self.filters = out_chan
         self.demod = demod
@@ -334,6 +334,12 @@ class Conv2DMod(nn.Module):
         self.dilation = dilation
         self.weight = nn.Parameter(torch.randn((out_chan, in_chan, kernel, kernel)))
         nn.init.kaiming_normal_(self.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
+        self.transfer_mode = transfer_mode
+        if transfer_mode:
+            self.transfer_scale = nn.Parameter(torch.ones(out_chan, in_chan, 1, 1))
+            self.transfer_scale.FOR_TRANSFER_LEARNING = True
+            self.transfer_shift = nn.Parameter(torch.zeros(out_chan, in_chan, 1, 1))
+            self.transfer_shift.FOR_TRANSFER_LEARNING = True
 
     def _get_same_padding(self, size, kernel, dilation, stride):
         return ((size - 1) * (stride - 1) + dilation * (kernel - 1)) // 2
@@ -341,8 +347,13 @@ class Conv2DMod(nn.Module):
     def forward(self, x, y):
         b, c, h, w = x.shape
 
+        if self.transfer_mode:
+            weight = self.weight * self.transfer_scale + self.transfer_shift
+        else:
+            weight = self.weight
+
         w1 = y[:, None, :, None, None]
-        w2 = self.weight[None, :, :, :, :]
+        w2 = weight[None, :, :, :, :]
         weights = w2 * (w1 + 1)
 
         if self.demod:
@@ -362,33 +373,27 @@ class Conv2DMod(nn.Module):
 
 
 class GeneratorBlock(nn.Module):
-    def __init__(self, latent_dim, input_channels, filters, upsample=True, upsample_rgb=True, rgba=False, structure_input=False):
+    def __init__(self, latent_dim, input_channels, filters, upsample=True, upsample_rgb=True, rgba=False,
+                 transfer_learning_mode=False):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
-        self.structure_input = structure_input
-        if self.structure_input:
-            self.structure_conv = nn.Conv2d(3, input_channels, 3, padding=1)
-            input_channels = input_channels * 2
+        self.to_style1 = TransferLinear(latent_dim, input_channels, transfer_mode=transfer_learning_mode)
+        self.to_noise1 = TransferLinear(1, filters, transfer_mode=transfer_learning_mode)
+        self.conv1 = Conv2DMod(input_channels, filters, 3, transfer_mode=transfer_learning_mode)
 
-        self.to_style1 = nn.Linear(latent_dim, input_channels)
-        self.to_noise1 = nn.Linear(1, filters)
-        self.conv1 = Conv2DMod(input_channels, filters, 3)
-
-        self.to_style2 = nn.Linear(latent_dim, filters)
-        self.to_noise2 = nn.Linear(1, filters)
-        self.conv2 = Conv2DMod(filters, filters, 3)
+        self.to_style2 = TransferLinear(latent_dim, filters, transfer_mode=transfer_learning_mode)
+        self.to_noise2 = TransferLinear(1, filters, transfer_mode=transfer_learning_mode)
+        self.conv2 = Conv2DMod(filters, filters, 3, transfer_mode=transfer_learning_mode)
 
         self.activation = leaky_relu()
-        self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
+        self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba, transfer_mode=transfer_learning_mode)
 
-    def forward(self, x, prev_rgb, istyle, inoise, structure_input=None):
+        self.transfer_learning_mode = transfer_learning_mode
+
+    def forward(self, x, prev_rgb, istyle, inoise):
         if exists(self.upsample):
             x = self.upsample(x)
-
-        if self.structure_input:
-            s = self.structure_conv(structure_input)
-            x = torch.cat([x, s], dim=1)
 
         inoise = inoise[:, :x.shape[2], :x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
