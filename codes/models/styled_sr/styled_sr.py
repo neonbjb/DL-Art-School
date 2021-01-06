@@ -130,9 +130,11 @@ class StyledSrGenerator(nn.Module):
         # Assume the vectorizer doesnt need transfer_mode=True. Re-evaluate this later.
         self.vectorizer = StyleVectorizer(latent_dim, style_depth, lr_mul=lr_mlp, transfer_mode=False)
         self.gen = Generator(image_size=image_size, latent_dim=latent_dim, initial_stride=initial_stride, transfer_mode=transfer_mode)
+        self.l2 = nn.MSELoss()
         self.mixed_prob = .9
         self._init_weights()
         self.transfer_mode = transfer_mode
+        self.initial_stride = initial_stride
         if transfer_mode:
             for p in self.parameters():
                 if not hasattr(p, 'FOR_TRANSFER_LEARNING'):
@@ -174,11 +176,14 @@ class StyledSrGenerator(nn.Module):
 
         out = self.gen(x, w_styles)
 
-        # Compute the net, areal, pixel-wise additions made on top of the LR image.
-        out_down = F.interpolate(out, size=(x.shape[-2], x.shape[-1]), mode="area")
-        diff = torch.sum(torch.abs(out_down - x), dim=[1,2,3])
+        # Compute an L2 loss on the areal interpolation of the generated image back down to LR * initial_stride; used
+        # for regularization.
+        out_down = F.interpolate(out, size=(x.shape[-2] // self.initial_stride, x.shape[-1] // self.initial_stride), mode="area")
+        if self.initial_stride > 1:
+            x = F.interpolate(x, scale_factor=1/self.initial_stride, mode="area")
+        l2_reg = self.l2(x, out_down)
 
-        return out, diff, w_styles
+        return out, l2_reg, w_styles
 
 
 if __name__ == '__main__':

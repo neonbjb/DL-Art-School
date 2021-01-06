@@ -396,8 +396,8 @@ class GeneratorBlock(nn.Module):
             x = self.upsample(x)
 
         inoise = inoise[:, :x.shape[2], :x.shape[3], :]
-        noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
-        noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
+        noise1 = self.to_noise1(inoise).permute((0, 3, 1, 2))
+        noise2 = self.to_noise2(inoise).permute((0, 3, 1, 2))
 
         style1 = self.to_style1(istyle)
         x = self.conv1(x, style1)
