@@ -119,7 +119,7 @@ def produce_latent_dict(model):
         id += batch_size
         if id > 1000:
             print("Saving checkpoint..")
-            torch.save((latents, paths), 'results.pth')
+            torch.save((latents, paths), '../results.pth')
             id = 0
 
 
@@ -128,7 +128,7 @@ def find_similar_latents(model, compare_fn=structural_euc_dist):
 
     img = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test\\80692045.jpg.jpg'
     #img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\nicky_xx.jpg'
-    output_path = '../../results/byol_resnet_similars'
+    output_path = '../../../results/byol_resnet_similars'
     os.makedirs(output_path, exist_ok=True)
     imglatent = get_latent_for_img(model, img).squeeze().unsqueeze(0)
     _, c = imglatent.shape
@@ -161,7 +161,7 @@ def find_similar_latents(model, compare_fn=structural_euc_dist):
 
 
 if __name__ == '__main__':
-    pretrained_path = '../../experiments/resnet_byol_diffframe_115k.pth'
+    pretrained_path = '../../../experiments/resnet_byol_diffframe_115k.pth'
     model = resnet50(pretrained=False).to('cuda')
     sd = torch.load(pretrained_path)
     resnet_sd = {}

@@ -204,7 +204,7 @@ def tsne(X, no_dims=2, initial_dims=50, perplexity=30.0):
     return Y
 
 
-def run_tsne():
+def run_tsne_instance_level():
     print("Run Y = tsne.tsne(X, no_dims, perplexity) to perform t-SNE on your dataset.")
 
     limit = 4000
@@ -236,12 +236,12 @@ def run_tsne():
 
     pyplot.scatter(Y[:, 0], Y[:, 1], 20, labels)
     pyplot.show()
-    torch.save((Y, files[:limit]), "tsne_output.pth")
+    torch.save((Y, files[:limit]), "../tsne_output.pth")
 
 
 # Uses the results from the calculation above to create a **massive** pdf plot that shows 1/8 size images on the tsne
 # spectrum.
-def plot_results_as_image_graph():
+def plot_instance_level_results_as_image_graph():
     Y, files = torch.load('tsne_output.pth')
     fig, ax = pyplot.subplots()
     fig.set_size_inches(200,200,forward=True)
@@ -258,6 +258,80 @@ def plot_results_as_image_graph():
     pyplot.savefig('tsne.pdf')
 
 
+random_coords = [(16,16), (14,14), (20,20), (24,24)]
+def run_tsne_pixel_level():
+    limit = 4000
+    latent_dict = torch.load('../results/byol_latents/latent_dict_1.pth')
+    id_vals = list(latent_dict.items())
+    ids, X = zip(*id_vals)
+    X = torch.stack(X, dim=0)[:limit//4]
+    # Unravel X into 4 latents per image, chosen from fixed points. This will serve as a psuedorandom source since these
+    # images are not aligned.
+    b,c,h,w = X.shape
+    X_c = []
+    for rc in random_coords:
+        X_c.append(X[:, :, rc[0], rc[1]])
+    X = torch.cat(X_c, dim=0)
+    labels = np.zeros(X.shape[0])  # We don't have any labels..
+
+    # confirm that x file get same number point than label file
+    # otherwise may cause error in scatter
+    assert(len(X[:, 0])==len(X[:,1]))
+    assert(len(X)==len(labels))
+
+    with torch.no_grad():
+        Y = tsne(X, 2, 128, 20.0)
+
+    if opt.cuda:
+        Y = Y.cpu().numpy()
+
+    # You may write result in two files
+    # print("Save Y values in file")
+    # Y1 = open("y1.txt", 'w')
+    # Y2 = open('y2.txt', 'w')
+    # for i in range(Y.shape[0]):
+    #     Y1.write(str(Y[i,0])+"\n")
+    #     Y2.write(str(Y[i,1])+"\n")
+
+    pyplot.scatter(Y[:, 0], Y[:, 1], 20, labels)
+    pyplot.show()
+    torch.save((Y, ids[:limit//4]), "../tsne_output_pix.pth")
+
+
+# Uses the results from the calculation above to create a **massive** pdf plot that shows 1/8 size images on the tsne
+# spectrum.
+def plot_pixel_level_results_as_image_graph():
+    Y, ids = torch.load('../tsne_output_pix.pth')
+    files = torch.load('../results/byol_latents/all_paths.pth')
+    fig, ax = pyplot.subplots()
+    fig.set_size_inches(200,200,forward=True)
+    ax.update_datalim(np.column_stack([Y[:, 0], Y[:, 1]]))
+    ax.autoscale()
+
+    expansion = 32  # Should be latent_compression(=8) * image_compression_at_inference(=4)
+    margins = 1  # Keep in mind this will be multiplied by <expansion>
+    for b in tqdm(range(Y.shape[0])):
+        if b % 4 == 0:
+            id = b // 4
+            imgfile = files[id]
+            baseim = pyplot.imread(imgfile)
+
+        ct, cl = random_coords[b%4]
+        im = baseim[expansion*(ct-margins):expansion*(ct+margins),
+                    expansion*(cl-margins):expansion*(cl+margins),:]
+        im = OffsetImage(im, zoom=1)
+        ab = AnnotationBbox(im, (Y[b, 0], Y[b, 1]), xycoords='data', frameon=False)
+        ax.add_artist(ab)
+    ax.scatter(Y[:, 0], Y[:, 1])
+
+    pyplot.savefig('tsne_pix.pdf')
+
+
 if __name__ == "__main__":
-    #run_tsne()
-    plot_results_as_image_graph()
+    # For use with instance-level results (e.g. from byol_resnet_playground.py)
+    #run_tsne_instance_level()
+    #plot_instance_level_results_as_image_graph()
+
+    # For use with pixel-level results (e.g. from byol_uresnet_playground)
+    #run_tsne_pixel_level()
+    plot_pixel_level_results_as_image_graph()

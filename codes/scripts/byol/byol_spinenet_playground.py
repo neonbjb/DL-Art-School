@@ -19,6 +19,7 @@ from models.spinenet_arch import SpineNet
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved
 # and the distance is computed across the channel dimension.
 from utils import util
+from utils.options import dict_to_nonedict
 
 
 def structural_euc_dist(x, y):
@@ -50,7 +51,7 @@ def im_norm(x):
 
 
 def get_image_folder_dataloader(batch_size, num_workers):
-    dataset_opt = {
+    dataset_opt = dict_to_nonedict({
         'name': 'amalgam',
         'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
@@ -58,15 +59,14 @@ def get_image_folder_dataloader(batch_size, num_workers):
         'target_size': 512,
         'force_multiple': 32,
         'scale': 1
-    }
+    })
     dataset = ImageFolderDataset(dataset_opt)
     return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=True)
 
 
-def create_latent_database(model, model_index=0):
-    batch_size = 8
-    num_workers = 1
-    output_path = '../../results/byol_spinenet_latents/'
+def create_latent_database(model, model_index=0, batch_size=8):
+    num_workers = 4
+    output_path = '../results/byol_latents/'
 
     os.makedirs(output_path, exist_ok=True)
     dataloader = get_image_folder_dataloader(batch_size, num_workers)
@@ -76,7 +76,9 @@ def create_latent_database(model, model_index=0):
     all_paths = []
     for batch in tqdm(dataloader):
         hq = batch['hq'].to('cuda')
-        latent = model(hq)[model_index]   # BYOL trainer only trains the '4' output, which is indexed at [1]. Confusing.
+        latent = model(hq)
+        if isinstance(latent, tuple):
+            latent = latent[model_index]
         for b in range(latent.shape[0]):
             im_path = batch['HQ_path'][b]
             all_paths.append(im_path)
@@ -124,10 +126,10 @@ def _get_mins_from_latent_dictionary(latent, hq_img_repo, ld_file_name, batch_si
 def find_similar_latents(model, model_index=0, lat_patch_size=16, compare_fn=structural_euc_dist):
     img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\adrianna_xx.jpg'
     #img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\nicky_xx.jpg'
-    hq_img_repo = '../../results/byol_spinenet_latents'
-    output_path = '../../results/byol_spinenet_similars'
-    batch_size = 2048
-    num_maps = 4
+    hq_img_repo = '../results/byol_latents'
+    output_path = '../results/byol_similars'
+    batch_size = 4096
+    num_maps = 1
     lat_patch_mult = 512 // lat_patch_size
 
     os.makedirs(output_path, exist_ok=True)
@@ -135,7 +137,10 @@ def find_similar_latents(model, model_index=0, lat_patch_size=16, compare_fn=str
     img_t = ToTensor()(Image.open(img)).to('cuda').unsqueeze(0)
     _, _, h, w = img_t.shape
     img_t = img_t[:, :, :128*(h//128), :128*(w//128)]
-    latent = model(img_t)[model_index]
+    latent = model(img_t)
+    if not isinstance(latent, tuple):
+        latent = (latent,)
+    latent = latent[model_index]
     _, c, h, w = latent.shape
 
     mins, min_offsets = [], []
@@ -195,7 +200,7 @@ def find_similar_latents(model, model_index=0, lat_patch_size=16, compare_fn=str
 
 def explore_latent_results(model):
     batch_size = 16
-    num_workers = 1
+    num_workers = 4
     output_path = '../../results/byol_spinenet_explore_latents/'
 
     os.makedirs(output_path, exist_ok=True)
@@ -225,7 +230,7 @@ class BYOLModelWrapper(nn.Module):
 
 
 if __name__ == '__main__':
-    pretrained_path = '../../experiments/spinenet49_imgset_sbyol.pth'
+    pretrained_path = '../../../experiments/spinenet49_imgset_sbyol.pth'
     model = SpineNet('49', in_channels=3, use_input_norm=True).to('cuda')
     model.load_state_dict(torch.load(pretrained_path), strict=True)
     model.eval()

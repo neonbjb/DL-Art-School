@@ -3,7 +3,7 @@ import torch
 from models.spinenet_arch import SpineNet
 
 if __name__ == '__main__':
-    pretrained_path = '../../experiments/resnet_byol_diffframe_115k.pth'
+    pretrained_path = '../../../experiments/resnet_byol_diffframe_115k.pth'
     output_path = '../../experiments/resnet_byol_diffframe_115k_.pth'
 
     wrap_key = 'online_encoder.net.'
