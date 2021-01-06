@@ -279,9 +279,11 @@ class PixelCL(nn.Module):
         super().__init__()
 
         DEFAULT_AUG = nn.Sequential(
-            RandomApply(augs.ColorJitter(0.3, 0.3, 0.3, 0.2), p=0.8),
+            RandomApply(augs.ColorJitter(0.6, 0.6, 0.6, 0.2), p=0.8),
             augs.RandomGrayscale(p=0.2),
-            RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1)
+            RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1),
+            augs.RandomSolarize(p=0.5),
+            # Normalize left out because it should be done at the model level.
         )
 
         self.augment1 = default(augment_fn, DEFAULT_AUG)
