@@ -19,13 +19,13 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\images'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\512_with_ref_new'
-    opt['crop_sz'] = [1024, 2048]  # the size of each sub-image
-    opt['step'] = [700, 1200]  # step of the sliding crop window
-    opt['exclusions'] = [[],[],[]] # image names matching these terms wont be included in the processing.
-    opt['thres_sz'] = 256  # size threshold
-    opt['resize_final_img'] = [.5, .25]
+    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\256_with_ref_v5'
+    opt['crop_sz'] = [256, 512]  # the size of each sub-image
+    opt['step'] = [256, 512]  # step of the sliding crop window
+    opt['exclusions'] = [[],[]] # image names matching these terms wont be included in the processing.
+    opt['thres_sz'] = 129  # size threshold
+    opt['resize_final_img'] = [1, .5]
     opt['only_resize'] = False
     opt['vertical_split'] = False
     opt['input_image_max_size_before_being_halved'] = 5500  # As described, images larger than this dimensional size will be halved before anything else is done.
