@@ -53,10 +53,9 @@ def im_norm(x):
 def get_image_folder_dataloader(batch_size, num_workers):
     dataset_opt = dict_to_nonedict({
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
-        #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
+        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
         'weights': [1],
-        'target_size': 512,
+        'target_size': 256,
         'force_multiple': 32,
         'scale': 1
     })

@@ -57,7 +57,7 @@ def im_norm(x):
 def get_image_folder_dataloader(batch_size, num_workers):
     dataset_opt = dict_to_nonedict({
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
+        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
         'weights': [1],
         'target_size': 256,
@@ -68,9 +68,28 @@ def get_image_folder_dataloader(batch_size, num_workers):
     return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=True)
 
 
+def produce_latent_dict(model):
+    batch_size = 32
+    num_workers = 4
+    dataloader = get_image_folder_dataloader(batch_size, num_workers)
+    id = 0
+    paths = []
+    latents = []
+    for batch in tqdm(dataloader):
+        hq = batch['hq'].to('cuda')
+        l = model(hq).cpu().split(1, dim=0)
+        latents.extend(l)
+        paths.extend(batch['HQ_path'])
+        id += batch_size
+        if id > 1000:
+            print("Saving checkpoint..")
+            torch.save((latents, paths), '../results.pth')
+            id = 0
+
+
 if __name__ == '__main__':
-    pretrained_path = '../experiments/uresnet_pixpro_83k.pth'
-    model = UResNet50(Bottleneck, [3,4,6,3]).to('cuda')
+    pretrained_path = '../experiments/uresnet_pixpro_attempt2.pth'
+    model = UResNet50(Bottleneck, [3,4,6,3], out_dim=512).to('cuda')
     sd = torch.load(pretrained_path)
     resnet_sd = {}
     for k, v in sd.items():
@@ -80,5 +99,6 @@ if __name__ == '__main__':
     model.eval()
 
     with torch.no_grad():
-        find_similar_latents(model, 0, 8, structural_euc_dist)
+        #find_similar_latents(model, 0, 8, structural_euc_dist)
         #create_latent_database(model, batch_size=32)
+        produce_latent_dict(model)

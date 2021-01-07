@@ -258,9 +258,11 @@ def plot_instance_level_results_as_image_graph():
     pyplot.savefig('tsne.pdf')
 
 
-random_coords = [(16,16), (14,14), (20,20), (24,24)]
+random_coords = [(8,8),(12,12),(18,18),(24,24)]
 def run_tsne_pixel_level():
     limit = 4000
+
+    '''  # For spinenet-style latent dicts
     latent_dict = torch.load('../results/byol_latents/latent_dict_1.pth')
     id_vals = list(latent_dict.items())
     ids, X = zip(*id_vals)
@@ -272,6 +274,22 @@ def run_tsne_pixel_level():
     for rc in random_coords:
         X_c.append(X[:, :, rc[0], rc[1]])
     X = torch.cat(X_c, dim=0)
+    '''
+
+    # For resnet-style latent tuples
+    X, files = torch.load('../results.pth')
+    zipped = list(zip(X, files))
+    shuffle(zipped)
+    X, files = zip(*zipped)
+
+    X = torch.stack(X, dim=0)[:limit//4]
+    # Unravel X into 1 latents per image, chosen from fixed points. This will serve as a psuedorandom source since these
+    # images are not aligned.
+    X_c = []
+    for rc in random_coords:
+        X_c.append(X[:, 0, :, rc[0], rc[1]])
+    X = torch.cat(X_c, dim=0)
+
     labels = np.zeros(X.shape[0])  # We don't have any labels..
 
     # confirm that x file get same number point than label file
@@ -295,21 +313,20 @@ def run_tsne_pixel_level():
 
     pyplot.scatter(Y[:, 0], Y[:, 1], 20, labels)
     pyplot.show()
-    torch.save((Y, ids[:limit//4]), "../tsne_output_pix.pth")
+    torch.save((Y, files[:limit//4]), "../tsne_output_pix.pth")
 
 
 # Uses the results from the calculation above to create a **massive** pdf plot that shows 1/8 size images on the tsne
 # spectrum.
 def plot_pixel_level_results_as_image_graph():
-    Y, ids = torch.load('../tsne_output_pix.pth')
-    files = torch.load('../results/byol_latents/all_paths.pth')
+    Y, files = torch.load('../tsne_output_pix.pth')
     fig, ax = pyplot.subplots()
     fig.set_size_inches(200,200,forward=True)
     ax.update_datalim(np.column_stack([Y[:, 0], Y[:, 1]]))
     ax.autoscale()
 
-    expansion = 32  # Should be latent_compression(=8) * image_compression_at_inference(=4)
-    margins = 1  # Keep in mind this will be multiplied by <expansion>
+    expansion = 8  # Should be latent_compression(=8) * image_compression_at_inference(=1)
+    margins = 4  # Keep in mind this will be multiplied by <expansion>
     for b in tqdm(range(Y.shape[0])):
         if b % 4 == 0:
             id = b // 4
