@@ -14,14 +14,14 @@ def main():
     split_img = False
     opt = {}
     opt['n_thread'] = 4
-    opt['compression_level'] = 90  # JPEG compression quality rating.
+    opt['compression_level'] = 98  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\vixen\\vix_cropped']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\video_512_cropped'
-    opt['imgsize'] = 512
+    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new']
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'
+    opt['imgsize'] = 256
     #opt['bottom_crop'] = 120
 
     save_folder = opt['save_folder']
