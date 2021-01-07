@@ -60,7 +60,6 @@ steps:
     training: generator
 
     optimizer_params:
-      # Optimizer params
       lr: !!float 2e-4
       weight_decay: 0
       beta1: 0.9
