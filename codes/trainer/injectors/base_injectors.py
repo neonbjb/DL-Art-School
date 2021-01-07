@@ -379,9 +379,10 @@ class RandomCropInjector(Injector):
         dim_in = opt['dim_in']
         dim_out = opt['dim_out']
         scale = dim_out / dim_in
-        self.operator = RandomResizedCrop(size=(dim_out, dim_out), scale=(scale, 1), ratio=(1,1),
+        self.operator = RandomResizedCrop(size=(dim_out, dim_out), scale=(scale, 1),
+                                          ratio=(.99,1),  # An aspect ratio range is required, but .99,1 is effectively "none".
                                           resample='NEAREST')
 
     def forward(self, state):
-        return {self.output: self.operator(self.input)}
+        return {self.output: self.operator(state[self.input])}
 
