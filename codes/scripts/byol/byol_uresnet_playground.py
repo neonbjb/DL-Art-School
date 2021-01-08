@@ -1,6 +1,7 @@
 import os
 import shutil
 
+import matplotlib.cm as cm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,6 +24,7 @@ from models.spinenet_arch import SpineNet
 # and the distance is computed across the channel dimension.
 from scripts.byol.byol_spinenet_playground import find_similar_latents, create_latent_database
 from utils import util
+from utils.kmeans import kmeans, kmeans_predict
 from utils.options import dict_to_nonedict
 
 
@@ -54,13 +56,14 @@ def im_norm(x):
     return (((x - torch.mean(x, dim=(2,3)).reshape(-1,1,1,1)) / torch.std(x, dim=(2,3)).reshape(-1,1,1,1)) * .5) + .5
 
 
-def get_image_folder_dataloader(batch_size, num_workers):
+def get_image_folder_dataloader(batch_size, num_workers, target_size=256):
     dataset_opt = dict_to_nonedict({
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
+        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
+        #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
         'weights': [1],
-        'target_size': 256,
+        'target_size': target_size,
         'force_multiple': 32,
         'scale': 1
     })
@@ -75,9 +78,17 @@ def produce_latent_dict(model):
     id = 0
     paths = []
     latents = []
+    prob = None
     for batch in tqdm(dataloader):
         hq = batch['hq'].to('cuda')
-        l = model(hq).cpu().split(1, dim=0)
+        l = model(hq)
+        b, c, h, w = l.shape
+        dim = b*h*w
+        l = l.permute(0,2,3,1).reshape(dim, c).cpu()
+        # extract a random set of 10 latents from each image
+        if prob is None:
+            prob = torch.full((dim,), 1/(dim))
+        l = l[prob.multinomial(num_samples=10, replacement=False)].split(1, dim=0)
         latents.extend(l)
         paths.extend(batch['HQ_path'])
         id += batch_size
@@ -85,6 +96,32 @@ def produce_latent_dict(model):
             print("Saving checkpoint..")
             torch.save((latents, paths), '../results.pth')
             id = 0
+
+
+def build_kmeans():
+    latents, _ = torch.load('../results.pth')
+    latents = torch.cat(latents, dim=0).to('cuda')
+    cluster_ids_x, cluster_centers = kmeans(latents, num_clusters=8, distance="euclidean", device=torch.device('cuda:0'))
+    torch.save((cluster_ids_x, cluster_centers), '../k_means.pth')
+
+
+def use_kmeans():
+    _, centers = torch.load('../k_means.pth')
+    batch_size = 8
+    num_workers = 0
+    dataloader = get_image_folder_dataloader(batch_size, num_workers, target_size=512)
+    colormap = cm.get_cmap('viridis', 8)
+    for i, batch in enumerate(tqdm(dataloader)):
+        hq = batch['hq'].to('cuda')
+        l = model(hq)
+        b, c, h, w = l.shape
+        dim = b*h*w
+        l = l.permute(0,2,3,1).reshape(dim,c)
+        pred = kmeans_predict(l, centers, device=l.device)
+        pred = pred.reshape(b,h,w)
+        img = torch.tensor(colormap(pred[:, :, :].detach().numpy()))
+        torchvision.utils.save_image(torch.nn.functional.interpolate(img.permute(0,3,1,2), scale_factor=8, mode="nearest"), f"{i}_categories.png")
+        torchvision.utils.save_image(hq, f"{i}_hq.png")
 
 
 if __name__ == '__main__':
@@ -101,4 +138,6 @@ if __name__ == '__main__':
     with torch.no_grad():
         #find_similar_latents(model, 0, 8, structural_euc_dist)
         #create_latent_database(model, batch_size=32)
-        produce_latent_dict(model)
+        #produce_latent_dict(model)
+        #build_kmeans()
+        use_kmeans()

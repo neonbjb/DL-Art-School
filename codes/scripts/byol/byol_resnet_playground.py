@@ -20,6 +20,7 @@ from models.spinenet_arch import SpineNet
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved
 # and the distance is computed across the channel dimension.
 from utils import util
+from utils.kmeans import kmeans, kmeans_predict
 from utils.options import dict_to_nonedict
 
 
@@ -51,13 +52,14 @@ def im_norm(x):
     return (((x - torch.mean(x, dim=(2,3)).reshape(-1,1,1,1)) / torch.std(x, dim=(2,3)).reshape(-1,1,1,1)) * .5) + .5
 
 
-def get_image_folder_dataloader(batch_size, num_workers):
+def get_image_folder_dataloader(batch_size, num_workers, target_size=224):
     dataset_opt = dict_to_nonedict({
         'name': 'amalgam',
         'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
+        #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
         'weights': [1],
-        'target_size': 224,
+        'target_size': target_size,
         'force_multiple': 32,
         'scale': 1
     })
@@ -119,7 +121,7 @@ def produce_latent_dict(model):
         id += batch_size
         if id > 1000:
             print("Saving checkpoint..")
-            torch.save((latents, paths), '../results.pth')
+            torch.save((latents, paths), '../results_instance_resnet.pth')
             id = 0
 
 
@@ -160,6 +162,30 @@ def find_similar_latents(model, compare_fn=structural_euc_dist):
             id = 0
 
 
+def build_kmeans():
+    latents, _ = torch.load('../results_instance_resnet.pth')
+    latents = torch.cat(latents, dim=0).squeeze().to('cuda')
+    cluster_ids_x, cluster_centers = kmeans(latents, num_clusters=8, distance="euclidean", device=torch.device('cuda:0'))
+    torch.save((cluster_ids_x, cluster_centers), '../k_means_instance_resnet.pth')
+
+
+def use_kmeans():
+    output = "../results/k_means_instance_resnet/"
+    _, centers = torch.load('../k_means_instance_resnet.pth')
+    batch_size = 8
+    num_workers = 0
+    dataloader = get_image_folder_dataloader(batch_size, num_workers, target_size=224)
+    for i, batch in enumerate(tqdm(dataloader)):
+        hq = batch['hq'].to('cuda')
+        model(hq)
+        l = layer_hooked_value.clone().squeeze()
+        pred = kmeans_predict(l, centers, device=l.device)
+        for b in range(pred.shape[0]):
+            cat = str(pred[b].item())
+            os.makedirs(os.path.join(output, cat), exist_ok=True)
+            torchvision.utils.save_image(hq[b], os.path.join(output, cat, f'{i}.png'))
+
+
 if __name__ == '__main__':
     pretrained_path = '../../../experiments/resnet_byol_diffframe_115k.pth'
     model = resnet50(pretrained=False).to('cuda')
@@ -168,10 +194,12 @@ if __name__ == '__main__':
     for k, v in sd.items():
         if 'target_encoder.net.' in k:
             resnet_sd[k.replace('target_encoder.net.', '')] = v
-    model.load_state_dict(resnet_sd, strict=True)
+    model.load_state_dict(sd, strict=True)
     model.eval()
     register_hook(model, 'avgpool')
 
     with torch.no_grad():
         #find_similar_latents(model, structural_euc_dist)
-        produce_latent_dict(model)
+        #produce_latent_dict(model)
+        #build_kmeans()
+        use_kmeans()

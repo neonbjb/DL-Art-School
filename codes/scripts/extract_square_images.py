@@ -20,8 +20,8 @@ def main():
 
     opt['dest'] = 'file'
     opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'
-    opt['imgsize'] = 256
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_384_full'
+    opt['imgsize'] = 384
     #opt['bottom_crop'] = 120
 
     save_folder = opt['save_folder']
