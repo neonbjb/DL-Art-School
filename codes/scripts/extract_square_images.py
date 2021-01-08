@@ -13,16 +13,17 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 4
-    opt['compression_level'] = 98  # JPEG compression quality rating.
+    opt['n_thread'] = 7
+    opt['compression_level'] = 95  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_384_full'
-    opt['imgsize'] = 384
-    #opt['bottom_crop'] = 120
+    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\working']
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\cropped'
+    opt['imgsize'] = 1024
+    opt['bottom_crop'] = .1
+    opt['keep_folder'] = True
 
     save_folder = opt['save_folder']
     if not osp.exists(save_folder):
@@ -58,11 +59,14 @@ class TiledDataset(data.Dataset):
         # Perform explicit crops first. These are generally used to get rid of watermarks so we dont even want to
         # consider these areas of the image.
         if 'bottom_crop' in self.opt.keys():
-            img = img[:-self.opt['bottom_crop'], :, :]
+            bc = self.opt['bottom_crop']
+            if bc > 0 and bc < 1:
+                bc = int(bc * img.shape[0])
+            img = img[:-bc, :, :]
 
         h, w, c = img.shape
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < 512:
+        if min(h,w) < self.opt['imgsize']:
             print("Skipping due to threshold")
             return None
 
@@ -71,7 +75,17 @@ class TiledDataset(data.Dataset):
         # Crop the image so that only the center is left, since this is often the most salient part of the image.
         img = img[(h - dim) // 2:dim + (h - dim) // 2, (w - dim) // 2:dim + (w - dim) // 2, :]
         img = cv2.resize(img, (self.opt['imgsize'], self.opt['imgsize']), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(osp.join(self.opt['save_folder'], basename + ".jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
+        output_folder = self.opt['save_folder']
+        if self.opt['keep_folder']:
+            # Attempt to find the folder name one level above opt['input_folder'] and use that.
+            pts = [os.path.dirname(path)]
+            while pts[0] != self.opt['input_folder'][0]:
+                pts = os.path.split(pts[0])
+            output_folder = osp.join(self.opt['save_folder'], pts[-1])
+            os.makedirs(output_folder, exist_ok=True)
+        if not basename.endswith(".jpg"):
+            basename = basename + ".jpg"
+        cv2.imwrite(osp.join(output_folder, basename + ".jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
         return None
 
     def __len__(self):
