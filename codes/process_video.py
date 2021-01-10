@@ -170,7 +170,7 @@ if __name__ == "__main__":
         if recurrent_mode:
             data['recurrent'] = recurrent_entry
 
-        model.feed_data(data, need_GT=need_GT)
+        model.feed_data(data, 0, need_GT=need_GT)
         model.test()
         visuals = model.get_current_visuals()['rlt']
 

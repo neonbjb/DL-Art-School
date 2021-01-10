@@ -336,9 +336,11 @@ class ExtensibleTrainer(BaseModel):
 
     def get_current_visuals(self, need_GT=True):
         # Conforms to an archaic format from MMSR.
-        return {'lq': self.eval_state['lq'][0].float().cpu(),
-                'hq': self.eval_state['hq'][0].float().cpu(),
-                'rlt': self.eval_state[self.opt['eval']['output_state']][0].float().cpu()}
+        res = {'lq': self.eval_state['lq'][0].float().cpu(),
+               'rlt': self.eval_state[self.opt['eval']['output_state']][0].float().cpu()}
+        if 'hq' in self.eval_state.keys():
+            res['hq'] = self.eval_state['hq'][0].float().cpu(),
+        return res
 
     def print_network(self):
         for name, net in self.networks.items():
