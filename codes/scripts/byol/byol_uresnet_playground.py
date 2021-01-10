@@ -106,7 +106,7 @@ def build_kmeans():
 
 
 def use_kmeans():
-    _, centers = torch.load('../k_means.pth')
+    _, centers = torch.load('../experiments/k_means_uresnet_512.pth')
     batch_size = 8
     num_workers = 0
     dataloader = get_image_folder_dataloader(batch_size, num_workers, target_size=512)
@@ -125,7 +125,7 @@ def use_kmeans():
 
 
 if __name__ == '__main__':
-    pretrained_path = '../experiments/uresnet_pixpro_attempt2.pth'
+    pretrained_path = '../experiments/uresnet_pixpro_512.pth'
     model = UResNet50(Bottleneck, [3,4,6,3], out_dim=512).to('cuda')
     sd = torch.load(pretrained_path)
     resnet_sd = {}
