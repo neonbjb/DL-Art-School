@@ -10,11 +10,11 @@ from utils.util import opt_get
 
 
 class UResnetMaskProducer(nn.Module):
-    def __init__(self, pretrained_uresnet_path, kmeans_centroid_path, mask_scales=[.125,.25,.5,1]):
+    def __init__(self, pretrained_uresnet_path, kmeans_centroid_path, mask_scales=[.125,.25,.5,1], tail_dim=512):
         super().__init__()
         _, centroids = torch.load(kmeans_centroid_path)
         self.centroids = nn.Parameter(centroids)
-        self.ures = UResNet50(Bottleneck, [3,4,6,3], out_dim=512).to('cuda')
+        self.ures = UResNet50(Bottleneck, [3,4,6,3], out_dim=tail_dim).to('cuda')
         self.mask_scales = mask_scales
 
         sd = torch.load(pretrained_uresnet_path)

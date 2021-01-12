@@ -48,9 +48,8 @@ class ScaledWeightConv(_ConvNd):
             w.FOR_SCALE_SHIFT = True
             s.FOR_SCALE_SHIFT = True
         # This should probably be configurable at some point.
-        for p in self.parameters():
-            if not hasattr(p, "FOR_SCALE_SHIFT"):
-                p.DO_NOT_TRAIN = True
+        self.weight.DO_NOT_TRAIN = True
+        self.weight.requires_grad = False
 
     def _weighted_conv_forward(self, input, weight):
         if self.padding_mode != 'zeros':
@@ -60,7 +59,12 @@ class ScaledWeightConv(_ConvNd):
         return F.conv2d(input, weight, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
-    def forward(self, input: Tensor, masks: dict) -> Tensor:
+    def forward(self, input: Tensor, masks: dict = None) -> Tensor:
+        if masks is None:
+            # An alternate "mode" of operation is the masks are injected as parameters.
+            assert hasattr(self, 'masks')
+            masks = self.masks
+
         # This is an exceptionally inefficient way of achieving this functionality. The hope is that if this is any
         # good at all, this can be made more efficient by performing a single conv pass with multiple masks.
         weighted_convs = [self._weighted_conv_forward(input, self.weight * scale + shift) for scale, shift in zip(self.weight_scales, self.shifts)]
@@ -70,6 +74,20 @@ class ScaledWeightConv(_ConvNd):
         assert needed_mask in masks.keys()
 
         return index_2d(weighted_convs, masks[needed_mask])
+
+
+def create_wrapped_conv_from_template(conv: nn.Conv2d, breadth: int):
+    wrapped = ScaledWeightConv(conv.in_channels,
+                               conv.out_channels,
+                               conv.kernel_size[0],
+                               conv.stride[0],
+                               conv.padding[0],
+                               conv.dilation[0],
+                               conv.groups,
+                               conv.bias,
+                               conv.padding_mode,
+                               breadth)
+    return wrapped
 
 
 # Drop-in implementation of ConvTranspose2d that can apply masked scales&shifts to the convolution weights.
@@ -102,9 +120,8 @@ class ScaledWeightConvTranspose(_ConvTransposeNd):
             w.FOR_SCALE_SHIFT = True
             s.FOR_SCALE_SHIFT = True
         # This should probably be configurable at some point.
-        for nm, p in self.named_parameters():
-            if nm == 'weight':
-                p.DO_NOT_TRAIN = True
+        self.weight.DO_NOT_TRAIN = True
+        self.weight.requires_grad = False
 
     def _conv_transpose_forward(self, input, weight, output_size) -> Tensor:
         if self.padding_mode != 'zeros':
@@ -117,7 +134,12 @@ class ScaledWeightConvTranspose(_ConvTransposeNd):
             input, weight, self.bias, self.stride, self.padding,
             output_padding, self.groups, self.dilation)
 
-    def forward(self, input: Tensor, masks: dict, output_size: Optional[List[int]] = None) -> Tensor:
+    def forward(self, input: Tensor, masks: dict = None, output_size: Optional[List[int]] = None) -> Tensor:
+        if masks is None:
+            # An alternate "mode" of operation is the masks are injected as parameters.
+            assert hasattr(self, 'masks')
+            masks = self.masks
+
         # This is an exceptionally inefficient way of achieving this functionality. The hope is that if this is any
         # good at all, this can be made more efficient by performing a single conv pass with multiple masks.
         weighted_convs = [self._conv_transpose_forward(input, self.weight * scale + shift, output_size)
@@ -128,3 +150,22 @@ class ScaledWeightConvTranspose(_ConvTransposeNd):
         assert needed_mask in masks.keys()
 
         return index_2d(weighted_convs, masks[needed_mask])
+
+
+def create_wrapped_conv_transpose_from_template(conv: nn.Conv2d, breadth: int):
+    wrapped = ScaledWeightConvTranspose(conv.in_channels,
+                               conv.out_channels,
+                               conv.kernel_size,
+                               conv.stride,
+                               conv.padding,
+                               conv.output_padding,
+                               conv.groups,
+                               conv.bias,
+                               conv.dilation,
+                               conv.padding_mode,
+                               breadth)
+    wrapped.weight = conv.weight
+    wrapped.weight.DO_NOT_TRAIN = True
+    wrapped.weight.requires_grad = False
+    wrapped.bias = conv.bias
+    return wrapped

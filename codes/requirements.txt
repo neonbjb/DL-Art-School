@@ -16,3 +16,4 @@ kornia
 linear_attention_transformer
 vector_quantize_pytorch
 orjson
+einops

@@ -59,7 +59,8 @@ def im_norm(x):
 def get_image_folder_dataloader(batch_size, num_workers, target_size=256):
     dataset_opt = dict_to_nonedict({
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
+        'paths': ['F:\\4k6k\\datasets\\images\\imagenet_2017\\train'],
+        #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
         'weights': [1],
@@ -94,22 +95,23 @@ def produce_latent_dict(model):
         id += batch_size
         if id > 1000:
             print("Saving checkpoint..")
-            torch.save((latents, paths), '../results.pth')
+            torch.save((latents, paths), '../imagenet_latent_dict.pth')
             id = 0
 
 
 def build_kmeans():
-    latents, _ = torch.load('../results.pth')
+    latents, _ = torch.load('../imagenet_latent_dict.pth')
     latents = torch.cat(latents, dim=0).to('cuda')
-    cluster_ids_x, cluster_centers = kmeans(latents, num_clusters=8, distance="euclidean", device=torch.device('cuda:0'))
-    torch.save((cluster_ids_x, cluster_centers), '../k_means.pth')
+    cluster_ids_x, cluster_centers = kmeans(latents, num_clusters=4, distance="euclidean", device=torch.device('cuda:0'))
+    torch.save((cluster_ids_x, cluster_centers), '../k_means_imagenet.pth')
 
 
 def use_kmeans():
-    _, centers = torch.load('../experiments/k_means_uresnet_512.pth')
+    _, centers = torch.load('../k_means_imagenet.pth')
+    centers = centers.to('cuda')
     batch_size = 8
     num_workers = 0
-    dataloader = get_image_folder_dataloader(batch_size, num_workers, target_size=512)
+    dataloader = get_image_folder_dataloader(batch_size, num_workers, target_size=256)
     colormap = cm.get_cmap('viridis', 8)
     for i, batch in enumerate(tqdm(dataloader)):
         hq = batch['hq'].to('cuda')
@@ -117,16 +119,16 @@ def use_kmeans():
         b, c, h, w = l.shape
         dim = b*h*w
         l = l.permute(0,2,3,1).reshape(dim,c)
-        pred = kmeans_predict(l, centers, device=l.device)
+        pred = kmeans_predict(l, centers)
         pred = pred.reshape(b,h,w)
-        img = torch.tensor(colormap(pred[:, :, :].detach().numpy()))
+        img = torch.tensor(colormap(pred[:, :, :].detach().cpu().numpy()))
         torchvision.utils.save_image(torch.nn.functional.interpolate(img.permute(0,3,1,2), scale_factor=8, mode="nearest"), f"{i}_categories.png")
         torchvision.utils.save_image(hq, f"{i}_hq.png")
 
 
 if __name__ == '__main__':
-    pretrained_path = '../experiments/uresnet_pixpro_512.pth'
-    model = UResNet50(Bottleneck, [3,4,6,3], out_dim=512).to('cuda')
+    pretrained_path = '../experiments/train_imagenet_pixpro_resnet/models/66500_generator.pth'
+    model = UResNet50(Bottleneck, [3,4,6,3], out_dim=256).to('cuda')
     sd = torch.load(pretrained_path)
     resnet_sd = {}
     for k, v in sd.items():
@@ -139,5 +141,5 @@ if __name__ == '__main__':
         #find_similar_latents(model, 0, 8, structural_euc_dist)
         #create_latent_database(model, batch_size=32)
         #produce_latent_dict(model)
-        #build_kmeans()
-        use_kmeans()
+        build_kmeans()
+        #use_kmeans()

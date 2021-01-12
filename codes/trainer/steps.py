@@ -107,6 +107,9 @@ class ConfigurableStep(Module):
                 optSGD = SGDNoBiasMomentum(list(optim_params.values()), lr=opt_config['lr'], momentum=opt_config['momentum'],
                                            weight_decay=opt_config['weight_decay'])
                 opt = LARC(optSGD, trust_coefficient=opt_config['lars_coefficient'])
+            elif self.step_opt['optimizer'] == 'sgd':
+                from torch.optim import SGD
+                opt = SGD(list(optim_params.values()), lr=opt_config['lr'], momentum=opt_config['momentum'], weight_decay=opt_config['weight_decay'])
             opt._config = opt_config  # This is a bit seedy, but we will need these configs later.
             opt._config['network'] = net_name
             self.optimizers.append(opt)
