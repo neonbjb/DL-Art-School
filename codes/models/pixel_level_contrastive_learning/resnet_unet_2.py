@@ -1,79 +1,16 @@
-# Resnet implementation that adds a u-net style up-conversion component to output values at a
-# specified pixel density.
-#
-# The downsampling part of the network is compatible with the built-in torch resnet for use in
-# transfer learning.
-#
-# Only resnet50 currently supported.
-
 import torch
 import torch.nn as nn
 from torchvision.models.resnet import BasicBlock, Bottleneck, conv1x1, conv3x3
 from torchvision.models.utils import load_state_dict_from_url
 import torchvision
 
-
+from models.arch_util import ConvBnRelu
+from models.pixel_level_contrastive_learning.resnet_unet import ReverseBottleneck
 from trainer.networks import register_model
 from utils.util import checkpoint, opt_get
 
 
-class ReverseBottleneck(nn.Module):
-
-    def __init__(self, inplanes, planes, groups=1, passthrough=False,
-                 base_width=64, dilation=1, norm_layer=None):
-        super().__init__()
-        if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
-        width = int(planes * (base_width / 64.)) * groups
-        self.passthrough = passthrough
-        if passthrough:
-            self.integrate = conv1x1(inplanes*2, inplanes)
-            self.bn_integrate = norm_layer(inplanes)
-        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
-        self.conv1 = conv1x1(inplanes, width)
-        self.bn1 = norm_layer(width)
-        self.conv2 = conv3x3(width, width, groups, dilation)
-        self.bn2 = norm_layer(width)
-        self.residual_upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            conv1x1(width, width),
-            norm_layer(width),
-        )
-        self.conv3 = conv1x1(width, planes)
-        self.bn3 = norm_layer(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            conv1x1(inplanes, planes),
-            norm_layer(planes),
-        )
-
-    def forward(self, x, passthrough=None):
-        if self.passthrough:
-            x = self.bn_integrate(self.integrate(torch.cat([x, passthrough], dim=1)))
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu(out)
-
-        out = self.residual_upsample(out)
-
-        out = self.conv3(out)
-        out = self.bn3(out)
-
-        identity = self.upsample(x)
-
-        out = out + identity
-        out = self.relu(out)
-
-        return out
-
-
-class UResNet50(torchvision.models.resnet.ResNet):
+class UResNet50_2(torchvision.models.resnet.ResNet):
 
     def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
@@ -82,6 +19,7 @@ class UResNet50(torchvision.models.resnet.ResNet):
                          replace_stride_with_dilation, norm_layer)
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
+        self.level_conv = ConvBnRelu(3, 64)
         '''
         # For reference:
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -95,29 +33,24 @@ class UResNet50(torchvision.models.resnet.ResNet):
         uplayers = []
         inplanes = 2048
         first = True
-        for i in range(2):
-            uplayers.append(ReverseBottleneck(inplanes, inplanes // 2, norm_layer=norm_layer, passthrough=not first))
-            inplanes = inplanes // 2
+        div = [2,2,2,4,1]
+        for i in range(5):
+            uplayers.append(ReverseBottleneck(inplanes, inplanes // div[i], norm_layer=norm_layer, passthrough=not first))
+            inplanes = inplanes // div[i]
             first = False
         self.uplayers = nn.ModuleList(uplayers)
-        self.tail = nn.Sequential(conv1x1(1024, 512),
-                                  norm_layer(512),
+        self.tail = nn.Sequential(conv3x3(128, 64),
+                                  norm_layer(64),
                                   nn.ReLU(),
-                                  conv3x3(512, 512),
-                                  norm_layer(512),
-                                  nn.ReLU(),
-                                  conv1x1(512, out_dim))
+                                  conv1x1(64, out_dim))
 
         del self.fc  # Not used in this implementation and just consumes a ton of GPU memory.
 
 
     def _forward_impl(self, x):
-        # Should be the exact same implementation of torchvision.models.resnet.ResNet.forward_impl,
-        # except using checkpoints on the body conv layers.
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+        level = self.level_conv(x)
+        x0 = self.relu(self.bn1(self.conv1(x)))
+        x = self.maxpool(x0)
 
         x1 = checkpoint(self.layer1, x)
         x2 = checkpoint(self.layer2, x1)
@@ -127,18 +60,19 @@ class UResNet50(torchvision.models.resnet.ResNet):
 
         x = checkpoint(self.uplayers[0], x4)
         x = checkpoint(self.uplayers[1], x, x3)
-        #x = checkpoint(self.uplayers[2], x, x2)
-        #x = checkpoint(self.uplayers[3], x, x1)
+        x = checkpoint(self.uplayers[2], x, x2)
+        x = checkpoint(self.uplayers[3], x, x1)
+        x = checkpoint(self.uplayers[4], x, x0)
 
-        return checkpoint(self.tail, torch.cat([x, x2], dim=1))
+        return checkpoint(self.tail, torch.cat([x, level], dim=1))
 
     def forward(self, x):
         return self._forward_impl(x)
 
 
 @register_model
-def register_u_resnet50(opt_net, opt):
-    model = UResNet50(Bottleneck, [3, 4, 6, 3], out_dim=opt_net['odim'])
+def register_u_resnet50_2(opt_net, opt):
+    model = UResNet50_2(Bottleneck, [3, 4, 6, 3], out_dim=opt_net['odim'])
     if opt_get(opt_net, ['use_pretrained_base'], False):
         state_dict = load_state_dict_from_url('https://download.pytorch.org/models/resnet50-19c8e357.pth', progress=True)
         model.load_state_dict(state_dict, strict=False)
@@ -146,7 +80,8 @@ def register_u_resnet50(opt_net, opt):
 
 
 if __name__ == '__main__':
-    model = UResNet50(Bottleneck, [3,4,6,3])
+    model = UResNet50_2(Bottleneck, [3,4,6,3])
     samp = torch.rand(1,3,224,224)
-    model(samp)
+    y = model(samp)
+    print(y.shape)
     # For pixpro: attach to "tail.3"
