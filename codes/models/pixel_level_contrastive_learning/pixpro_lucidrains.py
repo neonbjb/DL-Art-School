@@ -489,9 +489,7 @@ class PixelCL(nn.Module):
 
         pix_loss = (loss_pixpro_one_two + loss_pixpro_two_one) / 2
 
-        # total loss
-        loss = pix_loss * self.alpha + instance_loss
-        return loss, positive_pixel_pairs
+        return instance_loss, pix_loss, positive_pixel_pairs
 
     # Allows visualizing what the augmentor is up to.
     def visual_dbg(self, step, path):
