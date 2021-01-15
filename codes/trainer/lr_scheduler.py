@@ -124,7 +124,7 @@ class CosineAnnealingLR_Restart(_LRScheduler):
 
 
 if __name__ == "__main__":
-    optimizer = torch.optim.Adam([torch.zeros(3, 64, 3, 3)], lr=.2, weight_decay=0,
+    optimizer = torch.optim.Adam([torch.zeros(3, 64, 3, 3)], lr=1e-4, weight_decay=0,
                                  betas=(0.9, 0.99))
     ##############################
     # MultiStepLR_Restart
@@ -159,17 +159,17 @@ if __name__ == "__main__":
     restart_weights = [1]
 
     ## four
-    T_period = [25000, 25000]
-    restarts = [252000]
-    restart_weights = [.5]
+    T_period = [200000, 100000, 200000]
+    restarts = [200000, 300000]
+    restart_weights = [.5, .25]
 
-    scheduler = CosineAnnealingLR_Restart(optimizer, T_period, warmup=227000, eta_min=.01, restarts=restarts,
+    scheduler = CosineAnnealingLR_Restart(optimizer, T_period, warmup=10000, eta_min=1e-8, restarts=restarts,
                                           weights=restart_weights)
 
     ##############################
     # Draw figure
     ##############################
-    N_iter = 1000000
+    N_iter = 500000
     lr_l = list(range(N_iter))
     for i in range(N_iter):
         scheduler.step()

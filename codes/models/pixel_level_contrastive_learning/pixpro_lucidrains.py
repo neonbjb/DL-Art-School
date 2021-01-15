@@ -328,7 +328,6 @@ class PixelCL(nn.Module):
         ppm_gamma = 2,
         distance_thres = 0.7,
         similarity_temperature = 0.3,
-        alpha = 1.,
         cutout_ratio_range = (0.6, 0.8),
         cutout_interpolate_mode = 'nearest',
         coord_cutout_interpolate_mode = 'bilinear',
@@ -363,7 +362,6 @@ class PixelCL(nn.Module):
 
         self.distance_thres = distance_thres
         self.similarity_temperature = similarity_temperature
-        self.alpha = alpha
 
         # This requirement is due to the way that these are processed, not a hard requirement.
         assert math.sqrt(max_latent_dim) == int(math.sqrt(max_latent_dim))
@@ -456,7 +454,7 @@ class PixelCL(nn.Module):
                 l = l[:, :, prob.multinomial(num_samples=self.max_latent_dim, replacement=False)]
                 # For compatibility with the existing pixpro code, reshape this stochastic sampling back into a 2d "square".
                 #  Note that the actual structure no longer matters going forwards. Pixels are only compared to themselves and others without regards
-                #  to structure.
+                #  to the original image structure.
                 sqdim = int(math.sqrt(self.max_latent_dim))
                 extracted.append(l.reshape(b, c, sqdim, sqdim))
             proj_pixel_one, proj_pixel_two, target_proj_pixel_one, target_proj_pixel_two = extracted
