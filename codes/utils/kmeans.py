@@ -1,5 +1,6 @@
 # From: https://github.com/subhadarship/kmeans_pytorch
 # License: https://github.com/subhadarship/kmeans_pytorch/blob/master/LICENSE
+import random
 
 import numpy as np
 import torch
@@ -30,6 +31,7 @@ def kmeans(
         tol=1e-4,
         tqdm_flag=True,
         iter_limit=0,
+        gravity_limit_per_iter=None,
         device=torch.device('cpu')
 ):
     """
@@ -83,9 +85,10 @@ def kmeans(
 
         for index in range(num_clusters):
             selected = torch.nonzero(choice_cluster == index).squeeze().to(device)
-
             selected = torch.index_select(X, 0, selected)
-
+            if gravity_limit_per_iter and len(selected) > gravity_limit_per_iter:
+                ch = random.randint(0, len(selected)-gravity_limit_per_iter)
+                selected=selected[ch:ch+gravity_limit_per_iter]
             initial_state[index] = selected.mean(dim=0)
 
         center_shift = torch.sum(
@@ -97,14 +100,16 @@ def kmeans(
         iteration = iteration + 1
 
         # update tqdm meter
+        bins = torch.bincount(choice_cluster)
         if tqdm_flag:
             tqdm_meter.set_postfix(
                 iteration=f'{iteration}',
-                center_shift=f'{center_shift ** 2:0.6f}',
-                tol=f'{tol:0.6f}'
+                center_shift=f'{center_shift ** 2}',
+                tol=f'{tol}',
+                bins=f'{bins}',
             )
             tqdm_meter.update()
-        if center_shift ** 2 < tol:
+        if tol > 0 and center_shift ** 2 < tol:
             break
         if iter_limit != 0 and iteration >= iter_limit:
             break
