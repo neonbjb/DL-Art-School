@@ -13,17 +13,17 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 7
-    opt['compression_level'] = 90  # JPEG compression quality rating.
+    opt['n_thread'] = 3
+    opt['compression_level'] = 95  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
     opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\working']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\256_unsupervised'
-    opt['imgsize'] = 256
-    opt['bottom_crop'] = 0.1
-    opt['keep_folder'] = False
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\cropped'
+    opt['imgsize'] = 1024
+    opt['bottom_crop'] = .1
+    opt['keep_folder'] = True
 
     save_folder = opt['save_folder']
     if not osp.exists(save_folder):

@@ -3,8 +3,8 @@ import torch
 from models.spinenet_arch import SpineNet
 
 if __name__ == '__main__':
-    pretrained_path = '../../../experiments/resnet_byol_diffframe_115k.pth'
-    output_path = '../../experiments/resnet_byol_diffframe_115k_.pth'
+    pretrained_path = '../../../experiments/uresnet_pixpro4_imgset.pth'
+    output_path = '../../../experiments/uresnet_pixpro4_imgset.pth'
 
     wrap_key = 'online_encoder.net.'
     sd = torch.load(pretrained_path)

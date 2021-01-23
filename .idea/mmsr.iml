@@ -9,7 +9,7 @@
       <excludeFolder url="file://$MODULE_DIR$/results" />
       <excludeFolder url="file://$MODULE_DIR$/tb_logger" />
     </content>
-    <orderEntry type="jdk" jdkName="torch-cu11" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.8 (torch_nightly)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

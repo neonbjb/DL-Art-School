@@ -113,7 +113,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     want_just_images = True
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YMAL file.', default='../options/use_video_upsample.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/use_video_upsample.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
 
