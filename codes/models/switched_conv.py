@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
+from lambda_networks import LambdaLayer
 from torch.nn import init, Conv2d
 import torch.nn.functional as F
 
@@ -21,6 +22,7 @@ class SwitchedConv(nn.Module):
         bias: bool = True,
         padding_mode: str = 'zeros',
         include_coupler: bool = False,  # A 'coupler' is a latent converter which can make any bxcxhxw tensor a compatible switchedconv selector by performing a linear 1x1 conv, softmax and interpolate.
+        coupler_mode: str = 'standard',
         coupler_dim_in: int = 0):
         super().__init__()
         self.in_channels = in_channels
@@ -33,7 +35,11 @@ class SwitchedConv(nn.Module):
         self.groups = groups
 
         if include_coupler:
-            self.coupler = Conv2d(coupler_dim_in, switch_breadth, kernel_size=1)
+            if coupler_mode == 'standard':
+                self.coupler = Conv2d(coupler_dim_in, switch_breadth, kernel_size=1)
+            elif coupler_mode == 'lambda':
+                self.coupler = LambdaLayer(dim=coupler_dim_in, dim_out=switch_breadth, r=23, dim_k=16, heads=2, dim_u=1)
+
         else:
             self.coupler = None
 
@@ -52,12 +58,15 @@ class SwitchedConv(nn.Module):
             bound = 1 / math.sqrt(fan_in)
             init.uniform_(self.bias, -bound, bound)
 
-    def forward(self, inp, selector):
+    def forward(self, inp, selector=None):
         if self.coupler:
+            if selector is None:  # A coupler can convert from any input to a selector, so 'None' is allowed.
+                selector = inp
             selector = F.softmax(self.coupler(selector), dim=1)
             out_shape = [s // self.stride for s in inp.shape[2:]]
             if selector.shape[2] != out_shape[0] or selector.shape[3] != out_shape[1]:
                 selector = F.interpolate(selector, size=out_shape, mode="nearest")
+        assert selector is not None
 
         conv_results = []
         for i, w in enumerate(self.weights):
