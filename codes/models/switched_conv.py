@@ -63,6 +63,7 @@ class SwitchedConv(nn.Module):
             if selector is None:  # A coupler can convert from any input to a selector, so 'None' is allowed.
                 selector = inp
             selector = F.softmax(self.coupler(selector), dim=1)
+            self.last_select = selector.detach().clone()
             out_shape = [s // self.stride for s in inp.shape[2:]]
             if selector.shape[2] != out_shape[0] or selector.shape[3] != out_shape[1]:
                 selector = F.interpolate(selector, size=out_shape, mode="nearest")
