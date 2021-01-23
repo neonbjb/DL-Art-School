@@ -199,7 +199,7 @@ class VQVAE(nn.Module):
             codebook_dim, codebook_dim, channel, n_res_block, n_res_channel, stride=2
         )
         self.quantize_conv_b = nn.Conv2d(codebook_dim + channel, codebook_dim, 1)
-        self.quantize_b = Quantize(codebook_dim, codebook_size)
+        self.quantize_b = Quantize(codebook_dim, codebook_size*2)
         self.upsample_t = UpsampleConv(
             codebook_dim, codebook_dim, 5, padding=2
         )
