@@ -7,7 +7,8 @@ from torch.nn import functional as F
 
 import torch.distributed as distributed
 
-from models.switched_conv import SwitchedConv, convert_conv_net_state_dict_to_switched_conv
+from models.switched_conv_hard_routing import SwitchedConvHardRouting, \
+    convert_conv_net_state_dict_to_switched_conv
 from trainer.networks import register_model
 from utils.util import checkpoint, opt_get
 
@@ -16,7 +17,7 @@ from utils.util import checkpoint, opt_get
 class UpsampleConv(nn.Module):
     def __init__(self, in_filters, out_filters, breadth, kernel_size, padding):
         super().__init__()
-        self.conv = SwitchedConv(in_filters, out_filters, kernel_size, breadth, padding=padding, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_filters)
+        self.conv = SwitchedConvHardRouting(in_filters, out_filters, kernel_size, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_filters, dropout_rate=0.4)
 
     def forward(self, x):
         up = torch.nn.functional.interpolate(x, scale_factor=2)
@@ -83,9 +84,9 @@ class ResBlock(nn.Module):
 
         self.conv = nn.Sequential(
             nn.ReLU(inplace=True),
-            SwitchedConv(in_channel, channel, 3, breadth, padding=1, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_channel),
+            nn.Conv2d(in_channel, channel, 3, padding=1),
             nn.ReLU(inplace=True),
-            SwitchedConv(channel, in_channel, 1, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel),
+            nn.Conv2d(channel, in_channel, 1),
         )
 
     def forward(self, input):
@@ -101,18 +102,18 @@ class Encoder(nn.Module):
 
         if stride == 4:
             blocks = [
-                SwitchedConv(in_channel, channel // 2, 5, breadth, stride=2, padding=2, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_channel),
+                nn.Conv2d(in_channel, channel // 2, 5, stride=2, padding=2),
                 nn.ReLU(inplace=True),
-                SwitchedConv(channel // 2, channel, 5, breadth, stride=2, padding=2, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel // 2),
+                SwitchedConvHardRouting(channel // 2, channel, 5, breadth, stride=2, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel // 2, dropout_rate=0.4),
                 nn.ReLU(inplace=True),
-                SwitchedConv(channel, channel, 3, breadth, padding=1, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel),
+                SwitchedConvHardRouting(channel, channel, 3, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel, dropout_rate=0.4),
             ]
 
         elif stride == 2:
             blocks = [
-                SwitchedConv(in_channel, channel // 2, 5, breadth, stride=2, padding=2, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_channel),
+                nn.Conv2d(in_channel, channel // 2, 5, stride=2, padding=2),
                 nn.ReLU(inplace=True),
-                SwitchedConv(channel // 2, channel, 3, breadth, padding=1, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel // 2),
+                SwitchedConvHardRouting(channel // 2, channel, 3, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel // 2, dropout_rate=0.4),
             ]
 
         for i in range(n_res_block):
@@ -132,7 +133,7 @@ class Decoder(nn.Module):
     ):
         super().__init__()
 
-        blocks = [SwitchedConv(in_channel, channel, 3, breadth, padding=1, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_channel)]
+        blocks = [SwitchedConvHardRouting(in_channel, channel, 3, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_channel, dropout_rate=0.4)]
 
         for i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel, breadth))
@@ -171,7 +172,7 @@ class VQVAE(nn.Module):
         codebook_dim=64,
         codebook_size=512,
         decay=0.99,
-        breadth=4,
+        breadth=8,
     ):
         super().__init__()
 
@@ -218,6 +219,20 @@ class VQVAE(nn.Module):
         for i, c in enumerate(convs):
             self.save_attention_to_image_rgb(os.path.join(path, "%i_selector_%i.png" % (step, i+1)), c.last_select, self.breadth)
 
+    def get_debug_values(self, step, __):
+        switched_convs = [('enc_b_blk2', self.enc_b.blocks[2]),
+                          ('enc_b_blk4', self.enc_b.blocks[4]),
+                          ('enc_t_blk2', self.enc_t.blocks[2]),
+                          ('dec_t_blk0', self.dec_t.blocks[0]),
+                          ('dec_t_blk-1', self.dec_t.blocks[-1].conv),
+                          ('dec_blk0', self.dec.blocks[0]),
+                          ('dec_blk-1', self.dec.blocks[-1].conv),
+                          ('dec_blk-3', self.dec.blocks[-3].conv)]
+        logs = {}
+        for name, swc in switched_convs:
+            logs[f'{name}_histogram_switch_usage'] = swc.latest_masks
+        return logs
+
     def encode(self, input):
         enc_b = checkpoint(self.enc_b, input)
         enc_t = checkpoint(self.enc_t, enc_b)
@@ -260,17 +275,19 @@ def convert_weights(weights_file):
     import models.vqvae.vqvae_no_conv_transpose as stdvq
     std_model = stdvq.VQVAE()
     std_model.load_state_dict(sd)
-    nsd = convert_conv_net_state_dict_to_switched_conv(std_model, 4, ['quantize_conv_t', 'quantize_conv_b'])
+    nsd = convert_conv_net_state_dict_to_switched_conv(std_model, 8, ['quantize_conv_t', 'quantize_conv_b',
+                                                                      'enc_b.blocks.0', 'enc_t.blocks.0',
+                                                                      'conv.1', 'conv.3'])
     torch.save(nsd, "converted.pth")
 
 
 @register_model
-def register_vqvae_norm_switched_conv_lambda(opt_net, opt):
+def register_vqvae_norm_hard_switched_conv_lambda(opt_net, opt):
     kw = opt_get(opt_net, ['kwargs'], {})
     return VQVAE(**kw)
 
 
 if __name__ == '__main__':
-    #v = VQVAE()
-    #print(v(torch.randn(1,3,128,128))[0].shape)
-    convert_weights("../../../experiments/4000_generator.pth")
+    v = VQVAE(breadth=8).cuda()
+    print(v(torch.randn(1,3,128,128).cuda())[0].shape)
+    #convert_weights("../../../experiments/50000_generator.pth")
