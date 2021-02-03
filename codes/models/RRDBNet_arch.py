@@ -9,11 +9,10 @@ import torchvision
 from torchvision.models.resnet import Bottleneck
 
 from models.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
-from models.pixel_level_contrastive_learning.resnet_unet_2 import UResNet50_2
 from models.pixel_level_contrastive_learning.resnet_unet_3 import UResNet50_3
 from trainer.networks import register_model
 from utils.util import checkpoint, sequential_checkpoint, opt_get
-from models.switched_conv import SwitchedConv
+from models.switched_conv.switched_conv import SwitchedConv
 
 
 class ResidualDenseBlock(nn.Module):

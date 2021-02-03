@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 import torch.distributed as distributed
 
-from models.switched_conv import SwitchedConv, convert_conv_net_state_dict_to_switched_conv
+from models.switched_conv.switched_conv import SwitchedConv, convert_conv_net_state_dict_to_switched_conv
 from trainer.networks import register_model
 from utils.util import checkpoint, opt_get
 

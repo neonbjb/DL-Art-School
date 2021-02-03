@@ -48,10 +48,10 @@ def create_loss(opt_loss, env):
     elif type == 'for_element':
         return ForElementLoss(opt_loss, env)
     elif type == 'mixture_of_experts':
-        from models.switched_conv_hard_routing import MixtureOfExpertsLoss
+        from models.switched_conv.mixture_of_experts import MixtureOfExpertsLoss
         return MixtureOfExpertsLoss(opt_loss, env)
     elif type == 'switch_transformer_balance':
-        from models.switched_conv_hard_routing import SwitchTransformersLoadBalancingLoss
+        from models.switched_conv.mixture_of_experts import SwitchTransformersLoadBalancingLoss
         return SwitchTransformersLoadBalancingLoss(opt_loss, env)
     else:
         raise NotImplementedError
