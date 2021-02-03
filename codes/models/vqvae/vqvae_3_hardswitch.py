@@ -1,4 +1,5 @@
 import torch
+import torchvision
 from torch import nn
 
 from models.switched_conv.switched_conv_hard_routing import SwitchedConvHardRouting, \
