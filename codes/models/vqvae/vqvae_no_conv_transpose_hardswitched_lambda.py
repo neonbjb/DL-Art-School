@@ -17,7 +17,7 @@ from utils.util import checkpoint, opt_get
 class UpsampleConv(nn.Module):
     def __init__(self, in_filters, out_filters, breadth, kernel_size, padding):
         super().__init__()
-        self.conv = SwitchedConvHardRouting(in_filters, out_filters, kernel_size, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_filters, dropout_rate=0.4)
+        self.conv = SwitchedConvHardRouting(in_filters, out_filters, kernel_size, breadth, include_coupler=True, coupler_mode='standard', coupler_dim_in=in_filters, dropout_rate=0.4)
 
     def forward(self, x):
         up = torch.nn.functional.interpolate(x, scale_factor=2)
@@ -104,16 +104,16 @@ class Encoder(nn.Module):
             blocks = [
                 nn.Conv2d(in_channel, channel // 2, 5, stride=2, padding=2),
                 nn.ReLU(inplace=True),
-                SwitchedConvHardRouting(channel // 2, channel, 5, breadth, stride=2, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel // 2, dropout_rate=0.4),
+                SwitchedConvHardRouting(channel // 2, channel, 5, breadth, stride=2, include_coupler=True, coupler_mode='standard', coupler_dim_in=channel // 2, dropout_rate=0.4),
                 nn.ReLU(inplace=True),
-                SwitchedConvHardRouting(channel, channel, 3, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel, dropout_rate=0.4),
+                SwitchedConvHardRouting(channel, channel, 3, breadth, include_coupler=True, coupler_mode='standard', coupler_dim_in=channel, dropout_rate=0.4),
             ]
 
         elif stride == 2:
             blocks = [
                 nn.Conv2d(in_channel, channel // 2, 5, stride=2, padding=2),
                 nn.ReLU(inplace=True),
-                SwitchedConvHardRouting(channel // 2, channel, 3, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=channel // 2, dropout_rate=0.4),
+                SwitchedConvHardRouting(channel // 2, channel, 3, breadth, include_coupler=True, coupler_mode='standard', coupler_dim_in=channel // 2, dropout_rate=0.4),
             ]
 
         for i in range(n_res_block):
@@ -133,7 +133,7 @@ class Decoder(nn.Module):
     ):
         super().__init__()
 
-        blocks = [SwitchedConvHardRouting(in_channel, channel, 3, breadth, include_coupler=True, coupler_mode='lambda', coupler_dim_in=in_channel, dropout_rate=0.4)]
+        blocks = [SwitchedConvHardRouting(in_channel, channel, 3, breadth, include_coupler=True, coupler_mode='standard', coupler_dim_in=in_channel, dropout_rate=0.4)]
 
         for i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel, breadth))
