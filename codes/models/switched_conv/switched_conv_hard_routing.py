@@ -146,14 +146,16 @@ class SwitchNorm(nn.Module):
 
 
 class HardRoutingGate(nn.Module):
-    def __init__(self, breadth):
+    def __init__(self, breadth, hard_en=True):
         super().__init__()
         self.norm = SwitchNorm(breadth, accumulator_size=256)
+        self.hard_en = hard_en
 
     def forward(self, x):
         soft = self.norm(nn.functional.softmax(x, dim=1))
-        hard = RouteTop1.apply(soft)  # This variant can route gradients downstream.
-        return hard
+        if self.hard_en:
+            return RouteTop1.apply(soft)
+        return soft
 
 
 class SwitchedConvHardRouting(nn.Module):
@@ -167,7 +169,8 @@ class SwitchedConvHardRouting(nn.Module):
                  dropout_rate=0.0,
                  include_coupler: bool = False,  # A 'coupler' is a latent converter which can make any bxcxhxw tensor a compatible switchedconv selector by performing a linear 1x1 conv, softmax and interpolate.
                  coupler_mode: str = 'standard',
-                 coupler_dim_in: int = 0):
+                 coupler_dim_in: int = 0,
+                 hard_en=True):  # A test switch that, when used in 'emulation mode' (where all convs are calculated using torch functions) computes soft-attention instead of hard-attention.
         super().__init__()
         self.in_channels = in_c
         self.out_channels = out_c
@@ -190,7 +193,7 @@ class SwitchedConvHardRouting(nn.Module):
                                              Conv2d(breadth, breadth, 1, stride=self.stride))
         else:
             self.coupler = None
-        self.gate = HardRoutingGate(breadth)
+        self.gate = HardRoutingGate(breadth, hard_en=hard_en)
 
         self.weight = nn.Parameter(torch.empty(out_c, in_c, breadth, kernel_sz, kernel_sz))
         if bias:

@@ -15,10 +15,10 @@ from utils.util import checkpoint, opt_get
 
 # Upsamples and blurs (similar to StyleGAN). Replaces ConvTranspose2D from the original paper.
 class UpsampleConv(nn.Module):
-    def __init__(self, in_filters, out_filters, kernel_size, padding):
+    def __init__(self, in_filters, out_filters, kernel_size, padding, cfg):
         super().__init__()
-        self.conv = SwitchedConvHardRouting(in_filters, out_filters, kernel_size, breadth=16, include_coupler=True,
-                                            coupler_mode='standard', coupler_dim_in=in_filters, dropout_rate=0.4)
+        self.conv = SwitchedConvHardRouting(in_filters, out_filters, kernel_size, breadth=cfg['breadth'], include_coupler=True,
+                                            coupler_mode=cfg['mode'], coupler_dim_in=in_filters, dropout_rate=cfg['dropout'], hard_en=cfg['hard_enabled'])
 
     def forward(self, x):
         up = torch.nn.functional.interpolate(x, scale_factor=2)
@@ -26,26 +26,26 @@ class UpsampleConv(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_channel, channel, n_res_block, n_res_channel, stride):
+    def __init__(self, in_channel, channel, n_res_block, n_res_channel, stride, cfg):
         super().__init__()
 
         if stride == 4:
             blocks = [
                 nn.Conv2d(in_channel, channel // 2, 5, stride=2, padding=2),
                 nn.LeakyReLU(inplace=True),
-                SwitchedConvHardRouting(channel // 2, channel, 5, breadth=16, stride=2, include_coupler=True,
-                                        coupler_mode='standard', coupler_dim_in=channel // 2, dropout_rate=0.4),
+                SwitchedConvHardRouting(channel // 2, channel, 5, breadth=cfg['breadth'], stride=2, include_coupler=True,
+                                        coupler_mode=cfg['mode'], coupler_dim_in=channel // 2, dropout_rate=cfg['dropout'], hard_en=cfg['hard_enabled']),
                 nn.LeakyReLU(inplace=True),
-                SwitchedConvHardRouting(channel, channel, 3, breadth=16, include_coupler=True, coupler_mode='standard',
-                                        coupler_dim_in=channel, dropout_rate=0.4),
+                SwitchedConvHardRouting(channel, channel, 3, breadth=cfg['breadth'], include_coupler=True, coupler_mode=cfg['mode'],
+                                        coupler_dim_in=channel, dropout_rate=cfg['dropout'], hard_en=cfg['hard_enabled']),
             ]
 
         elif stride == 2:
             blocks = [
                 nn.Conv2d(in_channel, channel // 2, 5, stride=2, padding=2),
                 nn.LeakyReLU(inplace=True),
-                SwitchedConvHardRouting(channel // 2, channel, 3, breadth=16, include_coupler=True, coupler_mode='standard',
-                                        coupler_dim_in=channel // 2, dropout_rate=0.4),
+                SwitchedConvHardRouting(channel // 2, channel, 3, breadth=cfg['breadth'], include_coupler=True, coupler_mode=cfg['mode'],
+                                        coupler_dim_in=channel // 2, dropout_rate=cfg['dropout'], hard_en=cfg['hard_enabled']),
             ]
 
         for i in range(n_res_block):
@@ -61,12 +61,12 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(
-        self, in_channel, out_channel, channel, n_res_block, n_res_channel, stride
+        self, in_channel, out_channel, channel, n_res_block, n_res_channel, stride, cfg
     ):
         super().__init__()
 
-        blocks = [SwitchedConvHardRouting(in_channel, channel, 3, breadth=16, include_coupler=True, coupler_mode='standard',
-                                          coupler_dim_in=in_channel, dropout_rate=0.4)]
+        blocks = [SwitchedConvHardRouting(in_channel, channel, 3, breadth=cfg['breadth'], include_coupler=True, coupler_mode=cfg['mode'],
+                                          coupler_dim_in=in_channel, dropout_rate=cfg['dropout'], hard_en=cfg['hard_enabled'])]
 
         for i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel))
@@ -76,17 +76,17 @@ class Decoder(nn.Module):
         if stride == 4:
             blocks.extend(
                 [
-                    UpsampleConv(channel, channel // 2, 5, padding=2),
+                    UpsampleConv(channel, channel // 2, 5, padding=2, cfg=cfg),
                     nn.LeakyReLU(inplace=True),
                     UpsampleConv(
-                        channel // 2, out_channel, 5, padding=2
+                        channel // 2, out_channel, 5, padding=2, cfg=cfg
                     ),
                 ]
             )
 
         elif stride == 2:
             blocks.append(
-                UpsampleConv(channel, out_channel, 5, padding=2)
+                UpsampleConv(channel, out_channel, 5, padding=2, cfg=cfg)
             )
 
         self.blocks = nn.Sequential(*blocks)
@@ -105,22 +105,24 @@ class VQVAE3HardSwitch(nn.Module):
         codebook_dim=64,
         codebook_size=512,
         decay=0.99,
+        cfg={'mode':'standard', 'breadth':16, 'hard_enabled': True, 'dropout': 0.4}
     ):
         super().__init__()
 
+        self.cfg = cfg
         self.initial_conv = nn.Sequential(*[nn.Conv2d(in_channel, 32, 3, padding=1),
                                            nn.LeakyReLU(inplace=True)])
-        self.enc_b = Encoder(32, channel, n_res_block, n_res_channel, stride=4)
-        self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2)
+        self.enc_b = Encoder(32, channel, n_res_block, n_res_channel, stride=4, cfg=cfg)
+        self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2, cfg=cfg)
         self.quantize_conv_t = nn.Conv2d(channel, codebook_dim, 1)
         self.quantize_t = Quantize(codebook_dim, codebook_size)
         self.dec_t = Decoder(
-            codebook_dim, codebook_dim, channel, n_res_block, n_res_channel, stride=2
+            codebook_dim, codebook_dim, channel, n_res_block, n_res_channel, stride=2, cfg=cfg
         )
         self.quantize_conv_b = nn.Conv2d(codebook_dim + channel, codebook_dim, 1)
         self.quantize_b = Quantize(codebook_dim, codebook_size)
         self.upsample_t = UpsampleConv(
-            codebook_dim, codebook_dim, 5, padding=2
+            codebook_dim, codebook_dim, 5, padding=2, cfg=cfg
         )
         self.dec = Decoder(
             codebook_dim + codebook_dim,
@@ -129,6 +131,7 @@ class VQVAE3HardSwitch(nn.Module):
             n_res_block,
             n_res_channel,
             stride=4,
+            cfg=cfg
         )
         self.final_conv = nn.Conv2d(32, in_channel, 3, padding=1)
 
@@ -211,7 +214,7 @@ def convert_weights(weights_file):
     from models.vqvae.vqvae_3 import VQVAE3
     std_model = VQVAE3()
     std_model.load_state_dict(sd)
-    nsd = convert_conv_net_state_dict_to_switched_conv(std_model, 16, ['quantize_conv_t', 'quantize_conv_b',
+    nsd = convert_conv_net_state_dict_to_switched_conv(std_model, 8, ['quantize_conv_t', 'quantize_conv_b',
                                                                       'enc_b.blocks.0', 'enc_t.blocks.0',
                                                                       'conv.1', 'conv.3', 'initial_conv', 'final_conv'])
     torch.save(nsd, "converted.pth")
@@ -224,7 +227,13 @@ def register_vqvae3_hard_switch(opt_net, opt):
 
 
 def performance_test():
-    net = VQVAE3HardSwitch().to('cuda')
+    cfg = {
+        'mode': 'lambda',
+        'breadth': 8,
+        'hard_enabled': False,
+        'dropout': 0
+    }
+    net = VQVAE3HardSwitch(cfg=cfg).to('cuda')
     loss = nn.L1Loss()
     opt = torch.optim.Adam(net.parameters(), lr=1e-4)
     started = time()
@@ -241,5 +250,5 @@ def performance_test():
 if __name__ == '__main__':
     #v = VQVAE3HardSwitch()
     #print(v(torch.randn(1,3,128,128))[0].shape)
-    #convert_weights("../../../experiments/test_vqvae3.pth")
-    performance_test()
+    convert_weights("../../../experiments/test_vqvae3.pth")
+    #performance_test()
