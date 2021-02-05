@@ -185,10 +185,10 @@ class SwitchedConvHardRouting(nn.Module):
                 self.coupler = Conv2d(coupler_dim_in, breadth, kernel_size=1, stride=self.stride)
             elif coupler_mode == 'lambda':
                 self.coupler = nn.Sequential(nn.Conv2d(coupler_dim_in, coupler_dim_in, 1),
-                                             nn.BatchNorm2d(coupler_dim_in),
+                                             nn.GroupNorm(16, coupler_dim_in),
                                              nn.ReLU(),
                                              LambdaLayer(dim=coupler_dim_in, dim_out=breadth, r=23, dim_k=16, heads=2, dim_u=1),
-                                             nn.BatchNorm2d(breadth),
+                                             nn.GroupNorm(16, breadth),
                                              nn.ReLU(),
                                              Conv2d(breadth, breadth, 1, stride=self.stride))
         else:
@@ -240,7 +240,7 @@ class SwitchedConvHardRouting(nn.Module):
         self.last_select = selector.detach().clone()
         self.latest_masks = (selector.max(dim=1, keepdim=True)[0].repeat(1,self.breadth,1,1) == selector).float().argmax(dim=1)
 
-        if False:
+        if True:
             # This is a custom CUDA implementation which should be faster and less memory intensive (once completed).
             return SwitchedConvHardRoutingFunction.apply(input, selector, self.weight, self.bias, self.stride)
         else:

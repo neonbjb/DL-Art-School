@@ -214,7 +214,7 @@ def convert_weights(weights_file):
     from models.vqvae.vqvae_3 import VQVAE3
     std_model = VQVAE3()
     std_model.load_state_dict(sd)
-    nsd = convert_conv_net_state_dict_to_switched_conv(std_model, 8, ['quantize_conv_t', 'quantize_conv_b',
+    nsd = convert_conv_net_state_dict_to_switched_conv(std_model, 16, ['quantize_conv_t', 'quantize_conv_b',
                                                                       'enc_b.blocks.0', 'enc_t.blocks.0',
                                                                       'conv.1', 'conv.3', 'initial_conv', 'final_conv'])
     torch.save(nsd, "converted.pth")
@@ -229,9 +229,9 @@ def register_vqvae3_hard_switch(opt_net, opt):
 def performance_test():
     cfg = {
         'mode': 'lambda',
-        'breadth': 8,
-        'hard_enabled': False,
-        'dropout': 0
+        'breadth': 16,
+        'hard_enabled': True,
+        'dropout': 0.4
     }
     net = VQVAE3HardSwitch(cfg=cfg).to('cuda')
     loss = nn.L1Loss()
@@ -250,5 +250,5 @@ def performance_test():
 if __name__ == '__main__':
     #v = VQVAE3HardSwitch()
     #print(v(torch.randn(1,3,128,128))[0].shape)
-    convert_weights("../../../experiments/test_vqvae3.pth")
-    #performance_test()
+    #convert_weights("../../../experiments/vqvae_base.pth")
+    performance_test()
