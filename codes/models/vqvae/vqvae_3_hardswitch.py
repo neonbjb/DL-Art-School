@@ -3,8 +3,8 @@ from time import time
 
 import torch
 import torchvision
+import torch.distributed as distributed
 from torch import nn
-from torch.nn.parallel import distributed
 from tqdm import tqdm
 
 from models.switched_conv.switched_conv_hard_routing import SwitchedConvHardRouting, \
