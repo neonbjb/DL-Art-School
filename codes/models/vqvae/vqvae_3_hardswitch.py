@@ -232,7 +232,7 @@ def register_vqvae3_hard_switch(opt_net, opt):
 
 def performance_test():
     cfg = {
-        'mode': 'lambda',
+        'mode': 'lambda2',
         'breadth': 8,
         'hard_enabled': True,
         'dropout': 0.4
