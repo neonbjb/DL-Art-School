@@ -246,4 +246,7 @@ class VQVAE(nn.Module):
 @register_model
 def register_vqvae(opt_net, opt):
     kw = opt_get(opt_net, ['kwargs'], {})
-    return VQVAE(**kw)
+    vq = VQVAE(**kw)
+    if distributed.is_initialized() and distributed.get_world_size() > 1:
+        vq = torch.nn.SyncBatchNorm.convert_sync_batchnorm(vq)
+    return vq

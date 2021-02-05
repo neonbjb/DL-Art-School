@@ -4,6 +4,7 @@ from time import time
 import torch
 import torchvision
 from torch import nn
+from torch.nn.parallel import distributed
 from tqdm import tqdm
 
 from models.switched_conv.switched_conv_hard_routing import SwitchedConvHardRouting, \
@@ -223,13 +224,16 @@ def convert_weights(weights_file):
 @register_model
 def register_vqvae3_hard_switch(opt_net, opt):
     kw = opt_get(opt_net, ['kwargs'], {})
-    return VQVAE3HardSwitch(**kw)
+    vq = VQVAE3HardSwitch(**kw)
+    if distributed.is_initialized() and distributed.get_world_size() > 1:
+        vq = torch.nn.SyncBatchNorm.convert_sync_batchnorm(vq)
+    return vq
 
 
 def performance_test():
     cfg = {
         'mode': 'lambda',
-        'breadth': 16,
+        'breadth': 8,
         'hard_enabled': True,
         'dropout': 0.4
     }
