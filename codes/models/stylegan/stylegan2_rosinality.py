@@ -11,6 +11,10 @@ from torch.autograd import Function
 
 # Ops -> The rosinality repo uses native cuda kernels for fused LeakyReLUs and upsamplers. This version extracts the
 # "cpu" alternative code and uses that instead for compatibility reasons.
+from trainer.networks import register_model
+from utils.util import opt_get
+
+
 class FusedLeakyReLU(nn.Module):
     def __init__(self, channel, bias=True, negative_slope=0.2, scale=2 ** 0.5):
         super().__init__()
@@ -609,11 +613,7 @@ class Generator(nn.Module):
 
         image = skip
 
-        if return_latents:
-            return image, latent
-
-        else:
-            return image, None
+        return image, latent
 
 
 class ConvLayer(nn.Sequential):
@@ -741,3 +741,14 @@ class Discriminator(nn.Module):
         out = self.final_linear(out)
 
         return out
+
+
+@register_model
+def register_stylegan2_rosinality_gen(opt_net, opt):
+    kw = opt_get(opt_net, ['kwargs'], {})
+    return Generator(**kw)
+
+@register_model
+def register_stylegan2_rosinality_disc(opt_net, opt):
+    kw = opt_get(opt_net, ['kwargs'], {})
+    return Discriminator(**kw)

@@ -248,13 +248,12 @@ def gradient_penalty(images, output, weight=10, return_structured_grads=False):
         return penalty
 
 def calc_pl_lengths(styles, images):
-    device = images.device
     num_pixels = images.shape[2] * images.shape[3]
-    pl_noise = torch.randn(images.shape, device=device) / math.sqrt(num_pixels)
+    pl_noise = torch.randn_like(images) / math.sqrt(num_pixels)
     outputs = (images * pl_noise).sum()
 
     pl_grads = torch_grad(outputs=outputs, inputs=styles,
-                          grad_outputs=torch.ones(outputs.shape, device=device),
+                          grad_outputs=torch.ones_like(outputs),
                           create_graph=True, retain_graph=True, only_inputs=True)[0]
 
     return (pl_grads ** 2).sum(dim=2).mean(dim=1).sqrt()
@@ -850,6 +849,7 @@ class StyleGan2DivergenceLoss(L.ConfigurableLoss):
         self.for_gen = opt['gen_loss']
         self.gp_frequency = opt['gradient_penalty_frequency']
         self.noise = opt['noise'] if 'noise' in opt.keys() else 0
+        self.logistic = opt_get(opt, ['logistic'], False)  # Applies a logistic curve to the output logits, which is what the StyleGAN2 authors used.
 
     def forward(self, net, state):
         real_input = state[self.real]
@@ -861,11 +861,19 @@ class StyleGan2DivergenceLoss(L.ConfigurableLoss):
         D = self.env['discriminators'][self.discriminator]
         fake = D(fake_input)
         if self.for_gen:
-            return fake.mean()
+            if self.logistic:
+                return F.softplus(-fake).mean()
+            else:
+                return fake.mean()
         else:
             real_input.requires_grad_()  # <-- Needed to compute gradients on the input.
             real = D(real_input)
-            divergence_loss = (F.relu(1 + real) + F.relu(1 - fake)).mean()
+            if self.logistic:
+                rl = F.softplus(-real).mean()
+                fl = F.softplus(fake).mean()
+                return fl + rl
+            else:
+                divergence_loss = (F.relu(1 + real) + F.relu(1 - fake)).mean()
 
             # Apply gradient penalty. TODO: migrate this elsewhere.
             if self.env['step'] % self.gp_frequency == 0:

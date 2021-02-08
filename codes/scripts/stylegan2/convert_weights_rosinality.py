@@ -123,7 +123,7 @@ def update(state_dict, new):
 def discriminator_fill_statedict(statedict, vars, size):
     log_size = int(math.log(size, 2))
 
-    update(statedict, convert_conv(vars, f"{size}x{size}/FromRGB", "convs.0"))
+    update(statedict, convert_conv(vars, f"D/{size}x{size}/FromRGB", "convs.0"))
 
     conv_i = 1
 
@@ -131,25 +131,25 @@ def discriminator_fill_statedict(statedict, vars, size):
         reso = 4 * 2 ** i
         update(
             statedict,
-            convert_conv(vars, f"{reso}x{reso}/Conv0", f"convs.{conv_i}.conv1"),
+            convert_conv(vars, f"D/{reso}x{reso}/Conv0", f"convs.{conv_i}.conv1"),
         )
         update(
             statedict,
             convert_conv(
-                vars, f"{reso}x{reso}/Conv1_down", f"convs.{conv_i}.conv2", start=1
+                vars, f"D/{reso}x{reso}/Conv1_down", f"convs.{conv_i}.conv2", start=1
             ),
         )
         update(
             statedict,
             convert_conv(
-                vars, f"{reso}x{reso}/Skip", f"convs.{conv_i}.skip", start=1, bias=False
+                vars, f"D/{reso}x{reso}/Skip", f"convs.{conv_i}.skip", start=1, bias=False
             ),
         )
         conv_i += 1
 
-    update(statedict, convert_conv(vars, f"4x4/Conv", "final_conv"))
-    update(statedict, convert_dense(vars, f"4x4/Dense0", "final_linear.0"))
-    update(statedict, convert_dense(vars, f"Output", "final_linear.1"))
+    update(statedict, convert_conv(vars, f"D/4x4/Conv", "final_conv"))
+    update(statedict, convert_dense(vars, f"D/4x4/Dense0", "final_linear.0"))
+    update(statedict, convert_dense(vars, f"D/Output", "final_linear.1"))
 
     return statedict
 
@@ -249,8 +249,13 @@ if __name__ == "__main__":
     g = Generator(size, 512, 8, channel_multiplier=args.channel_multiplier)
     state_dict = g.state_dict()
     state_dict = fill_statedict(state_dict, gen_ema, size)
-
     g.load_state_dict(state_dict, strict=True)
+
+    d = Discriminator(size, args.channel_multiplier)
+    dstate_dict = d.state_dict()
+    dstate_dict = discriminator_fill_statedict(dstate_dict, discriminator, size)
+    d.load_state_dict(dstate_dict, strict=True)
+
 
     latent_avg = torch.from_numpy(get_vars_direct(gen_ema, "G/dlatent_avg"))
 
@@ -269,14 +274,16 @@ if __name__ == "__main__":
         ckpt["d"] = d_state
 
     name = os.path.splitext(os.path.basename(args.path))[0]
-    torch.save(state_dict, name + ".pth")
+    torch.save(state_dict, f"{name}_gen.pth")
+    torch.save(dstate_dict, f"{name}_disc.pth")
 
     batch_size = {256: 16, 512: 9, 1024: 4}
     n_sample = batch_size.get(size, 25)
 
     g = g.to(device)
+    d = d.to(device)
 
-    z = np.random.RandomState(5).randn(n_sample, 512).astype("float32")
+    z = np.random.RandomState(1).randn(n_sample, 512).astype("float32")
 
     with torch.no_grad():
         img_pt, _ = g(
@@ -285,6 +292,8 @@ if __name__ == "__main__":
             truncation_latent=latent_avg.to(device),
             randomize_noise=False,
         )
+        disc = d(img_pt)
+        print(disc)
 
     utils.save_image(
         img_pt, name + ".png", nrow=n_sample, normalize=True, range=(-1, 1)

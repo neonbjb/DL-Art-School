@@ -8,6 +8,9 @@ from pytorch_fid import fid_score
 
 
 # Evaluate that generates uniform noise to feed into a generator, then calculates a FID score on the results.
+from utils.util import opt_get
+
+
 class StyleTransferEvaluator(evaluator.Evaluator):
     def __init__(self, model, opt_eval, env):
         super().__init__(model, opt_eval, env)
@@ -16,13 +19,18 @@ class StyleTransferEvaluator(evaluator.Evaluator):
         self.im_sz = opt_eval['image_size']
         self.fid_real_samples = opt_eval['real_fid_path']
         self.gen_output_index = opt_eval['gen_index'] if 'gen_index' in opt_eval.keys() else 0
+        self.noise_type = opt_get(opt_eval, ['noise_type'], 'imgnoise')
+        self.latent_dim = opt_get(opt_eval, ['latent_dim'], 512)  # Not needed if using 'imgnoise' input.
 
     def perform_eval(self):
         fid_fake_path = osp.join(self.env['base_path'], "../../models", "fid", str(self.env["step"]))
         os.makedirs(fid_fake_path, exist_ok=True)
         counter = 0
         for i in range(self.batches_per_eval):
-            batch = torch.FloatTensor(self.batch_sz, 3, self.im_sz, self.im_sz).uniform_(0., 1.).to(self.env['device'])
+            if self.noise_type == 'imgnoise':
+                batch = torch.FloatTensor(self.batch_sz, 3, self.im_sz, self.im_sz).uniform_(0., 1.).to(self.env['device'])
+            elif self.noise_type == 'stylenoise':
+                batch = [torch.randn(self.batch_sz, self.latent_dim).to(self.env['device'])]
             gen = self.model(batch)
             if not isinstance(gen, list) and not isinstance(gen, tuple):
                 gen = [gen]

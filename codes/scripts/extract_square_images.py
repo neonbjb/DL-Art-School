@@ -13,17 +13,17 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 3
+    opt['n_thread'] = 5
     opt['compression_level'] = 95  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\working']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\cropped'
-    opt['imgsize'] = 1024
-    opt['bottom_crop'] = .1
-    opt['keep_folder'] = True
+    opt['input_folder'] = ['F:\\4k6k\\datasets\\images\\lsun\\lsun\\cats']
+    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\lsun\\lsun\\cats\\cropped'
+    opt['imgsize'] = 256
+    opt['bottom_crop'] = 0
+    opt['keep_folder'] = False
 
     save_folder = opt['save_folder']
     if not osp.exists(save_folder):
@@ -83,7 +83,7 @@ class TiledDataset(data.Dataset):
                 pts = os.path.split(pts[0])
             output_folder = osp.join(self.opt['save_folder'], pts[-1])
             os.makedirs(output_folder, exist_ok=True)
-        cv2.imwrite(osp.join(output_folder, basename), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
+        cv2.imwrite(osp.join(output_folder, basename.replace('.webp', '.jpg')), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
         return None
 
     def __len__(self):

@@ -70,7 +70,7 @@ class expand_greyscale(object):
 class Stylegan2Dataset(data.Dataset):
     def __init__(self, opt):
         super().__init__()
-        EXTS = ['jpg', 'jpeg', 'png']
+        EXTS = ['jpg', 'jpeg', 'png', 'webp']
         self.folder = opt['path']
         self.image_size = opt['target_size']
         self.paths = [p for ext in EXTS for p in Path(f'{self.folder}').glob(f'**/*.{ext}')]

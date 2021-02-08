@@ -8,6 +8,8 @@ import numpy as np
 import torch
 import os
 
+from torchvision.transforms import Normalize
+
 from data import util
 # Builds a dataset created from a simple folder containing a list of training/test/validation images.
 from data.image_corruptor import ImageCorruptor
@@ -28,6 +30,13 @@ class ImageFolderDataset:
                                                        # from the same video source. Search for 'fetch_alt_image' for more info.
         self.skip_lq = opt_get(opt, ['skip_lq'], False)
         self.disable_flip = opt_get(opt, ['disable_flip'], False)
+        if 'normalize' in opt.keys():
+            if opt['normalize'] == 'stylegan2_norm':
+                self.normalize = Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
+            else:
+                raise Exception('Unsupported normalize')
+        else:
+            self.normalize = None
         assert (self.target_hq_size // self.scale) % self.multiple == 0  # If we dont throw here, we get some really obscure errors.
         if not isinstance(self.paths, list):
             self.paths = [self.paths]
@@ -128,6 +137,8 @@ class ImageFolderDataset:
 
         # Convert to torch tensor
         hq = torch.from_numpy(np.ascontiguousarray(np.transpose(hs[0], (2, 0, 1)))).float()
+        if self.normalize:
+            hq = self.normalize(hq)
 
         out_dict = {'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item]}
 

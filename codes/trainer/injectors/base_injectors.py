@@ -6,6 +6,7 @@ from torch.cuda.amp import autocast
 
 from trainer.inject import Injector
 from trainer.losses import extract_params_from_state
+from utils.util import opt_get
 from utils.weight_scheduler import get_scheduler_for_opt
 
 
@@ -386,3 +387,19 @@ class RandomCropInjector(Injector):
     def forward(self, state):
         return {self.output: self.operator(state[self.input])}
 
+
+class Stylegan2NoiseInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.mix_prob = opt_get(opt, ['mix_probability'], .9)
+        self.latent_dim = opt_get(opt, ['latent_dim'], 512)
+
+    def make_noise(self, batch, latent_dim, n_noise, device):
+        return torch.randn(n_noise, batch, latent_dim, device=device).unbind(0)
+
+    def forward(self, state):
+        i = state[self.input]
+        if self.mix_prob > 0 and random.random() < self.mix_prob:
+            return {self.output: self.make_noise(i.shape[0], self.latent_dim, 2, i.device)}
+        else:
+            return {self.output: self.make_noise(i.shape[0], self.latent_dim, 1, i.device)}
