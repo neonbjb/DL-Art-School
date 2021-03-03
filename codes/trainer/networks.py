@@ -3,7 +3,7 @@ import logging
 import pkgutil
 import sys
 from collections import OrderedDict
-from inspect import isfunction, getmembers
+from inspect import isfunction, getmembers, signature
 import torch
 import models.feature_arch as feature_arch
 
@@ -56,7 +56,7 @@ class CreateModelError(Exception):
                          f'{available}')
 
 
-def create_model(opt, opt_net):
+def create_model(opt, opt_net, other_nets=None):
     which_model = opt_net['which_model']
     # For backwards compatibility.
     if not which_model:
@@ -66,7 +66,11 @@ def create_model(opt, opt_net):
     registered_fns = find_registered_model_fns()
     if which_model not in registered_fns.keys():
         raise CreateModelError(which_model, list(registered_fns.keys()))
-    return registered_fns[which_model](opt_net, opt)
+    num_params = len(signature(registered_fns[which_model]).parameters)
+    if num_params == 2:
+        return registered_fns[which_model](opt_net, opt)
+    else:
+        return registered_fns[which_model](opt_net, opt, other_nets)
 
 
 # Define network used for perceptual loss

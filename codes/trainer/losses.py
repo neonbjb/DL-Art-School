@@ -21,6 +21,9 @@ def create_loss(opt_loss, env):
     elif 'style_sr_' in type:
         from models.styled_sr import create_stylesr_loss
         return create_stylesr_loss(opt_loss, env)
+    elif 'lightweight_gan_divergence' == type:
+        from models.lightweight_gan import LightweightGanDivergenceLoss
+        return LightweightGanDivergenceLoss(opt_loss, env)
     elif type == 'crossentropy':
         return CrossEntropy(opt_loss, env)
     elif type == 'pix':

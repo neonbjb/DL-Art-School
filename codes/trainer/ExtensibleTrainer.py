@@ -59,11 +59,11 @@ class ExtensibleTrainer(BaseModel):
                 new_net = None
             if net['type'] == 'generator':
                 if new_net is None:
-                    new_net = networks.create_model(opt, net).to(self.device)
+                    new_net = networks.create_model(opt, net, self.netsG).to(self.device)
                 self.netsG[name] = new_net
             elif net['type'] == 'discriminator':
                 if new_net is None:
-                    new_net = networks.create_model(opt, net).to(self.device)
+                    new_net = networks.create_model(opt, net, self.netsD).to(self.device)
                 self.netsD[name] = new_net
             else:
                 raise NotImplementedError("Can only handle generators and discriminators")
@@ -251,12 +251,18 @@ class ExtensibleTrainer(BaseModel):
                 # And finally perform optimization.
                 [e.before_optimize(state) for e in self.experiments]
                 s.do_step(step)
+                # Some networks have custom steps, for example EMA
+                for net in self.networks:
+                    if hasattr(net, "custom_optimizer_step"):
+                        net.custom_optimizer_step(step)
                 [e.after_optimize(state) for e in self.experiments]
 
         # Record visual outputs for usage in debugging and testing.
         if 'visuals' in self.opt['logger'].keys() and self.rank <= 0 and step % self.opt['logger']['visual_debug_rate'] == 0:
             denorm = opt_get(self.opt, ['logger', 'denormalize'], False)
-            denorm_range = tuple(opt_get(self.opt, ['logger', 'denormalize_range'], None))
+            denorm_range = opt_get(self.opt, ['logger', 'denormalize_range'], None)
+            if denorm_range:
+                denorm_range = tuple(denorm_range)
             sample_save_path = os.path.join(self.opt['path']['models'], "..", "visual_dbg")
             for v in self.opt['logger']['visuals']:
                 if v not in state.keys():

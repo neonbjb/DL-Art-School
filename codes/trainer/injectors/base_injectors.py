@@ -403,3 +403,13 @@ class Stylegan2NoiseInjector(Injector):
             return {self.output: self.make_noise(i.shape[0], self.latent_dim, 2, i.device)}
         else:
             return {self.output: self.make_noise(i.shape[0], self.latent_dim, 1, i.device)}
+
+
+class NoiseInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.shape = tuple(opt['shape'])
+
+    def forward(self, state):
+        shape = (state[self.input].shape[0],) + self.shape
+        return {self.output: torch.randn(shape, device=state[self.input].device)}
