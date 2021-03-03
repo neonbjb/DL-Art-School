@@ -18,3 +18,4 @@ vector_quantize_pytorch
 orjson
 einops
 gsa-pytorch
+lambda-networks

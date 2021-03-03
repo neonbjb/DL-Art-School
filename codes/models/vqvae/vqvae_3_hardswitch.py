@@ -232,27 +232,41 @@ def register_vqvae3_hard_switch(opt_net, opt):
 
 def performance_test():
     # For breadth=32:
-    # Custom_cuda_naive: 28.9s
+    # Custom_cuda_naive: 15.4
     # Torch_native: 29.2s
     #
     # For breadth=8
-    # Custom_cuda_naive: 18.4s
+    # Custom_cuda_naive: 9.8
     # Torch_native: 10s
     cfg = {
         'mode': 'lambda',
-        'breadth': 8,
+        'breadth': 16,
         'hard_enabled': True,
-        'dropout': 0.4
+        'dropout': 0,
     }
-    net = VQVAE3HardSwitch(cfg=cfg).to('cuda')
+    net = VQVAE3HardSwitch(cfg=cfg).to('cuda').double()
+    cfg['hard_enabled'] = False
+    netO = VQVAE3HardSwitch(cfg=cfg).double()
+    netO.load_state_dict(net.state_dict())
+    netO = netO.cpu()
+
     loss = nn.L1Loss()
     opt = torch.optim.Adam(net.parameters(), lr=1e-4)
     started = time()
     for j in tqdm(range(10)):
-        inp = torch.rand((8, 3, 256, 256), device='cuda')
+        inp = torch.rand((4, 3, 64, 64), device='cuda', dtype=torch.double)
         res = net(inp)[0]
         l = loss(res, inp)
         l.backward()
+
+        res2 = netO(inp.cpu())[0]
+        l = loss(res2, inp.cpu())
+        l.backward()
+
+        for p, op in zip(net.parameters(), netO.parameters()):
+            diff = p.grad.cpu() - op.grad
+            print(diff.max())
+
         opt.step()
         net.zero_grad()
     print("Elapsed: ", (time()-started))

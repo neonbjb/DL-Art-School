@@ -2,9 +2,8 @@ import math
 
 import torch
 import torch.nn as nn
-import switched_conv_cuda_naive
 from lambda_networks import LambdaLayer
-from torch.nn import init, Conv2d, MSELoss
+from torch.nn import init, Conv2d, MSELoss, ZeroPad2d
 import torch.nn.functional as F
 from tqdm import tqdm
 import torch.distributed as dist
@@ -24,10 +23,14 @@ def SwitchedConvRoutingNormal(input, selector, weight, bias, stride=1):
 class SwitchedConvHardRoutingFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, selector, weight, bias, stride=1):
+        # Pre-pad the input.
+        input = ZeroPad2d(weight.shape[-1]//2)(input)
+
         # Build hard attention mask from selector input
         b, s, h, w = selector.shape
 
         mask = selector.argmax(dim=1).int()
+        import switched_conv_cuda_naive
         output = switched_conv_cuda_naive.forward(input, mask, weight, bias, stride)
 
         ctx.stride = stride
@@ -47,7 +50,13 @@ class SwitchedConvHardRoutingFunction(torch.autograd.Function):
         # and zeros that is multiplied by the output.)
         grad_sel = (gradIn * output).sum(dim=1, keepdim=True).repeat(1,ctx.breadth,1,1)
 
+        import switched_conv_cuda_naive
         grad, grad_w, grad_b = switched_conv_cuda_naive.backward(input, gradIn.contiguous(), mask, weight, bias, ctx.stride)
+
+        # Remove input padding from grad
+        padding = weight.shape[-1] // 2
+        if padding > 0:
+            grad = grad[:,:,padding:-padding,padding:-padding]
         return grad, grad_sel, grad_w, grad_b, None
 
 
@@ -204,7 +213,8 @@ class SwitchedConvHardRouting(nn.Module):
                                              Conv2d(breadth, breadth, 1, stride=self.stride))
         else:
             self.coupler = None
-        self.gate = HardRoutingGate(breadth, hard_en=hard_en)
+        self.gate = HardRoutingGate(breadth, hard_en=True)
+        self.hard_en = hard_en
 
         self.weight = nn.Parameter(torch.empty(out_c, in_c, breadth, kernel_sz, kernel_sz))
         if bias:
@@ -251,7 +261,7 @@ class SwitchedConvHardRouting(nn.Module):
         self.last_select = selector.detach().clone()
         self.latest_masks = (selector.max(dim=1, keepdim=True)[0].repeat(1,self.breadth,1,1) == selector).float().argmax(dim=1)
 
-        if False:
+        if self.hard_en:
             # This is a custom CUDA implementation which should be faster and less memory intensive (once completed).
             return SwitchedConvHardRoutingFunction.apply(input, selector, self.weight, self.bias, self.stride)
         else:
