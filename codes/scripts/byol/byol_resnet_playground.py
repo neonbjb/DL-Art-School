@@ -55,9 +55,9 @@ def im_norm(x):
 def get_image_folder_dataloader(batch_size, num_workers, target_size=224, shuffle=True):
     dataset_opt = dict_to_nonedict({
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\cropped2'],
+        #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\cropped2'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
-        #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
+        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_tiled_filtered_flattened'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
         'weights': [1],
         'target_size': target_size,
@@ -100,6 +100,7 @@ def get_latent_for_img(model, img):
         img_t = img_t[:, :, :, dw:-dw]
     elif dh != 0:
         img_t = img_t[:, :, dh:-dh, :]
+    img_t = img_t[:,:3,:,:]
     img_t = torch.nn.functional.interpolate(img_t, size=(224, 224), mode="area")
     model(img_t)
     latent = layer_hooked_value
@@ -129,14 +130,14 @@ def produce_latent_dict(model):
 def find_similar_latents(model, compare_fn=structural_euc_dist):
     global layer_hooked_value
 
-    img = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test\\80692045.jpg.jpg'
+    img = 'D:\\dlas\\results\\bobz.png'
     #img = 'F:\\4k6k\\datasets\\ns_images\\adrianna\\analyze\\analyze_xx\\nicky_xx.jpg'
     output_path = '../../../results/byol_resnet_similars'
     os.makedirs(output_path, exist_ok=True)
     imglatent = get_latent_for_img(model, img).squeeze().unsqueeze(0)
     _, c = imglatent.shape
 
-    batch_size = 128
+    batch_size = 512
     num_workers = 8
     dataloader = get_image_folder_dataloader(batch_size, num_workers)
     id = 0
@@ -152,7 +153,7 @@ def find_similar_latents(model, compare_fn=structural_euc_dist):
         result_paths.extend(batch['HQ_path'])
         id += batch_size
         if id > 10000:
-            k = 500
+            k = 200
             results = torch.cat(results, dim=0)
             vals, inds = torch.topk(results, k, largest=False)
             for i in inds:
@@ -201,7 +202,7 @@ if __name__ == '__main__':
     register_hook(model, 'avgpool')
 
     with torch.no_grad():
-        #find_similar_latents(model, structural_euc_dist)
+        find_similar_latents(model, structural_euc_dist)
         #produce_latent_dict(model)
         #build_kmeans()
-        use_kmeans()
+        #use_kmeans()

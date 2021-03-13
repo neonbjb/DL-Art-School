@@ -19,8 +19,8 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['F:\\4k6k\\datasets\\images\\lsun\\lsun\\cats']
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\images\\lsun\\lsun\\cats\\cropped'
+    opt['input_folder'] = ['E:\\4k6k\\datasets\\images\\faces\\CelebAMask-HQ\\CelebA-HQ-img']
+    opt['save_folder'] = 'E:\\4k6k\\datasets\\images\\faces\\CelebAMask-HQ\\256px'
     opt['imgsize'] = 256
     opt['bottom_crop'] = 0
     opt['keep_folder'] = False
