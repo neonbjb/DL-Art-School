@@ -57,8 +57,9 @@ def get_image_folder_dataloader(batch_size, num_workers, target_size=224, shuffl
         'name': 'amalgam',
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\pn_coven\\cropped2'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'],
-        'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_tiled_filtered_flattened'],
+        #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_tiled_filtered_flattened'],
         #'paths': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\1024_test'],
+        'paths': ['E:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
         'weights': [1],
         'target_size': target_size,
         'force_multiple': 32,
@@ -116,6 +117,7 @@ def produce_latent_dict(model):
     latents = []
     for batch in tqdm(dataloader):
         hq = batch['hq'].to('cuda')
+        hq = F.interpolate(F.interpolate(hq, size=(16,16), mode='bilinear'), size=(224,244))
         model(hq)
         l = layer_hooked_value.cpu().split(1, dim=0)
         latents.extend(l)
@@ -202,7 +204,7 @@ if __name__ == '__main__':
     register_hook(model, 'avgpool')
 
     with torch.no_grad():
-        find_similar_latents(model, structural_euc_dist)
-        #produce_latent_dict(model)
+        #find_similar_latents(model, structural_euc_dist)
+        produce_latent_dict(model)
         #build_kmeans()
         #use_kmeans()

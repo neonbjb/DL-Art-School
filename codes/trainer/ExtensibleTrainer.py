@@ -259,8 +259,8 @@ class ExtensibleTrainer(BaseModel):
 
         # Record visual outputs for usage in debugging and testing.
         if 'visuals' in self.opt['logger'].keys() and self.rank <= 0 and step % self.opt['logger']['visual_debug_rate'] == 0:
-            denorm = opt_get(self.opt, ['logger', 'denormalize'], False)
-            denorm_range = opt_get(self.opt, ['logger', 'denormalize_range'], None)
+            denorm = 'image_normalization_range' in self.opt.keys()
+            denorm_range = opt_get(self.opt, ['image_normalization_range'], None)
             if denorm_range:
                 denorm_range = tuple(denorm_range)
             sample_save_path = os.path.join(self.opt['path']['models'], "..", "visual_dbg")

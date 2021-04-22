@@ -558,7 +558,12 @@ class Generator(nn.Module):
         randomize_noise=True,
     ):
         if not input_is_latent:
-            styles = [self.style(s) for s in styles]
+            if self.training:
+                # In training mode, multiple style vectors are fed to the generator.
+                styles = [self.style(s) for s in styles]
+            else:
+                # In eval mode, only a single style is fed.
+                styles = [self.style(styles)]
 
         if noise is None:
             if randomize_noise:

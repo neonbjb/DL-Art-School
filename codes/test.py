@@ -13,11 +13,14 @@ from tqdm import tqdm
 import torch
 
 
-def forward_pass(model, output_dir, alteration_suffix=''):
+def forward_pass(model, output_dir, opt):
+    alteration_suffix = util.opt_get(opt, ['name'], '')
+    denorm_range = tuple(util.opt_get(opt, ['image_normalization_range'], [0, 1]))
     model.feed_data(data, 0, need_GT=need_GT)
     model.test()
 
     visuals = model.get_current_visuals(need_GT)['rlt'].cpu()
+    visuals = (visuals - denorm_range[0]) / (denorm_range[1]-denorm_range[0])
     fea_loss = 0
     psnr_loss = 0
     for i in range(visuals.shape[0]):
@@ -48,7 +51,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     want_metrics = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_mi1.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_cats_stylegan2_rosinality.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
@@ -90,7 +93,7 @@ if __name__ == "__main__":
             need_GT = False if test_loader.dataset.opt['dataroot_GT'] is None else True
             need_GT = need_GT and want_metrics
 
-            fea_loss, psnr_loss = forward_pass(model, dataset_dir, opt['name'])
+            fea_loss, psnr_loss = forward_pass(model, dataset_dir, opt)
             fea_loss += fea_loss
             psnr_loss += psnr_loss
 
