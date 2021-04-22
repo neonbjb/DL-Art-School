@@ -19,9 +19,9 @@ def main():
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['E:\\4k6k\\datasets\\images\\faces\\CelebAMask-HQ\\CelebA-HQ-img']
-    opt['save_folder'] = 'E:\\4k6k\\datasets\\images\\faces\\CelebAMask-HQ\\256px'
-    opt['imgsize'] = 256
+    opt['input_folder'] = ['E:\\4k6k\\datasets\\images\\lsun\\lsun\\cats']
+    opt['save_folder'] = 'E:\\4k6k\\datasets\\images\\lsun\\lsun\\cats\\256_4_by_3'
+    opt['imgsize'] = (256,192)
     opt['bottom_crop'] = 0
     opt['keep_folder'] = False
 
@@ -66,15 +66,25 @@ class TiledDataset(data.Dataset):
 
         h, w, c = img.shape
         # Uncomment to filter any image that doesnt meet a threshold size.
-        if min(h,w) < self.opt['imgsize']:
+        imgsz_w, imgsz_h = self.opt['imgsize']
+        if w < imgsz_w or h < imgsz_h:
             print("Skipping due to threshold")
             return None
 
-        # We must convert the image into a square.
-        dim = min(h, w)
-        # Crop the image so that only the center is left, since this is often the most salient part of the image.
-        img = img[(h - dim) // 2:dim + (h - dim) // 2, (w - dim) // 2:dim + (w - dim) // 2, :]
-        img = cv2.resize(img, (self.opt['imgsize'], self.opt['imgsize']), interpolation=cv2.INTER_AREA)
+        # We must first center-crop the image to the proper aspect ratio
+        aspect_ratio = imgsz_h / imgsz_w
+        if h < w * aspect_ratio:
+            hdim = h
+            wdim = int(h / aspect_ratio)
+        elif w * aspect_ratio < h:
+            hdim = int(w * aspect_ratio)
+            wdim = w
+        else:
+            hdim = h
+            wdim = w
+        img = img[(h - hdim) // 2:hdim + (h - hdim) // 2, (w - wdim) // 2:wdim + (w - wdim) // 2, :]
+
+        img = cv2.resize(img, (imgsz_w, imgsz_h), interpolation=cv2.INTER_AREA)
         output_folder = self.opt['save_folder']
         if self.opt['keep_folder']:
             # Attempt to find the folder name one level above opt['input_folder'] and use that.

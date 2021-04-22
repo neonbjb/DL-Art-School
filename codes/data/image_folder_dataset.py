@@ -5,10 +5,14 @@ import random
 import cv2
 import kornia
 import numpy as np
+import pytorch_ssim
 import torch
 import os
 
+import torchvision
+from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize
+from tqdm import tqdm
 
 from data import util
 # Builds a dataset created from a simple folder containing a list of training/test/validation images.
@@ -140,7 +144,7 @@ class ImageFolderDataset:
         if self.normalize:
             hq = self.normalize(hq)
 
-        out_dict = {'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item]}
+        out_dict = {'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item], 'has_alt': False}
 
         if self.fetch_alt_image:
             # This works by assuming a specific filename structure as would produced by ffmpeg. ex:
@@ -165,6 +169,7 @@ class ImageFolderDataset:
                     alt_hq = util.read_img(None, next_img, rgb=True)
                     alt_hs = self.resize_hq([alt_hq])
                     alt_hq = torch.from_numpy(np.ascontiguousarray(np.transpose(alt_hs[0], (2, 0, 1)))).float()
+                    out_dict['has_alt'] = True
                     if not self.skip_lq:
                         for_lq.append(alt_hs[0])
                 except:
@@ -200,33 +205,25 @@ class ImageFolderDataset:
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'paths': ['F:\\4k6k\\datasets\\images\\youtube\\4k_quote_unquote\\images'],
+        'paths': ['E:\\4k6k\\datasets\\ns_images\\256_unsupervised'],
         'weights': [1],
         'target_size': 256,
-        'force_multiple': 32,
+        'force_multiple': 1,
         'scale': 2,
-        'fixed_corruptions': ['jpeg-broad', 'gaussian_blur'],
-        'random_corruptions': ['noise-5', 'none'],
-        'num_corrupts_per_image': 1,
-        'corrupt_before_downsize': False,
+        'corrupt_before_downsize': True,
         'fetch_alt_image': True,
-        #'labeler': {
-        #    'type': 'patch_labels',
-        #    'label_file': 'F:\\4k6k\\datasets\\ns_images\\512_unsupervised\\categories_new.json'
-        #}
+        'disable_flip': True,
+        'fixed_corruptions': [ 'jpeg-broad' ],
+        'num_corrupts_per_image': 0,
+        'corruption_blur_scale': 0
     }
 
-    ds = ImageFolderDataset(opt)
+    ds = DataLoader(ImageFolderDataset(opt), shuffle=True, num_workers=2)
     import os
-    os.makedirs("debug", exist_ok=True)
-    for i in range(0, len(ds)):
-        o = ds[random.randint(0, len(ds)-1)]
-        hq = o['lq']
-        #masked = (o['labels_mask'] * .5 + .5) * hq
-        import torchvision
-        torchvision.utils.save_image(hq.unsqueeze(0), "debug/%i_lq.png" % (i,))
-        torchvision.utils.save_image(o['alt_lq'].unsqueeze(0), "debug/%i_lq_alt.png" % (i,))
-        #if len(o['labels'].unique()) > 1:
-        #    randlbl = np.random.choice(o['labels'].unique()[1:])
-        #    moremask = hq * ((1*(o['labels'] == randlbl))*.5+.5)
-        #    torchvision.utils.save_image(moremask.unsqueeze(0), "debug/%i_%s.png" % (i, o['label_strings'][randlbl]))
+    output_path = 'E:\\4k6k\\datasets\\ns_images\\128_unsupervised'
+    os.makedirs(output_path, exist_ok=True)
+    for i, d in tqdm(enumerate(ds)):
+        lq = d['lq']
+        torchvision.utils.save_image(lq[:,:,16:-16,:], f'{output_path}\\{i+500000}.png')
+        if i >= 200000:
+            break

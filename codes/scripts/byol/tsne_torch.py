@@ -208,7 +208,7 @@ def run_tsne_instance_level():
     print("Run Y = tsne.tsne(X, no_dims, perplexity) to perform t-SNE on your dataset.")
 
     limit = 4000
-    X, files = torch.load('results.pth')
+    X, files = torch.load('../results_instance_resnet.pth')
     zipped = list(zip(X, files))
     shuffle(zipped)
     X, files = zip(*zipped)
@@ -242,7 +242,7 @@ def run_tsne_instance_level():
 # Uses the results from the calculation above to create a **massive** pdf plot that shows 1/8 size images on the tsne
 # spectrum.
 def plot_instance_level_results_as_image_graph():
-    Y, files = torch.load('tsne_output.pth')
+    Y, files = torch.load('../tsne_output.pth')
     fig, ax = pyplot.subplots()
     fig.set_size_inches(200,200,forward=True)
     ax.update_datalim(np.column_stack([Y[:, 0], Y[:, 1]]))
@@ -250,7 +250,7 @@ def plot_instance_level_results_as_image_graph():
 
     for b in tqdm(range(Y.shape[0])):
         im = pyplot.imread(files[b])
-        im = OffsetImage(im, zoom=1/8)
+        im = OffsetImage(im, zoom=1/2)
         ab = AnnotationBbox(im, (Y[b, 0], Y[b, 1]), xycoords='data', frameon=False)
         ax.add_artist(ab)
     ax.scatter(Y[:, 0], Y[:, 1])
@@ -277,7 +277,7 @@ def run_tsne_pixel_level():
     '''
 
     # For resnet-style latent tuples
-    X, files = torch.load('../results.pth')
+    X, files = torch.load('../../results/2021-4-8-imgset-latent-dict.pth')
     zipped = list(zip(X, files))
     shuffle(zipped)
     X, files = zip(*zipped)
@@ -347,8 +347,8 @@ def plot_pixel_level_results_as_image_graph():
 if __name__ == "__main__":
     # For use with instance-level results (e.g. from byol_resnet_playground.py)
     #run_tsne_instance_level()
-    #plot_instance_level_results_as_image_graph()
+    plot_instance_level_results_as_image_graph()
 
     # For use with pixel-level results (e.g. from byol_uresnet_playground)
     #run_tsne_pixel_level()
-    plot_pixel_level_results_as_image_graph()
+    #plot_pixel_level_results_as_image_graph()

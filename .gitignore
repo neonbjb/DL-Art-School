@@ -18,6 +18,7 @@ data/*
 *.cu
 *.pt
 *.pth
+*.pdf
 
 # template
 
