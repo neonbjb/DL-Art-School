@@ -51,6 +51,54 @@ def set_requires_grad(model, val):
         p.requires_grad = val
 
 
+# Specialized augmentor class that applies a set of image transformations on points as well, allowing one to track
+# where a point in the src image is located in the dest image. Restricts transformation such that this is possible.
+class PointwiseAugmentor(nn.Module):
+    def __init__(self, img_size=224):
+        super().__init__()
+        self.jitter = RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8)
+        self.gray = augs.RandomGrayscale(p=0.2)
+        self.blur = RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1)
+        self.rrc = augs.RandomResizedCrop((img_size, img_size), same_on_batch=True)
+
+    # Given a point in the source image, returns the same point in the source image, given the kornia RRC params.
+    def rrc_on_point(self, src_point, params):
+        dh, dw = params['dst'][:,2,1]-params['dst'][:,0,1], params['dst'][:,2,0] - params['dst'][:,0,0]
+        sh, sw = params['src'][:,2,1]-params['src'][:,0,1], params['src'][:,2,0] - params['src'][:,0,0]
+        scale_h, scale_w = sh.float() / dh.float(), sw.float() / dw.float()
+        t, l = src_point[0] - params['src'][0,0,1], src_point[1] - params['src'][0,0,0]
+        t = (t.float() / scale_h[0]).long()
+        l = (l.float() / scale_w[0]).long()
+        return torch.stack([t,l])
+
+    def flip_on_point(self, pt, input):
+        t, l = pt[0], pt[1]
+        center = input.shape[-1] // 2
+        return t, 2 * center - l
+
+    def forward(self, x, point):
+        d = self.jitter(x)
+        d = self.gray(d)
+        will_flip = random.random() > .5
+        if will_flip:
+            d = apply_hflip(d)
+            point = self.flip_on_point(point, x)
+        d = self.blur(d)
+
+        invalid = True
+        while invalid:
+            params = self.rrc.generate_parameters(d.shape)
+            potential = self.rrc_on_point(point, params)
+            # '10' is an arbitrary number: we want to provide some margin. Making predictions at the very edge of an image is not very useful.
+            if potential[0] <= 10 or potential[1] <= 10 or potential[0] > x.shape[-2]-10 or potential[1] > x.shape[-1]-10:
+                continue
+            d = self.rrc(d, params=params)
+            point = potential
+            invalid = False
+
+        return d, point
+
+
 # loss fn
 def loss_fn(x, y):
     x = F.normalize(x, dim=-1, p=2)
@@ -160,21 +208,21 @@ class NetWrapper(nn.Module):
             projector = MLP(dim, self.projection_size, self.projection_hidden_size)
         return projector.to(hidden)
 
-    def get_representation(self, x):
+    def get_representation(self, x, pt):
         if self.layer == -1:
-            return self.net(x)
+            return self.net(x, pt)
 
         if not self.hook_registered:
             self._register_hook()
 
-        unused = self.net(x)
+        unused = self.net(x, pt)
         hidden = self.hidden
         self.hidden = None
         assert hidden is not None, f'hidden layer {self.layer} never emitted an output'
         return hidden
 
-    def forward(self, x):
-        representation = self.get_representation(x)
+    def forward(self, x, pt):
+        representation = self.get_representation(x, pt)
         projector = self._get_projector(representation)
         projection = checkpoint(projector, representation)
         return projection
@@ -191,24 +239,13 @@ class BYOL(nn.Module):
             moving_average_decay=0.99,
             use_momentum=True,
             structural_mlp=False,
-            do_augmentation=False  # In DLAS this was intended to be done at the dataset level. For massive batch sizes
-                                   # this can overwhelm the CPU though, and it becomes desirable to do the augmentations
-                                   # on the GPU again.
     ):
         super().__init__()
 
         self.online_encoder = NetWrapper(net, projection_size, projection_hidden_size, layer=hidden_layer,
                                          use_structural_mlp=structural_mlp)
 
-        self.do_aug = do_augmentation
-        if self.do_aug:
-            augmentations = [ \
-                RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8),
-                augs.RandomGrayscale(p=0.2),
-                augs.RandomHorizontalFlip(),
-                RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1),
-                augs.RandomResizedCrop((self.cropped_img_size, self.cropped_img_size))]
-            self.aug = nn.Sequential(*augmentations)
+        self.aug = PointwiseAugmentor(image_size)
         self.use_momentum = use_momentum
         self.target_encoder = None
         self.target_ema_updater = EMA(moving_average_decay)
@@ -220,8 +257,7 @@ class BYOL(nn.Module):
         self.to(device)
 
         # send a mock image tensor to instantiate singleton parameters
-        self.forward(torch.randn(2, 3, image_size, image_size, device=device),
-                     torch.randn(2, 3, image_size, image_size, device=device))
+        self.forward(torch.randn(2, 3, image_size, image_size, device=device))
 
     @singleton('target_encoder')
     def _get_target_encoder(self):
@@ -245,28 +281,32 @@ class BYOL(nn.Module):
         return {'target_ema_beta': self.target_ema_updater.beta}
 
     def visual_dbg(self, step, path):
-        if self.do_aug:
-            torchvision.utils.save_image(self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,)))
-            torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
+        torchvision.utils.save_image(self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,)))
+        torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
 
-    def forward(self, image_one, image_two):
-        if self.do_aug:
-            image_one = self.aug(image_one)
-            image_two = self.aug(image_two)
-            # Keep copies on hand for visual_dbg.
-            self.im1 = image_one.detach().copy()
-            self.im2 = image_two.detach().copy()
+    def forward(self, image):
+        _, _, h, w = image.shape
+        point = torch.randint(h//8, 7*h//8, (2,)).long().to(image.device)
 
-        online_proj_one = self.online_encoder(image_one)
-        online_proj_two = self.online_encoder(image_two)
+        image_one, pt_one = self.aug(image, point)
+        image_two, pt_two = self.aug(image, point)
+
+        # Keep copies on hand for visual_dbg.
+        self.im1 = image_one.detach().clone()
+        self.im1[:,:,pt_one[0]-3:pt_one[0]+3,pt_one[1]-3:pt_one[1]+3] = 1
+        self.im2 = image_two.detach().clone()
+        self.im2[:,:,pt_two[0]-3:pt_two[0]+3,pt_two[1]-3:pt_two[1]+3] = 1
+
+        online_proj_one = self.online_encoder(image_one, pt_one)
+        online_proj_two = self.online_encoder(image_two, pt_two)
 
         online_pred_one = self.online_predictor(online_proj_one)
         online_pred_two = self.online_predictor(online_proj_two)
 
         with torch.no_grad():
             target_encoder = self._get_target_encoder() if self.use_momentum else self.online_encoder
-            target_proj_one = target_encoder(image_one).detach()
-            target_proj_two = target_encoder(image_two).detach()
+            target_proj_one = target_encoder(image_one, pt_one).detach()
+            target_proj_two = target_encoder(image_two, pt_two).detach()
 
         loss_one = loss_fn(online_pred_one, target_proj_two.detach())
         loss_two = loss_fn(online_pred_two, target_proj_one.detach())
@@ -275,53 +315,20 @@ class BYOL(nn.Module):
         return loss.mean()
 
 
-class PointwiseAugmentor(nn.Module):
-    def __init__(self, img_size=224):
-        super().__init__()
-        self.jitter = RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8)
-        self.gray = augs.RandomGrayscale(p=0.2)
-        self.blur = RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1)
-        self.rrc = augs.RandomResizedCrop((img_size, img_size))
-
-    # Given a point in the *destination* image, returns the same point in the source image, given the kornia RRC params.
-    def reverse_rrc(self, dest_point, params):
-        dh, dw = params['dst'][:,2,1]-params['dst'][:,0,1], params['dst'][:,2,0] - params['dst'][:,0,0]
-        sh, sw = params['src'][:,2,1]-params['src'][:,0,1], params['src'][:,2,0] - params['src'][:,0,0]
-        scale_h, scale_w = sh.float() / dh.float(), sw.float() / dw.float()
-        t, l = dest_point
-        t = (t.float() * scale_h).int()
-        l = (l.float() * scale_w).int()
-        return t + params['src'][:,0,1], l + params['src'][:,0,0]
-
-    def reverse_horizontal_flip(self, pt, input):
-        t, l = pt
-        center = input.shape[-1] // 2
-        return t, 2 * center - l
-
-    def forward(self, x, points):
-        d = self.jitter(x)
-        d = self.gray(d)
-        will_flip = random.random() > .5
-        if will_flip:
-            d = apply_hflip(d)
-        d = self.blur(d)
-        params = self.rrc.generate_parameters(d.shape)
-        d = self.rrc(d, params=params)
-
-        rev = self.reverse_rrc(points, params)
-        if will_flip:
-            rev = self.reverse_horizontal_flip(rev, x)
-
 if __name__ == '__main__':
-    p = PointwiseAugmentor(256)
-    t = ToTensor()(Image.open('E:\\4k6k\\datasets\\ns_images\\imagesets\\000001_152761.jpg')).unsqueeze(0).repeat(8,1,1,1)
-    points = (torch.randint(0,224,(t.shape[0],)),torch.randint(0,224,(t.shape[0],)))
-    p(t, points)
+    pa = PointwiseAugmentor(256)
+    for j in range(100):
+        t = ToTensor()(Image.open('E:\\4k6k\\datasets\\ns_images\\imagesets\\000001_152761.jpg')).unsqueeze(0).repeat(8,1,1,1)
+        p = torch.randint(50,180,(2,))
+        augmented, dp = pa(t, p)
+        t, p = pa(t, p)
+        t[:,:,p[0]-3:p[0]+3,p[1]-3:p[1]+3] = 0
+        torchvision.utils.save_image(t, f"{j}_src.png")
+        augmented[:,:,dp[0]-3:dp[0]+3,dp[1]-3:dp[1]+3] = 0
+        torchvision.utils.save_image(augmented, f"{j}_dst.png")
 
 
 @register_model
-def register_byol(opt_net, opt):
+def register_pixel_local_byol(opt_net, opt):
     subnet = create_model(opt, opt_net['subnet'])
-    return BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
-                structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False),
-                do_augmentation=opt_get(opt_net, ['gpu_augmentation'], False))
+    return BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'])
