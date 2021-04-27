@@ -344,11 +344,75 @@ def plot_pixel_level_results_as_image_graph():
     pyplot.savefig('tsne_pix.pdf')
 
 
+def run_tsne_segformer():
+    print("Run Y = tsne.tsne(X, no_dims, perplexity) to perform t-SNE on your dataset.")
+
+    limit = 10000
+    X, points, files = torch.load('../results_segformer.pth')
+    zipped = list(zip(X, points, files))
+    shuffle(zipped)
+    X, points, files = zip(*zipped)
+    X = torch.cat(X, dim=0).squeeze()[:limit]
+    labels = np.zeros(X.shape[0])  # We don't have any labels..
+
+    # confirm that x file get same number point than label file
+    # otherwise may cause error in scatter
+    assert(len(X[:, 0])==len(X[:,1]))
+    assert(len(X)==len(labels))
+
+    with torch.no_grad():
+        Y = tsne(X, 2, 1024, 20.0)
+
+    if opt.cuda:
+        Y = Y.cpu().numpy()
+
+    # You may write result in two files
+    # print("Save Y values in file")
+    # Y1 = open("y1.txt", 'w')
+    # Y2 = open('y2.txt', 'w')
+    # for i in range(Y.shape[0]):
+    #     Y1.write(str(Y[i,0])+"\n")
+    #     Y2.write(str(Y[i,1])+"\n")
+
+    pyplot.scatter(Y[:, 0], Y[:, 1], 20, labels)
+    pyplot.show()
+    torch.save((Y, points, files[:limit]), "../tsne_output.pth")
+
+
+# Uses the results from the calculation above to create a **massive** pdf plot that shows 1/8 size images on the tsne
+# spectrum.
+def plot_segformer_results_as_image_graph():
+    Y, points, files = torch.load('../tsne_output.pth')
+    fig, ax = pyplot.subplots()
+    fig.set_size_inches(200,200,forward=True)
+    ax.update_datalim(np.column_stack([Y[:, 0], Y[:, 1]]))
+    ax.autoscale()
+
+    margins = 32
+    for b in tqdm(range(Y.shape[0])):
+        imgfile = files[b]
+        baseim = pyplot.imread(imgfile)
+        ct, cl = points[b]
+
+        im = baseim[(ct-margins):(ct+margins),
+                    (cl-margins):(cl+margins),:]
+        im = OffsetImage(im, zoom=1)
+        ab = AnnotationBbox(im, (Y[b, 0], Y[b, 1]), xycoords='data', frameon=False)
+        ax.add_artist(ab)
+    ax.scatter(Y[:, 0], Y[:, 1])
+
+    pyplot.savefig('tsne_segformer.pdf')
+
+
 if __name__ == "__main__":
     # For use with instance-level results (e.g. from byol_resnet_playground.py)
     #run_tsne_instance_level()
-    plot_instance_level_results_as_image_graph()
+    #plot_instance_level_results_as_image_graph()
 
     # For use with pixel-level results (e.g. from byol_uresnet_playground)
     #run_tsne_pixel_level()
     #plot_pixel_level_results_as_image_graph()
+
+    # For use with segformer results
+    #run_tsne_segformer()
+    plot_segformer_results_as_image_graph()

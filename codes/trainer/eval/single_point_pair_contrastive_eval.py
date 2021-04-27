@@ -33,8 +33,8 @@ class SinglePointPairContrastiveEval(evaluator.Evaluator):
         distances = []
         l2 = MSELoss()
         for i, data in tqdm(enumerate(dl)):
-            latent1 = self.model(data['img1'].to(dev), torch.stack(data['coords1'], dim=1).to(dev))
-            latent2 = self.model(data['img2'].to(dev), torch.stack(data['coords2'], dim=1).to(dev))
+            latent1 = self.model(img=data['img1'].to(dev), pos=torch.stack(data['coords1'], dim=1).to(dev))
+            latent2 = self.model(img=data['img2'].to(dev), pos=torch.stack(data['coords2'], dim=1).to(dev))
             distances.append(l2(latent1, latent2))
             if i * self.batch_sz >= self.eval_qty:
                 break
@@ -52,7 +52,7 @@ class SinglePointPairContrastiveEval(evaluator.Evaluator):
             diff = dissimilars.item() - similars.item()
             print(f"Eval done. val_similar_lq: {similars.item()}; val_dissimilar_l2: {dissimilars.item()}; val_diff: {diff}")
         self.model.train()
-        return {"val_similar_l2": similars.item(), "val_dissimilar_l2": dissimilars.item(), "val_diff": diff.item()}
+        return {"val_similar_l2": similars.item(), "val_dissimilar_l2": dissimilars.item(), "val_diff": diff}
 
 
 if __name__ == '__main__':

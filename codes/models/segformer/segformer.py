@@ -94,14 +94,21 @@ class Segformer(nn.Module):
         self.transformer_layers = nn.Sequential(*[nn.TransformerEncoderLayer(final_latent_channels, nhead=4) for _ in range(layers)])
         self.tail = Tail()
 
-    def forward(self, x, pos):
-        layers = self.backbone(x)
-        set = []
+    def forward(self, img=None, layers=None, pos=None, return_layers=False):
+        assert img is not None or layers is not None
+        if img is not None:
+            bs = img.shape[0]
+            layers = self.backbone(img)
+        else:
+            bs = layers[0].shape[0]
+        if return_layers:
+            return layers
 
         # A single position can be optionally given, in which case we need to expand it to represent the entire input.
         if pos.shape == (2,):
-            pos = pos.unsqueeze(0).repeat(x.shape[0],1)
+            pos = pos.unsqueeze(0).repeat(bs, 1)
 
+        set = []
         pos = pos // 4
         for layer_out, dilator in zip(layers, self.dilators):
             for subdilator in dilator:
@@ -124,4 +131,4 @@ if __name__ == '__main__':
     model = Segformer().to('cuda')
     for j in tqdm(range(1000)):
         test_tensor = torch.randn(64,3,224,224).cuda()
-        print(model(test_tensor, torch.randint(0,224,(64,2)).cuda()).shape)
+        print(model(img=test_tensor, pos=torch.randint(0,224,(64,2)).cuda()).shape)

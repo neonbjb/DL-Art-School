@@ -208,21 +208,21 @@ class NetWrapper(nn.Module):
             projector = MLP(dim, self.projection_size, self.projection_hidden_size)
         return projector.to(hidden)
 
-    def get_representation(self, x, pt):
+    def get_representation(self, **kwargs):
         if self.layer == -1:
-            return self.net(x, pt)
+            return self.net(**kwargs)
 
         if not self.hook_registered:
             self._register_hook()
 
-        unused = self.net(x, pt)
+        unused = self.net(**kwargs)
         hidden = self.hidden
         self.hidden = None
         assert hidden is not None, f'hidden layer {self.layer} never emitted an output'
         return hidden
 
-    def forward(self, x, pt):
-        representation = self.get_representation(x, pt)
+    def forward(self, **kwargs):
+        representation = self.get_representation(**kwargs)
         projector = self._get_projector(representation)
         projection = checkpoint(projector, representation)
         return projection
@@ -239,6 +239,7 @@ class BYOL(nn.Module):
             moving_average_decay=0.99,
             use_momentum=True,
             structural_mlp=False,
+            contrastive=False,
     ):
         super().__init__()
 
@@ -247,6 +248,7 @@ class BYOL(nn.Module):
 
         self.aug = PointwiseAugmentor(image_size)
         self.use_momentum = use_momentum
+        self.contrastive = contrastive
         self.target_encoder = None
         self.target_ema_updater = EMA(moving_average_decay)
 
@@ -278,13 +280,17 @@ class BYOL(nn.Module):
 
     def get_debug_values(self, step, __):
         # In the BYOL paper, this is made to increase over time. Not yet implemented, but still logging the value.
-        return {'target_ema_beta': self.target_ema_updater.beta}
+        dbg = {'target_ema_beta': self.target_ema_updater.beta}
+        if self.contrastive and hasattr(self, 'logs_closs'):
+            dbg['contrastive_distance'] = self.logs_closs
+            dbg['byol_distance'] = self.logs_loss
+        return dbg
 
     def visual_dbg(self, step, path):
         torchvision.utils.save_image(self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,)))
         torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
 
-    def forward(self, image):
+    def get_predictions_and_projections(self, image):
         _, _, h, w = image.shape
         point = torch.randint(h//8, 7*h//8, (2,)).long().to(image.device)
 
@@ -297,22 +303,55 @@ class BYOL(nn.Module):
         self.im2 = image_two.detach().clone()
         self.im2[:,:,pt_two[0]-3:pt_two[0]+3,pt_two[1]-3:pt_two[1]+3] = 1
 
-        online_proj_one = self.online_encoder(image_one, pt_one)
-        online_proj_two = self.online_encoder(image_two, pt_two)
+        online_proj_one = self.online_encoder(img=image_one, pos=pt_one)
+        online_proj_two = self.online_encoder(img=image_two, pos=pt_two)
 
         online_pred_one = self.online_predictor(online_proj_one)
         online_pred_two = self.online_predictor(online_proj_two)
 
         with torch.no_grad():
             target_encoder = self._get_target_encoder() if self.use_momentum else self.online_encoder
-            target_proj_one = target_encoder(image_one, pt_one).detach()
-            target_proj_two = target_encoder(image_two, pt_two).detach()
+            target_proj_one = target_encoder(img=image_one, pos=pt_one).detach()
+            target_proj_two = target_encoder(img=image_two, pos=pt_two).detach()
+        return online_pred_one, online_pred_two, target_proj_one, target_proj_two
+
+    def forward_normal(self, image):
+        online_pred_one, online_pred_two, target_proj_one, target_proj_two = self.get_predictions_and_projections(image)
 
         loss_one = loss_fn(online_pred_one, target_proj_two.detach())
         loss_two = loss_fn(online_pred_two, target_proj_one.detach())
 
         loss = loss_one + loss_two
         return loss.mean()
+
+    def forward_contrastive(self, image):
+        online_pred_one_1, online_pred_two_1, target_proj_one_1, target_proj_two_1 = self.get_predictions_and_projections(image)
+        loss_one = loss_fn(online_pred_one_1, target_proj_two_1.detach())
+        loss_two = loss_fn(online_pred_two_1, target_proj_one_1.detach())
+        loss = loss_one + loss_two
+
+        online_pred_one_2, online_pred_two_2, target_proj_one_2, target_proj_two_2 = self.get_predictions_and_projections(image)
+        loss_one = loss_fn(online_pred_one_2, target_proj_two_2.detach())
+        loss_two = loss_fn(online_pred_two_2, target_proj_one_2.detach())
+        loss = (loss + loss_one + loss_two).mean()
+
+        contrastive_loss = torch.cat([loss_fn(online_pred_one_1, target_proj_two_2),
+                                     loss_fn(online_pred_two_1, target_proj_one_2),
+                                     loss_fn(online_pred_one_2, target_proj_two_1),
+                                     loss_fn(online_pred_two_2, target_proj_one_1)], dim=0)
+        k = contrastive_loss.shape[0] // 2  # Take half of the total contrastive loss predictions.
+        contrastive_loss = torch.topk(contrastive_loss, k, dim=0).values.mean()
+
+        self.logs_loss = loss.detach()
+        self.logs_closs = contrastive_loss.detach()
+
+        return loss - contrastive_los00s
+
+    def forward(self, image):
+        if self.contrastive:
+            return self.forward_contrastive(image)
+        else:
+            return self.forward_normal(image)
 
 
 if __name__ == '__main__':
@@ -331,4 +370,4 @@ if __name__ == '__main__':
 @register_model
 def register_pixel_local_byol(opt_net, opt):
     subnet = create_model(opt, opt_net['subnet'])
-    return BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'])
+    return BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'], contrastive=opt_net['contrastive'])
