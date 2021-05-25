@@ -122,11 +122,3 @@ def backbone152(pretrained=False, progress=True, **kwargs):
     return _backbone('resnet152', Bottleneck, [3, 8, 36, 3], pretrained, progress,
                    **kwargs)
 
-
-@register_model
-def register_resnet50(opt_net, opt):
-    model = resnet50(pretrained=opt_net['pretrained'])
-    if opt_net['custom_head_logits']:
-        model.fc = nn.Linear(512 * 4, opt_net['custom_head_logits'])
-    return model
-

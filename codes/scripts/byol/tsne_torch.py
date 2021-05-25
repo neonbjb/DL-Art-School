@@ -414,5 +414,5 @@ if __name__ == "__main__":
     #plot_pixel_level_results_as_image_graph()
 
     # For use with segformer results
-    #run_tsne_segformer()
-    plot_segformer_results_as_image_graph()
+    run_tsne_segformer()
+    #plot_segformer_results_as_image_graph()

@@ -188,24 +188,19 @@ class BYOL(nn.Module):
             moving_average_decay=0.99,
             use_momentum=True,
             structural_mlp=False,
-            do_augmentation=False  # In DLAS this was intended to be done at the dataset level. For massive batch sizes
-                                   # this can overwhelm the CPU though, and it becomes desirable to do the augmentations
-                                   # on the GPU again.
     ):
         super().__init__()
 
         self.online_encoder = NetWrapper(net, projection_size, projection_hidden_size, layer=hidden_layer,
                                          use_structural_mlp=structural_mlp)
 
-        self.do_aug = do_augmentation
-        if self.do_aug:
-            augmentations = [ \
-                RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8),
-                augs.RandomGrayscale(p=0.2),
-                augs.RandomHorizontalFlip(),
-                RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1),
-                augs.RandomResizedCrop((self.cropped_img_size, self.cropped_img_size))]
-            self.aug = nn.Sequential(*augmentations)
+        augmentations = [ \
+            RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8),
+            augs.RandomGrayscale(p=0.2),
+            augs.RandomHorizontalFlip(),
+            RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1),
+            augs.RandomResizedCrop((image_size, image_size))]
+        self.aug = nn.Sequential(*augmentations)
         self.use_momentum = use_momentum
         self.target_encoder = None
         self.target_ema_updater = EMA(moving_average_decay)
@@ -242,17 +237,16 @@ class BYOL(nn.Module):
         return {'target_ema_beta': self.target_ema_updater.beta}
 
     def visual_dbg(self, step, path):
-        if self.do_aug:
-            torchvision.utils.save_image(self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,)))
-            torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
+        torchvision.utils.save_image(self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,)))
+        torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
 
     def forward(self, image_one, image_two):
-        if self.do_aug:
-            image_one = self.aug(image_one)
-            image_two = self.aug(image_two)
-            # Keep copies on hand for visual_dbg.
-            self.im1 = image_one.detach().copy()
-            self.im2 = image_two.detach().copy()
+        image_one = self.aug(image_one)
+        image_two = self.aug(image_two)
+
+        # Keep copies on hand for visual_dbg.
+        self.im1 = image_one.detach().clone()
+        self.im2 = image_two.detach().clone()
 
         online_proj_one = self.online_encoder(image_one)
         online_proj_two = self.online_encoder(image_two)
@@ -276,5 +270,4 @@ class BYOL(nn.Module):
 def register_byol(opt_net, opt):
     subnet = create_model(opt, opt_net['subnet'])
     return BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
-                structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False),
-                do_augmentation=opt_get(opt_net, ['gpu_augmentation'], False))
+                structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False))

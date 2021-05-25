@@ -206,22 +206,12 @@ class BYOL(nn.Module):
             dbg['byol_distance'] = self.logs_loss
         return dbg
 
-    def visual_dbg(self, step, path):
-        torchvision.utils.save_image(self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,)))
-        torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
-
     def get_predictions_and_projections(self, image):
         _, _, h, w = image.shape
         point = torch.randint(h//8, 7*h//8, (2,)).long().to(image.device)
 
         image_one, pt_one = self.aug(image, point)
         image_two, pt_two = self.aug(image, point)
-
-        # Keep copies on hand for visual_dbg.
-        self.im1 = image_one.detach().clone()
-        self.im1[:,:,pt_one[0]-3:pt_one[0]+3,pt_one[1]-3:pt_one[1]+3] = 1
-        self.im2 = image_two.detach().clone()
-        self.im2[:,:,pt_two[0]-3:pt_two[0]+3,pt_two[1]-3:pt_two[1]+3] = 1
 
         online_proj_one = self.online_encoder(img=image_one, pos=pt_one)
         online_proj_two = self.online_encoder(img=image_two, pos=pt_two)
