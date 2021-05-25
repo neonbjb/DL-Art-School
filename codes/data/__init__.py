@@ -55,6 +55,8 @@ def create_dataset(dataset_opt):
         from data.byol_attachment import DatasetRandomAugWrapper as D
     elif mode == 'random_dataset':
         from data.random_dataset import RandomDataset as D
+    elif mode == 'zipfile':
+        from data.zip_file_dataset import ZipFileDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)
