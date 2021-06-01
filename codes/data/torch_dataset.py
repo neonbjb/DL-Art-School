@@ -4,6 +4,9 @@ import torchvision.transforms as T
 from torchvision import datasets
 
 # Wrapper for basic pytorch datasets which re-wraps them into a format usable by ExtensibleTrainer.
+from utils.util import opt_get
+
+
 class TorchDataset(Dataset):
     def __init__(self, opt):
         DATASET_MAP = {
@@ -14,7 +17,7 @@ class TorchDataset(Dataset):
             "imagefolder": datasets.ImageFolder
         }
         normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        if opt['train']:
+        if opt_get(opt, ['random_crop'], False):
             transforms = [
                 T.RandomResizedCrop(opt['image_size']),
                 T.RandomHorizontalFlip(),
@@ -23,8 +26,9 @@ class TorchDataset(Dataset):
             ]
         else:
             transforms = [
-                T.Resize(opt['val_resize']),
+                T.Resize(opt['image_size']),
                 T.CenterCrop(opt['image_size']),
+                T.RandomHorizontalFlip(),
                 T.ToTensor(),
                 normalize,
             ]

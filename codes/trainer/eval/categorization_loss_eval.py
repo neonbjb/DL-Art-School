@@ -18,7 +18,7 @@ class CategorizationLossEvaluator(evaluator.Evaluator):
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
         self.dataset = torchvision.datasets.ImageFolder(
-            'F:\\4k6k\\datasets\\images\\imagenet_2017\\val',
+            'E:\\4k6k\\datasets\\images\\imagenet_2017\\val',
             transforms.Compose([
                 transforms.Resize(256),
                 transforms.CenterCrop(224),
@@ -27,7 +27,7 @@ class CategorizationLossEvaluator(evaluator.Evaluator):
             ]))
         self.dataloader = DataLoader(self.dataset, self.batch_sz, shuffle=False, num_workers=4)
         self.gen_output_index = opt_eval['gen_index'] if 'gen_index' in opt_eval.keys() else 0
-        self.masking = opt_get(opt_eval, ['masking'], True)
+        self.masking = opt_get(opt_eval, ['masking'], False)
         if self.masking:
             self.mask_producer = UResnetMaskProducer(pretrained_uresnet_path= '../experiments/train_imagenet_pixpro_resnet/models/66500_generator.pth',
                                                      kmeans_centroid_path='../experiments/k_means_uresnet_imagenet_256.pth',

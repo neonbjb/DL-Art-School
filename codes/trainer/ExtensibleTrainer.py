@@ -371,7 +371,7 @@ class ExtensibleTrainer(BaseModel):
                 if load_path is not None:
                     if self.rank <= 0:
                         logger.info('Loading model for [%s]' % (load_path,))
-                    self.load_network(load_path, net, self.opt['path']['strict_load'])
+                    self.load_network(load_path, net, self.opt['path']['strict_load'], opt_get(self.opt, ['path', f'pretrain_base_path_{name}']))
                 if hasattr(net.module, 'network_loaded'):
                     net.module.network_loaded()
 

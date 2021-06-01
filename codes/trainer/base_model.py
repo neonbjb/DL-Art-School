@@ -97,7 +97,7 @@ class BaseModel():
                                             save_path, os.path.join(self.opt['remote_path'], 'models', save_filename))
         return save_path
 
-    def load_network(self, load_path, network, strict=True):
+    def load_network(self, load_path, network, strict=True, pretrain_base_path=None):
         #if isinstance(network, nn.DataParallel) or isinstance(network, DistributedDataParallel):
         network = network.module
         load_net = torch.load(load_path)
@@ -105,9 +105,15 @@ class BaseModel():
         # Support loading torch.save()s for whole models as well as just state_dicts.
         if 'state_dict' in load_net:
             load_net = load_net['state_dict']
-
-        is_srflow = False
         load_net_clean = OrderedDict()  # remove unnecessary 'module.'
+
+        if pretrain_base_path is not None:
+            t = load_net
+            load_net = {}
+            for k, v in t.items():
+                if k.startswith(pretrain_base_path):
+                    load_net[k[len(pretrain_base_path):]] = v
+
         for k, v in load_net.items():
             if k.startswith('module.'):
                 load_net_clean[k.replace('module.', '')] = v

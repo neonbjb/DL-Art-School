@@ -14,16 +14,18 @@ def main():
     split_img = False
     opt = {}
     opt['n_thread'] = 5
-    opt['compression_level'] = 95  # JPEG compression quality rating.
-    # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
-    # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = ['E:\\4k6k\\datasets\\images\\lsun\\lsun\\cats']
-    opt['save_folder'] = 'E:\\4k6k\\datasets\\images\\lsun\\lsun\\cats\\256_4_by_3'
-    opt['imgsize'] = (256,192)
+    opt['input_folder'] = ['E:\\4k6k\datasets\\ns_images\\imagesets\\imageset_256_masked']
+    opt['save_folder'] = 'E:\\4k6k\datasets\\ns_images\\imagesets\\imageset_128_masked'
+    opt['imgsize'] = (128,128)
     opt['bottom_crop'] = 0
     opt['keep_folder'] = False
+
+    #opt['format'] = 'jpg'
+    #opt['cv2_write_options'] = [cv2.IMWRITE_JPEG_QUALITY, 95]
+    opt['format'] = 'png'
+    opt['cv2_write_options'] = [cv2.IMWRITE_PNG_COMPRESSION, 9]
 
     save_folder = opt['save_folder']
     if not osp.exists(save_folder):
@@ -93,7 +95,7 @@ class TiledDataset(data.Dataset):
                 pts = os.path.split(pts[0])
             output_folder = osp.join(self.opt['save_folder'], pts[-1])
             os.makedirs(output_folder, exist_ok=True)
-        cv2.imwrite(osp.join(output_folder, basename.replace('.webp', '.jpg')), img, [cv2.IMWRITE_JPEG_QUALITY, self.opt['compression_level']])
+        cv2.imwrite(osp.join(output_folder, basename.replace('.webp', self.opt['format'])), img, self.opt['cv2_write_options'])
         return None
 
     def __len__(self):

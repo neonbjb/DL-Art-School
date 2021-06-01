@@ -35,18 +35,22 @@ class ZipFileDataset(torch.utils.data.Dataset):
         return tensor
 
     def __getitem__(self, i):
-        fname = self.all_files[i]
-        out = {
-            'hq': self.load_image(fname),
-            'HQ_path': fname,
-            'has_alt': self.paired_mode
-        }
-        if self.paired_mode:
-            if fname.endswith('0.jpg'):
-                aname = fname.replace('0.jpg', '1.jpg')
-            else:
-                aname = fname.replace('1.jpg', '0.jpg')
-            out['alt_hq'] = self.load_image(aname)
+        try:
+            fname = self.all_files[i]
+            out = {
+                'hq': self.load_image(fname),
+                'HQ_path': fname,
+                'has_alt': self.paired_mode
+            }
+            if self.paired_mode:
+                if fname.endswith('0.jpg'):
+                    aname = fname.replace('0.jpg', '1.jpg')
+                else:
+                    aname = fname.replace('1.jpg', '0.jpg')
+                out['alt_hq'] = self.load_image(aname)
+        except:
+            print(f"Error loading {fname} from zipfile. Attempting to recover by loading next element.")
+            return self[i+1]
         return out
 
 if __name__ == '__main__':
