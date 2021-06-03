@@ -401,3 +401,10 @@ def opt_get(opt, keys, default=None):
         if ret is None:
             return default
     return ret
+
+
+def denormalize(x, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
+    ten = x.clone().permute(1, 2, 3, 0)
+    for t, m, s in zip(ten, mean, std):
+        t.mul_(s).add_(m)
+    return torch.clamp(ten, 0, 1).permute(3, 0, 1, 2)

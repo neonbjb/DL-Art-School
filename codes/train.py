@@ -14,6 +14,9 @@ from data import create_dataloader, create_dataset
 from trainer.ExtensibleTrainer import ExtensibleTrainer
 from time import time
 
+from utils.util import opt_get
+
+
 def init_dist(backend, **kwargs):
     # These packages have globals that screw with Windows, so only import them if needed.
     import torch.distributed as dist
@@ -31,8 +34,8 @@ class Trainer:
 
     def init(self, opt, launcher, all_networks={}):
         self._profile = False
-        self.val_compute_psnr = opt['eval']['compute_psnr'] if 'compute_psnr' in opt['eval'].keys() else True
-        self.val_compute_fea = opt['eval']['compute_fea'] if 'compute_fea' in opt['eval'].keys() else True
+        self.val_compute_psnr = opt_get(opt, ['eval', 'compute_psnr'], False)
+        self.val_compute_fea = opt_get(opt, ['eval', 'compute_fea'], False)
 
         #### loading resume state if exists
         if opt['path'].get('resume_state', None):
@@ -133,7 +136,7 @@ class Trainer:
 
         ### Evaluators
         self.evaluators = []
-        if 'evaluators' in opt['eval'].keys():
+        if 'eval' in opt.keys() and 'evaluators' in opt['eval'].keys():
             for ev_key, ev_opt in opt['eval']['evaluators'].items():
                 self.evaluators.append(create_evaluator(self.model.networks[ev_opt['for']],
                                                         ev_opt, self.model.env))
@@ -295,7 +298,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imagenet_resnet50_yt_pretrained.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_imgset_rrdb_diffusion.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()

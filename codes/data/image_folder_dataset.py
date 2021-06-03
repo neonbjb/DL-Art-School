@@ -34,6 +34,7 @@ class ImageFolderDataset:
                                                        # from the same video source. Search for 'fetch_alt_image' for more info.
         self.skip_lq = opt_get(opt, ['skip_lq'], False)
         self.disable_flip = opt_get(opt, ['disable_flip'], False)
+        self.rgb_n1_to_1 = opt_get(opt, ['rgb_n1_to_1'], False)
         if 'normalize' in opt.keys():
             if opt['normalize'] == 'stylegan2_norm':
                 self.normalize = Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
@@ -143,8 +144,6 @@ class ImageFolderDataset:
 
         # Convert to torch tensor
         hq = torch.from_numpy(np.ascontiguousarray(np.transpose(hs[0], (2, 0, 1)))).float()
-        if self.normalize:
-            hq = self.normalize(hq)
 
         out_dict = {'hq': hq, 'LQ_path': self.image_paths[item], 'HQ_path': self.image_paths[item], 'has_alt': False}
 
@@ -202,6 +201,15 @@ class ImageFolderDataset:
             out_dict['labels'] = lbls
             out_dict['labels_mask'] = lbl_masks
             out_dict['label_strings'] = lblstrings
+
+        for k, v in out_dict.items():
+            if isinstance(v, torch.Tensor) and len(v.shape) == 3:
+                if self.normalize:
+                    v = self.normalize(v)
+                if self.rgb_n1_to_1:
+                    v = v * 2 - 1
+                out_dict[k] = v
+
         return out_dict
 
 if __name__ == '__main__':

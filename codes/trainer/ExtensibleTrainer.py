@@ -13,7 +13,7 @@ from trainer.steps import ConfigurableStep
 from trainer.experiments.experiments import get_experiment_for_name
 import torchvision.utils as utils
 
-from utils.util import opt_get
+from utils.util import opt_get, denormalize
 
 logger = logging.getLogger('base')
 
@@ -259,10 +259,15 @@ class ExtensibleTrainer(BaseModel):
 
         # Record visual outputs for usage in debugging and testing.
         if 'visuals' in self.opt['logger'].keys() and self.rank <= 0 and step % self.opt['logger']['visual_debug_rate'] == 0:
-            denorm = 'image_normalization_range' in self.opt.keys()
-            denorm_range = opt_get(self.opt, ['image_normalization_range'], None)
-            if denorm_range:
-                denorm_range = tuple(denorm_range)
+            def fix_image(img):
+                if img.shape[1] > 3:
+                    img = img[:, :3, :, :]
+                if opt_get(self.opt, ['logger', 'reverse_n1_to_1'], False):
+                    img = (img + 1) / 2
+                if opt_get(self.opt, ['logger', 'reverse_imagenet_norm'], False):
+                    img = denormalize(img)
+                return img
+
             sample_save_path = os.path.join(self.opt['path']['models'], "..", "visual_dbg")
             for v in self.opt['logger']['visuals']:
                 if v not in state.keys():
@@ -270,16 +275,13 @@ class ExtensibleTrainer(BaseModel):
                 for i, dbgv in enumerate(state[v]):
                     if 'recurrent_visual_indices' in self.opt['logger'].keys() and len(dbgv.shape)==5:
                         for rvi in self.opt['logger']['recurrent_visual_indices']:
-                            rdbgv = dbgv[:, rvi]
-                            if rdbgv.shape[1] > 3:
-                                rdbgv = rdbgv[:, :3, :, :]
+                            rdbgv = fix_image(dbgv[:, rvi])
                             os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
-                            utils.save_image(rdbgv.float(), os.path.join(sample_save_path, v, "%05i_%02i_%02i.png" % (step, rvi, i)), normalize=denorm, range=denorm_range)
+                            utils.save_image(rdbgv.float(), os.path.join(sample_save_path, v, "%05i_%02i_%02i.png" % (step, rvi, i)))
                     else:
-                        if dbgv.shape[1] > 3:
-                            dbgv = dbgv[:,:3,:,:]
+                        dbgv = fix_image(dbgv)
                         os.makedirs(os.path.join(sample_save_path, v), exist_ok=True)
-                        utils.save_image(dbgv.float(), os.path.join(sample_save_path, v, "%05i_%02i.png" % (step, i)), normalize=denorm, range=denorm_range)
+                        utils.save_image(dbgv.float(), os.path.join(sample_save_path, v, "%05i_%02i.png" % (step, i)))
             # Some models have their own specific visual debug routines.
             for net_name, net in self.networks.items():
                 if hasattr(net.module, "visual_dbg"):

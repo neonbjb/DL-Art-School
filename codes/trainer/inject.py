@@ -55,7 +55,7 @@ class CreateInjectorError(Exception):
                          f'{available}')
 
 
-# Injectors are a way to sythesize data within a step that can then be used (and reused) by loss functions.
+# Injectors are a way to synthesize data within a step that can then be used (and reused) by loss functions.
 def create_injector(opt_inject, env):
     injectors = find_registered_injectors()
     type = opt_inject['type']

@@ -179,7 +179,7 @@ class SrPixLoss(ConfigurableLoss):
         return loss.mean()
 
 
-# Loss defined by averaging the input tensor across all dimensions an optionally inverting it.
+# Loss defined by averaging the input tensor across all dimensions and optionally inverting it.
 class DirectLoss(ConfigurableLoss):
     def __init__(self, opt, env):
         super(DirectLoss, self).__init__(opt, env)
