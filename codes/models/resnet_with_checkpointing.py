@@ -197,4 +197,3 @@ def register_resnet50(opt_net, opt):
     if opt_net['custom_head_logits']:
         model.fc = nn.Linear(512 * 4, opt_net['custom_head_logits'])
     return model
-

@@ -13,6 +13,7 @@ class TorchDataset(Dataset):
             "mnist": datasets.MNIST,
             "fmnist": datasets.FashionMNIST,
             "cifar10": datasets.CIFAR10,
+            "cifar100": datasets.CIFAR100,
             "imagenet": datasets.ImageNet,
             "imagefolder": datasets.ImageFolder
         }
@@ -48,12 +49,12 @@ if __name__ == '__main__':
     opt = {
         'flip': True,
         'crop_sz': None,
-        'dataset': 'imagefolder',
-        'resize': 256,
-        'center_crop': 224,
+        'dataset': 'cifar100',
+        'image_size': 32,
         'normalize': True,
         'kwargs': {
-            'root': 'F:\\4k6k\\datasets\\images\\imagenet_2017\\val',
+            'root': 'E:\\4k6k\\datasets\\images\\cifar100',
+            'download': True
         }
     }
     set = TorchDataset(opt)
