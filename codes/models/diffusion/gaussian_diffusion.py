@@ -9,6 +9,7 @@ import enum
 import math
 
 import numpy as np
+import torch
 import torch as th
 from tqdm import tqdm
 
@@ -756,6 +757,7 @@ class GaussianDiffusion:
         terms = {}
 
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
+            x_start_pred = torch.zeros_like(x_start)  # This type of model doesn't predict x_start.
             terms["loss"] = self._vb_terms_bpd(
                 model=model,
                 x_start=x_start,
@@ -791,15 +793,22 @@ class GaussianDiffusion:
                     # Without a factor of 1/1000, the VB term hurts the MSE term.
                     terms["vb"] *= self.num_timesteps / 1000.0
 
-            target = {
-                ModelMeanType.PREVIOUS_X: self.q_posterior_mean_variance(
+            if self.model_mean_type == ModelMeanType.PREVIOUS_X:
+                target = self.q_posterior_mean_variance(
                     x_start=x_start, x_t=x_t, t=t
-                )[0],
-                ModelMeanType.START_X: x_start,
-                ModelMeanType.EPSILON: noise,
-            }[self.model_mean_type]
+                )[0]
+                x_start_pred = torch.zeros(x_start)  # Not supported.
+            elif self.model_mean_type == ModelMeanType.START_X:
+                target = x_start
+                x_start_pred = model_output
+            elif self.model_mean_type == ModelMeanType.EPSILON:
+                target = noise
+                x_start_pred = x_t - model_output
+            else:
+                raise NotImplementedError(self.model_mean_type)
             assert model_output.shape == target.shape == x_start.shape
             terms["mse"] = mean_flat((target - model_output) ** 2)
+            terms["x_start_predicted"] = x_start_pred
             if "vb" in terms:
                 terms["loss"] = terms["mse"] + terms["vb"]
             else:
