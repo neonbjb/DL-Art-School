@@ -101,6 +101,10 @@ class ConfigurableStep(Module):
                 opt = torch.optim.Adam(list(optim_params.values()),
                                        weight_decay=opt_config['weight_decay'],
                                        betas=(opt_config['beta1'], opt_config['beta2']))
+            elif self.step_opt['optimizer'] == 'adamw':
+                opt = torch.optim.AdamW(list(optim_params.values()),
+                                       weight_decay=opt_config['weight_decay'],
+                                       betas=(opt_config['beta1'], opt_config['beta2']))
             elif self.step_opt['optimizer'] == 'lars':
                 from trainer.optimizers.larc import LARC
                 from trainer.optimizers.sgd import SGDNoBiasMomentum

@@ -757,7 +757,6 @@ class GaussianDiffusion:
         terms = {}
 
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
-            x_start_pred = torch.zeros_like(x_start)  # This type of model doesn't predict x_start.
             terms["loss"] = self._vb_terms_bpd(
                 model=model,
                 x_start=x_start,
@@ -803,7 +802,7 @@ class GaussianDiffusion:
                 x_start_pred = model_output
             elif self.model_mean_type == ModelMeanType.EPSILON:
                 target = noise
-                x_start_pred = x_t - model_output
+                x_start_pred = self._predict_xstart_from_eps(x_t, t, model_output)
             else:
                 raise NotImplementedError(self.model_mean_type)
             assert model_output.shape == target.shape == x_start.shape

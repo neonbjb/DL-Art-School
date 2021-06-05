@@ -1,7 +1,7 @@
 import torch
 
 from models.diffusion.gaussian_diffusion import GaussianDiffusion, get_named_beta_schedule
-from models.diffusion.resample import create_named_schedule_sampler
+from models.diffusion.resample import create_named_schedule_sampler, LossAwareSampler
 from models.diffusion.respace import space_timesteps, SpacedDiffusion
 from trainer.inject import Injector
 from utils.util import opt_get
@@ -27,6 +27,8 @@ class GaussianDiffusionInjector(Injector):
         model_inputs = {k: state[v] for k, v in self.model_input_keys.items()}
         t, weights = self.schedule_sampler.sample(hq.shape[0], hq.device)
         diffusion_outputs = self.diffusion.training_losses(gen, hq, t, model_kwargs=model_inputs)
+        if isinstance(self.schedule_sampler, LossAwareSampler):
+            self.schedule_sampler.update_with_local_losses(t, diffusion_outputs['losses'])
         return {self.output: diffusion_outputs['mse'],
                 self.output_variational_bounds_key: diffusion_outputs['vb'],
                 self.output_x_start_key: diffusion_outputs['x_start_predicted']}
