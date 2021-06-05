@@ -269,6 +269,9 @@ class Trainer:
                 print("Evaluator results: ", eval_dict)
                 for ek, ev in eval_dict.items():
                     self.tb_logger.add_scalar(ek, ev, self.current_step)
+                if opt['wandb']:
+                    wandb.log(eval_dict)
+
 
     def do_training(self):
         self.logger.info('Start training from epoch: {:d}, iter: {:d}'.format(self.start_epoch, self.current_step))

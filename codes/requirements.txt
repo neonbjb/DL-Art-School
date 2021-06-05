@@ -19,3 +19,4 @@ orjson
 einops
 gsa-pytorch
 lambda-networks
+pytorch_ssim
