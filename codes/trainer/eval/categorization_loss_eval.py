@@ -52,7 +52,8 @@ class CategorizationLossEvaluator(evaluator.Evaluator):
 
         self.model.eval()
         with torch.no_grad():
-            for hq, labels in tqdm(self.dataloader):
+            for batch in tqdm(self.dataloader):
+                hq, labels = batch['hq'], batch['labels']
                 hq = hq.to(self.env['device'])
                 labels = labels.to(self.env['device'])
                 if self.masking:
