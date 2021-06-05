@@ -4,6 +4,7 @@ import torchvision.transforms as T
 from torchvision import datasets
 
 # Wrapper for basic pytorch datasets which re-wraps them into a format usable by ExtensibleTrainer.
+from data.cifar import CIFAR100, CIFAR10
 from utils.util import opt_get
 
 
@@ -12,8 +13,8 @@ class TorchDataset(Dataset):
         DATASET_MAP = {
             "mnist": datasets.MNIST,
             "fmnist": datasets.FashionMNIST,
-            "cifar10": datasets.CIFAR10,
-            "cifar100": datasets.CIFAR100,
+            "cifar10": CIFAR10,
+            "cifar100": CIFAR100,
             "imagenet": datasets.ImageNet,
             "imagefolder": datasets.ImageFolder
         }
@@ -39,8 +40,15 @@ class TorchDataset(Dataset):
         self.offset = opt_get(opt, ['offset'], 0)
 
     def __getitem__(self, item):
-        underlying_item, lbl = self.dataset[item+self.offset]
-        return {'lq': underlying_item, 'hq': underlying_item, 'labels': lbl,
+        item = self.dataset[item+self.offset]
+        if len(item) == 2:
+            underlying_item, lbl = item
+            coarselbl = None
+        elif len(item) == 3:
+            underlying_item, lbl, coarselbl = item
+        else:
+            raise NotImplementedError
+        return {'lq': underlying_item, 'hq': underlying_item, 'labels': lbl, 'coarse_labels': coarselbl,
                 'LQ_path': str(item), 'GT_path': str(item)}
 
     def __len__(self):

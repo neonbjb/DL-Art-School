@@ -1,5 +1,4 @@
 import os
-import shutil
 
 import torch
 import torch.nn as nn
@@ -7,20 +6,14 @@ import torch.nn.functional as F
 import torchvision
 from PIL import Image
 from torch.utils.data import DataLoader
-from torchvision.transforms import ToTensor, Resize, Normalize
+from torchvision.transforms import ToTensor, Normalize
 from tqdm import tqdm
-import numpy as np
 
-import utils
 from data.image_folder_dataset import ImageFolderDataset
-from models.resnet_with_checkpointing import resnet50
 from models.segformer.segformer import Segformer
-from models.spinenet_arch import SpineNet
-
 
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved
 # and the distance is computed across the channel dimension.
-from utils import util
 from utils.kmeans import kmeans, kmeans_predict
 from utils.options import dict_to_nonedict
 

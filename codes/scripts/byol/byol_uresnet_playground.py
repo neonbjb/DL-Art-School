@@ -1,5 +1,4 @@
 import os
-import shutil
 from random import shuffle
 
 import matplotlib.cm as cm
@@ -7,26 +6,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision.models.resnet import Bottleneck
-from torchvision.transforms import ToTensor, Resize
 from tqdm import tqdm
-import numpy as np
 
-import utils
 from data.image_folder_dataset import ImageFolderDataset
-from models.pixel_level_contrastive_learning.resnet_unet import UResNet50
-from models.pixel_level_contrastive_learning.resnet_unet_2 import UResNet50_2
 from models.pixel_level_contrastive_learning.resnet_unet_3 import UResNet50_3
-from models.resnet_with_checkpointing import resnet50
-from models.spinenet_arch import SpineNet
-
 
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved
 # and the distance is computed across the channel dimension.
-from scripts.byol.byol_spinenet_playground import find_similar_latents, create_latent_database
-from utils import util
 from utils.kmeans import kmeans, kmeans_predict
 from utils.options import dict_to_nonedict
 
