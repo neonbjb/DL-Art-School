@@ -70,7 +70,7 @@ class ExtensibleTrainer(BaseModel):
 
             if not net['trainable']:
                 new_net.eval()
-            if net['wandb_debug']:
+            if net['wandb_debug'] and self.rank <= 0:
                 import wandb
                 wandb.watch(new_net, log='all', log_freq=3)
 

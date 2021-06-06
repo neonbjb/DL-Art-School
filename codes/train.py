@@ -81,7 +81,7 @@ class Trainer:
         self.opt = opt
 
         #### wandb init
-        if opt['wandb']:
+        if opt['wandb'] and self.rank <= 0:
             import wandb
             os.makedirs(os.path.join(opt['path']['log'], 'wandb'), exist_ok=True)
             wandb.init(project=opt['name'], dir=opt['path']['log'])
@@ -193,7 +193,7 @@ class Trainer:
                     # tensorboard logger
                     if opt['use_tb_logger'] and 'debug' not in opt['name']:
                         self.tb_logger.add_scalar(k, v, self.current_step)
-            if opt['wandb']:
+            if opt['wandb'] and self.rank <= 0:
                 import wandb
                 wandb.log(logs)
             self.logger.info(message)
