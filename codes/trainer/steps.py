@@ -169,6 +169,8 @@ class ConfigurableStep(Module):
                'before' in inj.opt.keys() and self.env['step'] > inj.opt['before'] or \
                'every' in inj.opt.keys() and self.env['step'] % inj.opt['every'] != 0:
                 continue
+            if 'no_accum' in inj.opt.keys() and grad_accum_step > 0:
+                continue
             injected = inj(local_state)
             local_state.update(injected)
             new_state.update(injected)
