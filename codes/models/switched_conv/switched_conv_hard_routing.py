@@ -63,7 +63,9 @@ class SwitchedConvHardRoutingFunction(torch.autograd.Function):
 class RouteTop1(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
-        mask = torch.nn.functional.one_hot(input.argmax(dim=1), num_classes=input.shape[1]).permute(0,3,1,2)
+        mask = torch.nn.functional.one_hot(input.argmax(dim=1), num_classes=input.shape[1])
+        if len(input.shape) > 2:
+            mask = mask.permute(0, 3, 1, 2)  # TODO: Make this more extensible.
         out = torch.ones_like(input)
         out[mask != 1] = 0
         ctx.save_for_backward(mask, input.clone())
@@ -116,7 +118,8 @@ class SwitchNorm(nn.Module):
         self.register_buffer("accumulator", torch.zeros(accumulator_size, group_size))
 
     def add_norm_to_buffer(self, x):
-        flat = x.sum(dim=[0, 2, 3])
+        flatten_dims = [0] + [k+2 for k in range(len(x)-2)]
+        flat = x.sum(dim=flatten_dims)
         norm = flat / torch.mean(flat)
 
         self.accumulator[self.accumulator_index] = norm.detach().clone()
@@ -126,9 +129,9 @@ class SwitchNorm(nn.Module):
             if self.accumulator_filled <= 0:
                 self.accumulator_filled += 1
 
-    # Input into forward is a switching tensor of shape (batch,groups,width,height)
+    # Input into forward is a switching tensor of shape (batch,groups,<misc>)
     def forward(self, x: torch.Tensor, update_attention_norm=True):
-        assert len(x.shape) == 4
+        assert len(x.shape) >= 2
 
         # Push the accumulator to the right device on the first iteration.
         if self.accumulator.device != x.device:
@@ -148,7 +151,10 @@ class SwitchNorm(nn.Module):
             norm = torch.mean(self.accumulator, dim=0)
         else:
             norm = torch.ones(self.group_size, device=self.accumulator.device)
-        x = x / norm.view(1,-1,1,1)
+
+        while len(x.shape) < len(norm.shape):
+            norm = norm.unsqueeze(-1)
+        x = x / norm
 
         # Need to re-normalize x so that the groups dimension sum to 1, just like when it was fed in.
         return x / x.sum(dim=1, keepdim=True)

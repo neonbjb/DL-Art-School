@@ -11,6 +11,7 @@
 import torch
 import torch.nn as nn
 
+from models.switched_conv.switched_conv_hard_routing import HardRoutingGate
 from trainer.networks import register_model
 
 
@@ -111,7 +112,7 @@ class ResNetTail(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, num_block, num_classes=100, num_tails=8):
+    def __init__(self, block, num_block, num_classes=100, num_tails=8, dropout_rate=.2):
         super().__init__()
         self.in_channels = 32
         self.conv1 = nn.Sequential(
@@ -123,6 +124,9 @@ class ResNet(nn.Module):
         self.conv3_x = self._make_layer(block, 64, num_block[1], 2)
         self.tails = nn.ModuleList([ResNetTail(block, num_block, 256) for _ in range(num_tails)])
         self.selector = ResNetTail(block, num_block, num_tails)
+        self.selector_gate = nn.Linear(256, 1)
+        self.gate = HardRoutingGate(num_tails, hard_en=True)
+        self.dropout_rate = dropout_rate
         self.final_linear = nn.Linear(256, num_classes)
 
     def _make_layer(self, block, out_channels, num_blocks, stride):
@@ -144,8 +148,16 @@ class ResNet(nn.Module):
         keys = torch.stack(keys, dim=1)
 
         query = self.selector(output).unsqueeze(2)
-        attn = torch.nn.functional.softmax(query * keys, dim=1)
-        values = self.final_linear(attn * keys)
+        selector = self.selector_gate(query * keys).squeeze(-1)
+        if self.training and self.dropout_rate > 0:
+            bs, br = selector.shape
+            drop = torch.rand((bs, br), device=x.device) > self.dropout_rate
+            # Ensure that there is always at least one switch left un-dropped out
+            fix_blank = (drop.sum(dim=1, keepdim=True) == 0).repeat(1, br)
+            drop = drop.logical_or(fix_blank)
+            selector = drop * selector
+        selector = self.gate(selector)
+        values = self.final_linear(selector.unsqueeze(-1) * keys)
 
         return values.sum(dim=1)
 
@@ -181,5 +193,8 @@ def resnet152():
 
 if __name__ == '__main__':
     model = ResNet(BasicBlock, [2,2,2,2])
-    print(model(torch.randn(2,3,32,32), torch.LongTensor([4,7])).shape)
+    v = model(torch.randn(2,3,32,32), torch.LongTensor([4,7]))
+    print(v.shape)
+    l = nn.MSELoss()(v, torch.randn_like(v))
+    l.backward()
 
