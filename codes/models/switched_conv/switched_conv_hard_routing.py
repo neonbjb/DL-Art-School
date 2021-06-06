@@ -118,7 +118,7 @@ class SwitchNorm(nn.Module):
         self.register_buffer("accumulator", torch.zeros(accumulator_size, group_size))
 
     def add_norm_to_buffer(self, x):
-        flatten_dims = [0] + [k+2 for k in range(len(x)-2)]
+        flatten_dims = [0] + [k+2 for k in range(len(x.shape)-2)]
         flat = x.sum(dim=flatten_dims)
         norm = flat / torch.mean(flat)
 

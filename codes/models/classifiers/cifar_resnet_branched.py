@@ -193,7 +193,7 @@ def resnet152():
 
 if __name__ == '__main__':
     model = ResNet(BasicBlock, [2,2,2,2])
-    v = model(torch.randn(2,3,32,32), torch.LongTensor([4,7]))
+    v = model(torch.randn(256,3,32,32), None)
     print(v.shape)
     l = nn.MSELoss()(v, torch.randn_like(v))
     l.backward()
