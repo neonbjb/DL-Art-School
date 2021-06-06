@@ -77,8 +77,11 @@ DLAS comes with some Dataset instances that I have created for my own use. Unles
 There are currently 3 base scripts for interacting with models. They all take a single parameter, `-opt` which specifies the configuration file which controls how they work. Configs (will be) documented above in the user guide.
 
 #### train.py
-Starts (or continues) a training session.
+Start (or continue) a training session:
 `python train.py -opt <your_config.yml>`
+
+Start a distributed training session:
+`python -m torch.distributed.launch --nproc_per_node=<gpus> --master_port=1234 train.py -o <opt> --launcher=pytorch`
 
 #### test.py
 Runs a model against a validation or test set of data and reports metrics (for now, just PSNR and a custom perceptual metric)
