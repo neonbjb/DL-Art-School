@@ -197,7 +197,7 @@ class ResNet(nn.Module):
         self.tails = nn.ModuleList([ResNetTail(block, num_block, 256) for _ in range(num_tails)])
         self.selector = ResNetTail(block, num_block, num_tails)
         self.selector_gate = nn.Linear(256, 1)
-        self.gate = HardRoutingGate(num_tails)
+        self.gate = HardRoutingGate(num_tails, dropout_rate=2)
         self.final_linear = nn.Linear(256, num_classes)
 
     def _make_layer(self, block, out_channels, num_blocks, stride):

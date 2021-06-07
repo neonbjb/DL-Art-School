@@ -21,7 +21,7 @@ if __name__ == '__main__':
     set = TorchDataset(dopt)
     loader = DataLoader(set, num_workers=0, batch_size=32)
     model = ResNet(BasicBlock, [2, 2, 2, 2])
-    model.load_state_dict(torch.load('C:\\Users\\jbetk\\Downloads\\cifar_hardsw_85000.pth'))
+    model.load_state_dict(torch.load('C:\\Users\\jbetk\\Downloads\\cifar_hardw_10000.pth'))
     model.eval()
 
     bins = [[] for _ in range(8)]
