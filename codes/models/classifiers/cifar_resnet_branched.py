@@ -10,8 +10,9 @@
 
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 
-from models.switched_conv.switched_conv_hard_routing import HardRoutingGate
+from models.switched_conv.switched_conv_hard_routing import SwitchNorm, RouteTop1
 from trainer.networks import register_model
 
 
@@ -110,9 +111,78 @@ class ResNetTail(nn.Module):
         return output
 
 
+class DropoutNorm(SwitchNorm):
+    def __init__(self, group_size, dropout_rate, accumulator_size=256):
+        super().__init__(group_size, accumulator_size)
+        self.accumulator_desired_size = accumulator_size
+        self.group_size = group_size
+        self.dropout_rate = dropout_rate
+        self.register_buffer("accumulator_index", torch.zeros(1, dtype=torch.long, device='cpu'))
+        self.register_buffer("accumulator_filled", torch.zeros(1, dtype=torch.long, device='cpu'))
+        self.register_buffer("accumulator", torch.zeros(accumulator_size, group_size))
+
+    def add_norm_to_buffer(self, x):
+        flatten_dims = [0] + [k+2 for k in range(len(x.shape)-2)]
+        flat = x.mean(dim=flatten_dims)
+
+        self.accumulator[self.accumulator_index] = flat.detach().clone()
+        self.accumulator_index += 1
+        if self.accumulator_index >= self.accumulator_desired_size:
+            self.accumulator_index *= 0
+            if self.accumulator_filled <= 0:
+                self.accumulator_filled += 1
+
+    # Input into forward is a switching tensor of shape (batch,groups,<misc>)
+    def forward(self, x: torch.Tensor):
+        assert len(x.shape) >= 2
+
+        if not self.training:
+            return x
+
+        # Only accumulate the "winning" switch slots.
+        mask = torch.nn.functional.one_hot(x.argmax(dim=1), num_classes=x.shape[1])
+        if len(x.shape) > 2:
+            mask = mask.permute(0, 3, 1, 2)  # TODO: Make this more extensible.
+        xtop = torch.ones_like(x)
+        xtop[mask != 1] = 0
+
+        # Push the accumulator to the right device on the first iteration.
+        if self.accumulator.device != xtop.device:
+            self.accumulator = self.accumulator.to(xtop.device)
+        self.add_norm_to_buffer(xtop)
+
+        # Reduce across all distributed entities, if needed
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(self.accumulator, op=dist.ReduceOp.SUM)
+            self.accumulator /= dist.get_world_size()
+
+        # Compute the dropout probabilities. This module is a no-op before the accumulator is initialized.
+        if self.accumulator_filled > 0:
+            probs = torch.mean(self.accumulator, dim=0) * self.dropout_rate
+            bs, br = x.shape[:2]
+            drop = torch.rand((bs, br), device=x.device) > probs.unsqueeze(0)
+            # Ensure that there is always at least one switch left un-dropped out
+            fix_blank = (drop.sum(dim=1, keepdim=True) == 0).repeat(1, br)
+            drop = drop.logical_or(fix_blank)
+            x = drop * x
+
+        return x
+
+
+class HardRoutingGate(nn.Module):
+    def __init__(self, breadth, dropout_rate=.8):
+        super().__init__()
+        self.norm = DropoutNorm(breadth, dropout_rate, accumulator_size=2)
+
+    def forward(self, x):
+        soft = self.norm(nn.functional.softmax(x, dim=1))
+        return RouteTop1.apply(soft)
+        return soft
+
+
 class ResNet(nn.Module):
 
-    def __init__(self, block, num_block, num_classes=100, num_tails=8, dropout_rate=.2):
+    def __init__(self, block, num_block, num_classes=100, num_tails=8):
         super().__init__()
         self.in_channels = 32
         self.conv1 = nn.Sequential(
@@ -125,8 +195,7 @@ class ResNet(nn.Module):
         self.tails = nn.ModuleList([ResNetTail(block, num_block, 256) for _ in range(num_tails)])
         self.selector = ResNetTail(block, num_block, num_tails)
         self.selector_gate = nn.Linear(256, 1)
-        self.gate = HardRoutingGate(num_tails, hard_en=True)
-        self.dropout_rate = dropout_rate
+        self.gate = HardRoutingGate(num_tails)
         self.final_linear = nn.Linear(256, num_classes)
 
     def _make_layer(self, block, out_channels, num_blocks, stride):
@@ -137,7 +206,7 @@ class ResNet(nn.Module):
             self.in_channels = out_channels * block.expansion
         return nn.Sequential(*layers)
 
-    def forward(self, x, coarse_label):
+    def forward(self, x, coarse_label, return_selector=False):
         output = self.conv1(x)
         output = self.conv2_x(output)
         output = self.conv3_x(output)
@@ -149,17 +218,13 @@ class ResNet(nn.Module):
 
         query = self.selector(output).unsqueeze(2)
         selector = self.selector_gate(query * keys).squeeze(-1)
-        if self.training and self.dropout_rate > 0:
-            bs, br = selector.shape
-            drop = torch.rand((bs, br), device=x.device) > self.dropout_rate
-            # Ensure that there is always at least one switch left un-dropped out
-            fix_blank = (drop.sum(dim=1, keepdim=True) == 0).repeat(1, br)
-            drop = drop.logical_or(fix_blank)
-            selector = drop * selector
         selector = self.gate(selector)
         values = self.final_linear(selector.unsqueeze(-1) * keys)
 
-        return values.sum(dim=1)
+        if return_selector:
+            return values.sum(dim=1), selector
+        else:
+            return values.sum(dim=1)
 
         #bs = output.shape[0]
         #return (tailouts[coarse_label] * torch.eye(n=bs, device=x.device).view(bs,bs,1)).sum(dim=1)
@@ -193,7 +258,8 @@ def resnet152():
 
 if __name__ == '__main__':
     model = ResNet(BasicBlock, [2,2,2,2])
-    v = model(torch.randn(256,3,32,32), None)
+    for j in range(10):
+        v = model(torch.randn(256,3,32,32), None)
     print(v.shape)
     l = nn.MSELoss()(v, torch.randn_like(v))
     l.backward()
