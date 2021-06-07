@@ -4,14 +4,11 @@ import torch
 import torch.nn as nn
 import torchvision
 from tqdm import tqdm
-
 from models.segformer.backbone import backbone50
-
-
-# torch.gather() which operates as it always fucking should have: pulling indexes from the input.
 from trainer.networks import register_model
 
 
+# torch.gather() which operates as it always fucking should have: pulling indexes from the input.
 def gather_2d(input, index):
     b, c, h, w = input.shape
     nodim = input.view(b, c, h * w)
