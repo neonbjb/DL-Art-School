@@ -112,14 +112,14 @@ class ImageFolderDataset:
                 local_scale = local_scale // special_factor
             else:
                 hs = [h.copy() for h in hs]
-            hs = self.corruptor.corrupt_images(hs)
+            hs, ent = self.corruptor.corrupt_images(hs, return_entropy=True)
         for hq in hs:
             h, w, _ = hq.shape
             ls.append(cv2.resize(hq, (h // local_scale, w // local_scale), interpolation=cv2.INTER_AREA))
         # Corrupt the LQ image (only in eval mode)
         if not self.corrupt_before_downsize:
-            ls = self.corruptor.corrupt_images(ls)
-        return ls
+            ls, ent = self.corruptor.corrupt_images(ls, return_entropy=True)
+        return ls, ent
 
     def __len__(self):
         return self.len
@@ -184,9 +184,10 @@ class ImageFolderDataset:
             out_dict['alt_hq'] = alt_hq
 
         if not self.skip_lq:
-            lqs = self.synthesize_lq(for_lq)
+            lqs, ent = self.synthesize_lq(for_lq)
             ls = lqs[0]
             out_dict['lq'] = torch.from_numpy(np.ascontiguousarray(np.transpose(ls, (2, 0, 1)))).float()
+            out_dict['corruption_entropy'] = torch.tensor(ent)
             if len(lqs) > 1:
                 alt_lq = lqs[1]
                 out_dict['alt_lq'] = torch.from_numpy(np.ascontiguousarray(np.transpose(alt_lq, (2, 0, 1)))).float()
@@ -215,25 +216,25 @@ class ImageFolderDataset:
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'paths': ['E:\\4k6k\\datasets\\ns_images\\256_unsupervised'],
+        'paths': ['E:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
         'weights': [1],
         'target_size': 256,
         'force_multiple': 1,
         'scale': 2,
         'corrupt_before_downsize': True,
-        'fetch_alt_image': True,
+        'fetch_alt_image': False,
         'disable_flip': True,
-        'fixed_corruptions': [ 'jpeg-broad' ],
+        'fixed_corruptions': [ 'jpeg-broad', 'gaussian_blur' ],
         'num_corrupts_per_image': 0,
         'corruption_blur_scale': 0
     }
 
-    ds = DataLoader(ImageFolderDataset(opt), shuffle=True, num_workers=2)
+    ds = DataLoader(ImageFolderDataset(opt), shuffle=True, num_workers=0)
     import os
     output_path = 'E:\\4k6k\\datasets\\ns_images\\128_unsupervised'
     os.makedirs(output_path, exist_ok=True)
     for i, d in tqdm(enumerate(ds)):
         lq = d['lq']
-        torchvision.utils.save_image(lq[:,:,16:-16,:], f'{output_path}\\{i+500000}.png')
+        #torchvision.utils.save_image(lq[:,:,16:-16,:], f'{output_path}\\{i+500000}.png')
         if i >= 200000:
             break

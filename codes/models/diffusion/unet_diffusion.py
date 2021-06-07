@@ -660,12 +660,18 @@ class SuperResModel(UNetModel):
     Expects an extra kwarg `low_res` to condition on a low-resolution image.
     """
 
-    def __init__(self, image_size, in_channels, *args, **kwargs):
-        super().__init__(image_size, in_channels * 2, *args, **kwargs)
+    def __init__(self, image_size, in_channels, num_corruptions=0, *args, **kwargs):
+        self.num_corruptions = 0
+        super().__init__(image_size, in_channels * 2 + num_corruptions, *args, **kwargs)
 
-    def forward(self, x, timesteps, low_res=None, **kwargs):
-        _, _, new_height, new_width = x.shape
+    def forward(self, x, timesteps, low_res=None, corruption_factor=None, **kwargs):
+        b, _, new_height, new_width = x.shape
         upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
+        if corruption_factor is not None:
+            corruption_factor = corruption_factor.view(b, -1, 1, 1).repeat(1, 1, new_height, new_width)
+        else:
+            corruption_factor = torch.zeros((b, self.num_corruptions, new_height, new_width), dtype=torch.float, device=x.device)
+        upsampled = torch.cat([upsampled, corruption_factor], dim=1)
         x = th.cat([x, upsampled], dim=1)
         res = super().forward(x, timesteps, **kwargs)
         return res

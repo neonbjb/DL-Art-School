@@ -1,9 +1,28 @@
 import random
+from math import cos, pi
+
 import cv2
 import numpy as np
 from data.util import read_img
 from PIL import Image
 from io import BytesIO
+
+
+# Feeds a random uniform through a cosine distribution to slightly bias corruptions towards "uncorrupted".
+# Return is on [0,1] with a bias towards 0.
+def get_rand():
+    r = random.random()
+    return 1 - cos(r * pi / 2)
+
+# Get a rough visualization of the above distribution. (Y-axis is meaningless, just spreads data)
+'''
+if __name__ == '__main__':
+    import numpy as np
+    import matplotlib.pyplot as plt
+    data = np.asarray([get_rand() for _ in range(5000)])
+    plt.plot(data, np.random.uniform(size=(5000,)), 'x')
+    plt.show()
+'''
 
 # Performs image corruption on a list of images from a configurable set of corruption
 # options.
@@ -16,7 +35,7 @@ class ImageCorruptor:
             return
         self.random_corruptions = opt['random_corruptions'] if 'random_corruptions' in opt.keys() else []
 
-    def corrupt_images(self, imgs):
+    def corrupt_images(self, imgs, return_entropy=False):
         if self.num_corrupts == 0 and not self.fixed_corruptions:
             return imgs
 
@@ -24,51 +43,45 @@ class ImageCorruptor:
             augmentations = []
         else:
             augmentations = random.choices(self.random_corruptions, k=self.num_corrupts)
-        # Source of entropy, which should be used across all images.
-        rand_int_f = random.randint(1, 999999)
-        rand_int_a = random.randint(1, 999999)
 
+        # Sources of entropy
         corrupted_imgs = []
+        entropy = []
         applied_augs = augmentations + self.fixed_corruptions
         for img in imgs:
             for aug in augmentations:
-                img = self.apply_corruption(img, aug, rand_int_a, applied_augs)
+                r = get_rand()
+                img = self.apply_corruption(img, aug, r, applied_augs)
             for aug in self.fixed_corruptions:
-                img = self.apply_corruption(img, aug, rand_int_f, applied_augs)
+                r = get_rand()
+                img = self.apply_corruption(img, aug, r, applied_augs)
+                entropy.append(r)
             corrupted_imgs.append(img)
 
-        return corrupted_imgs
+        if return_entropy:
+            return corrupted_imgs, entropy
+        else:
+            return corrupted_imgs
 
-    def apply_corruption(self, img, aug, rand_int, applied_augmentations):
+    def apply_corruption(self, img, aug, rand_val, applied_augmentations):
         if 'color_quantization' in aug:
             # Color quantization
-            quant_div = 2 ** ((rand_int % 3) + 2)
+            quant_div = 2 ** (int(rand_val * 10 / 3) + 2)
             img = img * 255
             img = (img // quant_div) * quant_div
             img = img / 255
         elif 'gaussian_blur' in aug:
-            # Gaussian Blur
-            if aug == 'gaussian_blur_3':
-                kernel = 3
-            elif aug == 'gaussian_blur_5':
-                kernel = 5
-            else:
-                kernel = 2 * self.blur_scale * (rand_int % 3) + 1
-            img = cv2.GaussianBlur(img, (kernel, kernel), 3)
+            img = cv2.GaussianBlur(img, (0,0), rand_val*1.5)
         elif 'motion_blur' in aug:
             # Motion blur
-            intensity = self.blur_scale * (rand_int % 3) + 1
-            angle = (rand_int // 3) % 360
+            intensity = self.blur_scale * rand_val * 3 + 1
+            angle = random.randint(0,360)
             k = np.zeros((intensity, intensity), dtype=np.float32)
             k[(intensity - 1) // 2, :] = np.ones(intensity, dtype=np.float32)
             k = cv2.warpAffine(k, cv2.getRotationMatrix2D((intensity / 2 - 0.5, intensity / 2 - 0.5), angle, 1.0),
                                (intensity, intensity))
             k = k * (1.0 / np.sum(k))
             img = cv2.filter2D(img, -1, k)
-        elif 'smooth_blur' in aug:
-            # Smooth blur
-            kernel = 2 * self.blur_scale * (rand_int % 3) + 1
-            img = cv2.blur(img, ksize=(kernel, kernel))
         elif 'block_noise' in aug:
             # Large distortion blocks in part of an img, such as is used to mask out a face.
             pass
@@ -78,7 +91,7 @@ class ImageCorruptor:
             if 'lq_resampling4x' == aug:
                 scale = 4
             interpolation_modes = [cv2.INTER_NEAREST, cv2.INTER_CUBIC, cv2.INTER_LINEAR, cv2.INTER_LANCZOS4]
-            mode = rand_int % len(interpolation_modes)
+            mode = random.randint(0,4) % len(interpolation_modes)
             # Downsample first, then upsample using the random mode.
             img = cv2.resize(img, dsize=(img.shape[1]//scale, img.shape[0]//scale), interpolation=cv2.INTER_NEAREST)
             img = cv2.resize(img, dsize=(img.shape[1]*scale, img.shape[0]*scale), interpolation=mode)
@@ -96,7 +109,7 @@ class ImageCorruptor:
             if 'noise-5' == aug:
                 noise_intensity = 5 / 255.0
             else:
-                noise_intensity = (rand_int % 4 + 2) / 255.0  # Between 1-4
+                noise_intensity = (rand_val*4 + 2) / 255.0
             img += np.random.randn(*img.shape) * noise_intensity
         elif 'jpeg' in aug:
             if 'noise' not in applied_augmentations and 'noise-5' not in applied_augmentations:
@@ -118,7 +131,7 @@ class ImageCorruptor:
                 else:
                     raise NotImplementedError("specified jpeg corruption doesn't exist")
                 # JPEG compression
-                qf = (rand_int % range + lo)
+                qf = (int((1-rand_val)*range) + lo)
                 # Use PIL to perform a mock compression to a data buffer, then swap back to cv2.
                 img = (img * 255).astype(np.uint8)
                 img = Image.fromarray(img)
@@ -129,7 +142,7 @@ class ImageCorruptor:
                 img = read_img("buffer", jpeg_img_bytes, rgb=True)
         elif 'saturation' in aug:
             # Lightening / saturation
-            saturation = float(rand_int % 10) * .03
+            saturation = rand_val * .3
             img = np.clip(img + saturation, a_max=1, a_min=0)
         elif 'none' not in aug:
             raise NotImplementedError("Augmentation doesn't exist")
