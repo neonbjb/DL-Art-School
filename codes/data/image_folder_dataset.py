@@ -35,6 +35,8 @@ class ImageFolderDataset:
         self.skip_lq = opt_get(opt, ['skip_lq'], False)
         self.disable_flip = opt_get(opt, ['disable_flip'], False)
         self.rgb_n1_to_1 = opt_get(opt, ['rgb_n1_to_1'], False)
+        self.force_square = opt_get(opt, ['force_square'], True)
+        self.fixed_parameters = {k: torch.tensor(v) for k, v in opt_get(opt, ['fixed_parameters'], {}).items()}
         if 'normalize' in opt.keys():
             if opt['normalize'] == 'stylegan2_norm':
                 self.normalize = Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
@@ -44,7 +46,8 @@ class ImageFolderDataset:
                 raise Exception('Unsupported normalize')
         else:
             self.normalize = None
-        assert (self.target_hq_size // self.scale) % self.multiple == 0  # If we dont throw here, we get some really obscure errors.
+        if self.target_hq_size is not None:
+            assert (self.target_hq_size // self.scale) % self.multiple == 0  # If we dont throw here, we get some really obscure errors.
         if not isinstance(self.paths, list):
             self.paths = [self.paths]
             self.weights = [1]
@@ -129,10 +132,10 @@ class ImageFolderDataset:
         if not self.disable_flip and random.random() < .5:
             hq = hq[:, ::-1, :]
 
-        # We must convert the image into a square.
-        h, w, _ = hq.shape
-        dim = min(h, w)
-        hq = hq[(h - dim) // 2:dim + (h - dim) // 2, (w - dim) // 2:dim + (w - dim) // 2, :]
+        if self.force_square:
+            h, w, _ = hq.shape
+            dim = min(h, w)
+            hq = hq[(h - dim) // 2:dim + (h - dim) // 2, (w - dim) // 2:dim + (w - dim) // 2, :]
 
         if self.labeler:
             assert hq.shape[0] == hq.shape[1]  # This just has not been accomodated yet.
@@ -211,6 +214,7 @@ class ImageFolderDataset:
                     v = v * 2 - 1
                 out_dict[k] = v
 
+        out_dict.update(self.fixed_parameters)
         return out_dict
 
 if __name__ == '__main__':

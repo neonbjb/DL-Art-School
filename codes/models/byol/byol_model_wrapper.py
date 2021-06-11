@@ -241,8 +241,8 @@ class BYOL(nn.Module):
         torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
 
     def forward(self, image_one, image_two):
-        image_one = self.aug(image_one)
-        image_two = self.aug(image_two)
+        image_one = self.aug(image_one.clone())
+        image_two = self.aug(image_two.clone())
 
         # Keep copies on hand for visual_dbg.
         self.im1 = image_one.detach().clone()

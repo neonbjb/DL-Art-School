@@ -7,7 +7,7 @@ from trainer.losses import create_loss
 import torch
 from collections import OrderedDict
 from trainer.inject import create_injector
-from utils.util import recursively_detach
+from utils.util import recursively_detach, opt_get
 
 logger = logging.getLogger('base')
 
@@ -53,21 +53,19 @@ class ConfigurableStep(Module):
     #  This default implementation defines a single optimizer for all Generator parameters.
     #  Must be called after networks are initialized and wrapped.
     def define_optimizers(self):
+        opt_configs = opt_get(self.step_opt, ['optimizer_params'], None)
+        self.optimizers = []
+        if opt_configs is None:
+            return
         training = self.step_opt['training']
         training_net = self.get_network_for_name(training)
-        # When only training one network, optimizer params can just embedded in the step params.
-        if 'optimizer_params' not in self.step_opt.keys():
-            opt_configs = [self.step_opt]
-        else:
-            opt_configs = [self.step_opt['optimizer_params']]
         nets = [training_net]
         training = [training]
-        self.optimizers = []
         for net_name, net, opt_config in zip(training, nets, opt_configs):
             # Configs can organize parameters by-group and specify different learning rates for each group. This only
             # works in the model specifically annotates which parameters belong in which group using PARAM_GROUP.
             optim_params = {'default': {'params': [], 'lr': opt_config['lr']}}
-            if 'param_groups' in opt_config.keys():
+            if opt_config is not None and 'param_groups' in opt_config.keys():
                 for k, pg in opt_config['param_groups'].items():
                     optim_params[k] = {'params': [], 'lr': pg['lr']}
 

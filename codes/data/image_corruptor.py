@@ -37,7 +37,10 @@ class ImageCorruptor:
 
     def corrupt_images(self, imgs, return_entropy=False):
         if self.num_corrupts == 0 and not self.fixed_corruptions:
-            return imgs
+            if return_entropy:
+                return imgs, []
+            else:
+                return imgs
 
         if self.num_corrupts == 0:
             augmentations = []

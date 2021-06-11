@@ -159,7 +159,8 @@ class ExtensibleTrainer(BaseModel):
         self.batch_factor = self.mega_batch_factor
         self.opt['checkpointing_enabled'] = self.checkpointing_cache
         # The batch factor can be adjusted on a period to allow known high-memory steps to fit in GPU memory.
-        if 'mod_batch_factor' in self.opt['train'].keys() and \
+        if 'train' in self.opt.keys() and \
+                'mod_batch_factor' in self.opt['train'].keys() and \
                 self.env['step'] % self.opt['train']['mod_batch_factor_every'] == 0:
             self.batch_factor = self.opt['train']['mod_batch_factor']
             if self.opt['train']['mod_batch_factor_also_disable_checkpointing']:
@@ -350,8 +351,7 @@ class ExtensibleTrainer(BaseModel):
 
     def get_current_visuals(self, need_GT=True):
         # Conforms to an archaic format from MMSR.
-        res = {'lq': self.eval_state['lq'][0].float().cpu(),
-               'rlt': self.eval_state[self.opt['eval']['output_state']][0].float().cpu()}
+        res = {'rlt': self.eval_state[self.opt['eval']['output_state']][0].float().cpu()}
         if 'hq' in self.eval_state.keys():
             res['hq'] = self.eval_state['hq'][0].float().cpu(),
         return res

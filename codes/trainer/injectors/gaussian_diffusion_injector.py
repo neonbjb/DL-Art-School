@@ -40,7 +40,9 @@ class GaussianDiffusionInferenceInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
         self.generator = opt['generator']
-        self.output_shape = opt['output_shape']
+        self.output_batch_size = opt['output_batch_size']
+        self.output_scale_factor = opt['output_scale_factor']
+        self.undo_n1_to_1 = opt_get(opt, ['undo_n1_to_1'], False)  # Explanation: when specified, will shift the output of this injector from [-1,1] to [0,1]
         opt['diffusion_args']['betas'] = get_named_beta_schedule(**opt['beta_schedule'])
         opt['diffusion_args']['use_timesteps'] = space_timesteps(opt['beta_schedule']['num_diffusion_timesteps'],
                                                                  [opt_get(opt, ['respaced_timestep_spacing'], opt['beta_schedule']['num_diffusion_timesteps'])])
@@ -49,9 +51,12 @@ class GaussianDiffusionInferenceInjector(Injector):
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
-        batch_size = self.output_shape[0]
-        model_inputs = {k: state[v][:batch_size] for k, v in self.model_input_keys.items()}
+        model_inputs = {k: state[v][:self.output_batch_size] for k, v in self.model_input_keys.items()}
         gen.eval()
         with torch.no_grad():
-            gen = self.diffusion.p_sample_loop(gen, self.output_shape, model_kwargs=model_inputs)
+            output_shape = (self.output_batch_size, 3, model_inputs['low_res'].shape[-2] * self.output_scale_factor,
+                            model_inputs['low_res'].shape[-1] * self.output_scale_factor)
+            gen = self.diffusion.p_sample_loop(gen, output_shape, model_kwargs=model_inputs)
+            if self.undo_n1_to_1:
+                gen = (gen + 1) / 2
             return {self.output: gen}

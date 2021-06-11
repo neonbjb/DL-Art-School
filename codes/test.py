@@ -1,5 +1,6 @@
 import os.path as osp
 import logging
+import random
 import time
 import argparse
 from collections import OrderedDict
@@ -11,9 +12,10 @@ from trainer.ExtensibleTrainer import ExtensibleTrainer
 from data import create_dataset, create_dataloader
 from tqdm import tqdm
 import torch
+import numpy as np
 
 
-def forward_pass(model, output_dir, opt):
+def forward_pass(model, data, output_dir, opt):
     alteration_suffix = util.opt_get(opt, ['name'], '')
     denorm_range = tuple(util.opt_get(opt, ['image_normalization_range'], [0, 1]))
     model.feed_data(data, 0, need_GT=need_GT)
@@ -47,11 +49,16 @@ def forward_pass(model, output_dir, opt):
 
 
 if __name__ == "__main__":
+    # Set seeds
+    torch.manual_seed(5555)
+    random.seed(5555)
+    np.random.seed(5555)
+
     #### options
     torch.backends.cudnn.benchmark = True
     want_metrics = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_cats_stylegan2_rosinality.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_diffusion_unet.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
@@ -93,7 +100,7 @@ if __name__ == "__main__":
             need_GT = False if test_loader.dataset.opt['dataroot_GT'] is None else True
             need_GT = need_GT and want_metrics
 
-            fea_loss, psnr_loss = forward_pass(model, dataset_dir, opt)
+            fea_loss, psnr_loss = forward_pass(model, data, dataset_dir, opt)
             fea_loss += fea_loss
             psnr_loss += psnr_loss
 
