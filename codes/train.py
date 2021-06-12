@@ -241,10 +241,6 @@ class Trainer:
                             sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
                             avg_psnr += util.calculate_psnr(sr_img, gt_img)
 
-                        # calculate fea loss
-                        if self.val_compute_fea:
-                            avg_fea_loss += self.model.compute_fea_loss(visuals['rlt'][b], visuals['hq'][b])
-
                         # Save SR images for reference
                         img_base_name = '{:s}_{:d}.png'.format(img_name, self.current_step)
                         save_img_path = os.path.join(img_dir, img_base_name)

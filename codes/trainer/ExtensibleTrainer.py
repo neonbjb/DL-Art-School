@@ -46,8 +46,6 @@ class ExtensibleTrainer(BaseModel):
 
         self.netsG = {}
         self.netsD = {}
-        # Note that this is on the chopping block. It should be integrated into an injection point.
-        self.netF = networks.define_F().to(self.device)  # Used to compute feature loss.
         for name, net in opt['networks'].items():
             # Trainable is a required parameter, but the default is simply true. Set it here.
             if 'trainable' not in net.keys():
@@ -124,8 +122,6 @@ class ExtensibleTrainer(BaseModel):
             else:
                 dnet.eval()
             dnets.append(dnet)
-        if not opt['dist']:
-            self.netF = DataParallel(self.netF, device_ids=opt['gpu_ids'])
 
         # Backpush the wrapped networks into the network dicts..
         self.networks = {}
@@ -289,12 +285,6 @@ class ExtensibleTrainer(BaseModel):
                     model_vdbg_dir = os.path.join(sample_save_path, net_name)
                     os.makedirs(model_vdbg_dir, exist_ok=True)
                     net.module.visual_dbg(step, model_vdbg_dir)
-
-    def compute_fea_loss(self, real, fake):
-        with torch.no_grad():
-            logits_real = self.netF(real.to(self.device))
-            logits_fake = self.netF(fake.to(self.device))
-        return nn.L1Loss().to(self.device)(logits_fake, logits_real)
 
     def test(self):
         for net in self.netsG.values():

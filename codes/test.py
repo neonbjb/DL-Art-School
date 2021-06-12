@@ -18,8 +18,9 @@ import numpy as np
 def forward_pass(model, data, output_dir, opt):
     alteration_suffix = util.opt_get(opt, ['name'], '')
     denorm_range = tuple(util.opt_get(opt, ['image_normalization_range'], [0, 1]))
-    model.feed_data(data, 0, need_GT=need_GT)
-    model.test()
+    with torch.no_grad():
+        model.feed_data(data, 0, need_GT=need_GT)
+        model.test()
 
     visuals = model.get_current_visuals(need_GT)['rlt'].cpu()
     visuals = (visuals - denorm_range[0]) / (denorm_range[1]-denorm_range[0])
@@ -39,7 +40,6 @@ def forward_pass(model, data, output_dir, opt):
             save_img_path = osp.join(output_dir, img_name + '.png')
 
         if need_GT:
-            fea_loss += model.compute_fea_loss(visuals[i], data['hq'][i])
             psnr_sr = util.tensor2img(visuals[i])
             psnr_gt = util.tensor2img(data['hq'][i])
             psnr_loss += util.calculate_psnr(psnr_sr, psnr_gt)
