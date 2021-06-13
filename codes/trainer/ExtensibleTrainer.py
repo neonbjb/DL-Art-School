@@ -231,7 +231,7 @@ class ExtensibleTrainer(BaseModel):
             # Now do a forward and backward pass for each gradient accumulation step.
             new_states = {}
             for m in range(self.batch_factor):
-                ns = s.do_forward_backward(state, m, step_num, train=train_step)
+                ns = s.do_forward_backward(state, m, step_num, train=train_step, no_ddp_sync=(m+1 < self.batch_factor))
                 for k, v in ns.items():
                     if k not in new_states.keys():
                         new_states[k] = [v]
