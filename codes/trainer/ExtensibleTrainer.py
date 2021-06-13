@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 
@@ -42,6 +43,7 @@ class ExtensibleTrainer(BaseModel):
             self.mega_batch_factor = train_opt['mega_batch_factor']
             self.env['mega_batch_factor'] = self.mega_batch_factor
             self.batch_factor = self.mega_batch_factor
+            self.ema_rate = opt_get(train_opt, ['ema_rate'], .999)
         self.checkpointing_cache = opt['checkpointing_enabled']
 
         self.netsG = {}
@@ -123,8 +125,9 @@ class ExtensibleTrainer(BaseModel):
                 dnet.eval()
             dnets.append(dnet)
 
-        # Backpush the wrapped networks into the network dicts..
+        # Backpush the wrapped networks into the network dicts. Also build the EMA parameters.
         self.networks = {}
+        self.emas = {}
         found = 0
         for dnet in dnets:
             for net_dict in [self.netsD, self.netsG]:
@@ -132,6 +135,8 @@ class ExtensibleTrainer(BaseModel):
                     if v == dnet.module:
                         net_dict[k] = dnet
                         self.networks[k] = dnet
+                        if self.is_train:
+                            self.emas[k] = copy.deepcopy(v)
                         found += 1
         assert found == len(self.netsG) + len(self.netsD)
 
@@ -140,7 +145,7 @@ class ExtensibleTrainer(BaseModel):
         self.env['discriminators'] = self.netsD
 
         self.print_network()  # print network
-        self.load()  # load G and D if needed
+        self.load()  # load networks from save states as needed
 
         # Load experiments
         self.experiments = []
@@ -248,11 +253,16 @@ class ExtensibleTrainer(BaseModel):
                 # And finally perform optimization.
                 [e.before_optimize(state) for e in self.experiments]
                 s.do_step(step)
-                # Some networks have custom steps, for example EMA
-                for net in self.networks:
+                # Call into custom step hooks as well as update EMA params.
+                for name, net in self.networks.items():
                     if hasattr(net, "custom_optimizer_step"):
                         net.custom_optimizer_step(step)
+                    ema_params = self.emas[name].parameters()
+                    net_params = net.parameters()
+                    for ep, np in zip(ema_params, net_params):
+                        ep.detach().mul_(self.ema_rate).add_(np, alpha=1 - self.ema_rate)
                 [e.after_optimize(state) for e in self.experiments]
+
 
         # Record visual outputs for usage in debugging and testing.
         if 'visuals' in self.opt['logger'].keys() and self.rank <= 0 and step % self.opt['logger']['visual_debug_rate'] == 0:
@@ -360,10 +370,19 @@ class ExtensibleTrainer(BaseModel):
                 if not self.opt['networks'][name]['trainable']:
                     continue
                 load_path = self.opt['path']['pretrain_model_%s' % (name,)]
-                if load_path is not None:
-                    if self.rank <= 0:
-                        logger.info('Loading model for [%s]' % (load_path,))
-                    self.load_network(load_path, net, self.opt['path']['strict_load'], opt_get(self.opt, ['path', f'pretrain_base_path_{name}']))
+                if load_path is None:
+                    return
+                if self.rank <= 0:
+                    logger.info('Loading model for [%s]' % (load_path,))
+                self.load_network(load_path, net, self.opt['path']['strict_load'], opt_get(self.opt, ['path', f'pretrain_base_path_{name}']))
+                load_path_ema = load_path.replace('.pth', '_ema.pth')
+                if self.is_train:
+                    ema_model = self.emas[name]
+                    if os.path.exists(load_path_ema):
+                        self.load_network(load_path_ema, ema_model, self.opt['path']['strict_load'], opt_get(self.opt, ['path', f'pretrain_base_path_{name}']))
+                    else:
+                        print("WARNING! Unable to find EMA network! Starting a new EMA from given model parameters.")
+                        self.emas[name] = copy.deepcopy(net)
                 if hasattr(net.module, 'network_loaded'):
                     net.module.network_loaded()
 
@@ -372,6 +391,7 @@ class ExtensibleTrainer(BaseModel):
             # Don't save non-trainable networks.
             if self.opt['networks'][name]['trainable']:
                 self.save_network(net, name, iter_step)
+                self.save_network(self.emas[name], f'{name}_ema', iter_step)
 
     def force_restore_swapout(self):
         # Legacy method. Do nothing.

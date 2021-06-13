@@ -53,9 +53,9 @@ class ConfigurableStep(Module):
     #  This default implementation defines a single optimizer for all Generator parameters.
     #  Must be called after networks are initialized and wrapped.
     def define_optimizers(self):
-        opt_configs = opt_get(self.step_opt, ['optimizer_params'], None)
+        opt_configs = [opt_get(self.step_opt, ['optimizer_params'], None)]
         self.optimizers = []
-        if opt_configs is None:
+        if opt_configs[0] is None:
             return
         training = self.step_opt['training']
         training_net = self.get_network_for_name(training)

@@ -151,4 +151,5 @@ class BaseModel():
         for i, s in enumerate(resume_schedulers):
             self.schedulers[i].load_state_dict(s)
         if load_amp and 'amp' in resume_state.keys():
+            from apex import amp
             amp.load_state_dict(resume_state['amp'])
