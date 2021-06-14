@@ -7,11 +7,11 @@ import sys
 
 
 class Evaluator:
-    def __init__(self, model, opt_eval, env):
+    def __init__(self, model, opt_eval, env, uses_all_ddp=True):
         self.model = model.module if hasattr(model, 'module') else model
         self.opt = opt_eval
         self.env = env
-        self.uses_all_ddp = opt_get(opt_eval, ['uses_all_ddp'], True)
+        self.uses_all_ddp = uses_all_ddp
 
     def perform_eval(self):
         return {}

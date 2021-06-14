@@ -13,7 +13,7 @@ from utils.util import opt_get
 
 class CategorizationLossEvaluator(evaluator.Evaluator):
     def __init__(self, model, opt_eval, env):
-        super().__init__(model, opt_eval, env)
+        super().__init__(model, opt_eval, env, uses_all_ddp=False)
         self.batch_sz = opt_eval['batch_size']
         assert self.batch_sz is not None
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],

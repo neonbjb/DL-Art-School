@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 # generator might make from the source image.
 class SrFidEvaluator(evaluator.Evaluator):
     def __init__(self, model, opt_eval, env):
-        super().__init__(model, opt_eval, env)
+        super().__init__(model, opt_eval, env, uses_all_ddp=False)
         self.batch_sz = opt_eval['batch_size']
         assert self.batch_sz is not None
         self.dataset = create_dataset(opt_eval['dataset'])

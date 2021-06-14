@@ -16,7 +16,7 @@ from data.stylegan2_dataset import Stylegan2Dataset
 
 class SrStyleTransferEvaluator(evaluator.Evaluator):
     def __init__(self, model, opt_eval, env):
-        super().__init__(model, opt_eval, env)
+        super().__init__(model, opt_eval, env, uses_all_ddp=False)
         self.batches_per_eval = opt_eval['batches_per_eval']
         self.batch_sz = opt_eval['batch_size']
         self.im_sz = opt_eval['image_size']

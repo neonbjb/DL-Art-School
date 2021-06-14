@@ -11,7 +11,7 @@ from models.srflow.flow import GaussianDiag
 
 class FlowGaussianNll(evaluator.Evaluator):
     def __init__(self, model, opt_eval, env):
-        super().__init__(model, opt_eval, env)
+        super().__init__(model, opt_eval, env, uses_all_ddp=False)
         self.batch_sz = opt_eval['batch_size']
         self.dataset = ImageFolderDataset(opt_eval['dataset'])
         self.dataloader = DataLoader(self.dataset, self.batch_sz)

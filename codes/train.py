@@ -260,7 +260,7 @@ class Trainer:
         if len(self.evaluators) != 0 and self.current_step % opt['train']['val_freq'] == 0:
             eval_dict = {}
             for eval in self.evaluators:
-                if eval.uses_all_ddp() or self.rank <= 0:
+                if eval.uses_all_ddp or self.rank <= 0:
                     eval_dict.update(eval.perform_eval())
             if self.rank <= 0:
                 print("Evaluator results: ", eval_dict)

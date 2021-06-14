@@ -20,7 +20,7 @@ from utils.util import opt_get
 # dissimilar points remain constant or get further apart.
 class SinglePointPairContrastiveEval(evaluator.Evaluator):
     def __init__(self, model, opt_eval, env):
-        super().__init__(model, opt_eval, env)
+        super().__init__(model, opt_eval, env, uses_all_ddp=False)
         self.batch_sz = opt_eval['batch_size']
         self.eval_qty = opt_eval['quantity']
         assert self.eval_qty % self.batch_sz == 0

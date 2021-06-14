@@ -10,7 +10,7 @@ from utils.util import opt_get
 # Evaluator that generates uniform noise to feed into a generator, then calculates a FID score on the results.
 class StyleTransferEvaluator(evaluator.Evaluator):
     def __init__(self, model, opt_eval, env):
-        super().__init__(model, opt_eval, env)
+        super().__init__(model, opt_eval, env, uses_all_ddp=False)
         self.batches_per_eval = opt_eval['batches_per_eval']
         self.batch_sz = opt_eval['batch_size']
         self.im_sz = opt_eval['image_size']
