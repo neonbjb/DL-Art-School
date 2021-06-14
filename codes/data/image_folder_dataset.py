@@ -124,6 +124,9 @@ class ImageFolderDataset:
             ls, ent = self.corruptor.corrupt_images(ls, return_entropy=True)
         return ls, ent
 
+    def reset_random(self):
+        self.corruptor.reset_random()
+
     def __len__(self):
         return self.len
 

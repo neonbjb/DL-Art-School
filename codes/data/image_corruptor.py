@@ -8,12 +8,6 @@ from PIL import Image
 from io import BytesIO
 
 
-# Feeds a random uniform through a cosine distribution to slightly bias corruptions towards "uncorrupted".
-# Return is on [0,1] with a bias towards 0.
-def get_rand():
-    r = random.random()
-    return 1 - cos(r * pi / 2)
-
 # Get a rough visualization of the above distribution. (Y-axis is meaningless, just spreads data)
 '''
 if __name__ == '__main__':
@@ -28,12 +22,26 @@ if __name__ == '__main__':
 # options.
 class ImageCorruptor:
     def __init__(self, opt):
+        self.opt = opt
         self.blur_scale = opt['corruption_blur_scale'] if 'corruption_blur_scale' in opt.keys() else 1
         self.fixed_corruptions = opt['fixed_corruptions'] if 'fixed_corruptions' in opt.keys() else []
         self.num_corrupts = opt['num_corrupts_per_image'] if 'num_corrupts_per_image' in opt.keys() else 0
         if self.num_corrupts == 0:
             return
         self.random_corruptions = opt['random_corruptions'] if 'random_corruptions' in opt.keys() else []
+        self.reset_random()
+
+    def reset_random(self):
+        if 'random_seed' in self.opt.keys():
+            self.rand = random.Random(self.opt['random_seed'])
+        else:
+            self.rand = random.Random()
+
+    # Feeds a random uniform through a cosine distribution to slightly bias corruptions towards "uncorrupted".
+    # Return is on [0,1] with a bias towards 0.
+    def get_rand(self):
+        r = self.rand.random()
+        return 1 - cos(r * pi / 2)
 
     def corrupt_images(self, imgs, return_entropy=False):
         if self.num_corrupts == 0 and not self.fixed_corruptions:
@@ -53,10 +61,10 @@ class ImageCorruptor:
         applied_augs = augmentations + self.fixed_corruptions
         for img in imgs:
             for aug in augmentations:
-                r = get_rand()
+                r = self.get_rand()
                 img = self.apply_corruption(img, aug, r, applied_augs)
             for aug in self.fixed_corruptions:
-                r = get_rand()
+                r = self.get_rand()
                 img = self.apply_corruption(img, aug, r, applied_augs)
                 entropy.append(r)
             corrupted_imgs.append(img)
