@@ -143,6 +143,7 @@ class ExtensibleTrainer(BaseModel):
         # Replace the env networks with the wrapped networks
         self.env['generators'] = self.netsG
         self.env['discriminators'] = self.netsD
+        self.env['emas'] = self.emas
 
         self.print_network()  # print network
         self.load()  # load networks from save states as needed

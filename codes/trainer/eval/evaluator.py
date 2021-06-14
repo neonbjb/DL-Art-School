@@ -17,7 +17,7 @@ class Evaluator:
 
 
 def format_evaluator_name(name):
-    # Formats by converting from CamelCase to snake_case and removing trailing "_injector"
+    # Formats by converting from CamelCase to snake_case and removing trailing "_evaluator"
     name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
     name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
     return name.replace("_evaluator", "")

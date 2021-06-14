@@ -48,9 +48,13 @@ class GaussianDiffusionInferenceInjector(Injector):
                                                                  [opt_get(opt, ['respaced_timestep_spacing'], opt['beta_schedule']['num_diffusion_timesteps'])])
         self.diffusion = SpacedDiffusion(**opt['diffusion_args'])
         self.model_input_keys = opt_get(opt, ['model_input_keys'], [])
+        self.use_ema_model = opt_get(opt, ['use_ema'], False)
 
     def forward(self, state):
-        gen = self.env['generators'][self.opt['generator']]
+        if self.use_ema_model:
+            gen = self.env['emas'][self.opt['generator']]
+        else:
+            gen = self.env['generators'][self.opt['generator']]
         model_inputs = {k: state[v][:self.output_batch_size] for k, v in self.model_input_keys.items()}
         gen.eval()
         with torch.no_grad():
