@@ -11,6 +11,7 @@ class Evaluator:
         self.model = model.module if hasattr(model, 'module') else model
         self.opt = opt_eval
         self.env = env
+        self.uses_all_ddp = opt_get(opt_eval, ['uses_all_ddp'], True)
 
     def perform_eval(self):
         return {}
