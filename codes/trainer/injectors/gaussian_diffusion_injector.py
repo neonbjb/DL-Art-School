@@ -39,16 +39,22 @@ class GaussianDiffusionInjector(Injector):
 class GaussianDiffusionInferenceInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
+        use_ddim = opt_get(opt, ['use_ddim'], False)
         self.generator = opt['generator']
         self.output_batch_size = opt['output_batch_size']
         self.output_scale_factor = opt['output_scale_factor']
         self.undo_n1_to_1 = opt_get(opt, ['undo_n1_to_1'], False)  # Explanation: when specified, will shift the output of this injector from [-1,1] to [0,1]
         opt['diffusion_args']['betas'] = get_named_beta_schedule(**opt['beta_schedule'])
-        opt['diffusion_args']['use_timesteps'] = space_timesteps(opt['beta_schedule']['num_diffusion_timesteps'],
-                                                                 [opt_get(opt, ['respaced_timestep_spacing'], opt['beta_schedule']['num_diffusion_timesteps'])])
+        if use_ddim:
+            spacing = "ddim" + str(opt['respaced_timestep_spacing'])
+        else:
+            spacing = [opt_get(opt, ['respaced_timestep_spacing'], opt['beta_schedule']['num_diffusion_timesteps'])]
+        opt['diffusion_args']['use_timesteps'] = space_timesteps(opt['beta_schedule']['num_diffusion_timesteps'], spacing)
         self.diffusion = SpacedDiffusion(**opt['diffusion_args'])
+        self.sampling_fn = self.diffusion.ddim_sample_loop if use_ddim else self.diffusion.p_sample_loop
         self.model_input_keys = opt_get(opt, ['model_input_keys'], [])
         self.use_ema_model = opt_get(opt, ['use_ema'], False)
+        self.zero_noise = opt_get(opt, ['zero_noise'], False)
 
     def forward(self, state):
         if self.use_ema_model:
@@ -60,7 +66,8 @@ class GaussianDiffusionInferenceInjector(Injector):
         with torch.no_grad():
             output_shape = (self.output_batch_size, 3, model_inputs['low_res'].shape[-2] * self.output_scale_factor,
                             model_inputs['low_res'].shape[-1] * self.output_scale_factor)
-            gen = self.diffusion.p_sample_loop(gen, output_shape, model_kwargs=model_inputs)
+            noise = torch.zeros(output_shape, device=model_inputs['low_res'].device) if self.zero_noise else None
+            gen = self.sampling_fn(gen, output_shape, noise=noise, model_kwargs=model_inputs, progress=True)
             if self.undo_n1_to_1:
                 gen = (gen + 1) / 2
             return {self.output: gen}
