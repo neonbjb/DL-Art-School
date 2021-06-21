@@ -173,12 +173,18 @@ class RRDBNet(nn.Module):
                 default_init_weights(m, 1.0)
         default_init_weights(self.conv_last, 0)
 
-    def forward(self, x, timesteps, low_res=None):
+    def forward(self, x, timesteps, low_res, correction_factors=None):
         emb = self.time_embed(timestep_embedding(timesteps, self.mid_channels))
 
         _, _, new_height, new_width = x.shape
         upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
         x = torch.cat([x, upsampled], dim=1)
+
+        if correction_factors is not None:
+            correction_factors = correction_factors.view(x.shape[0], -1, 1, 1).repeat(1, 1, new_height, new_width)
+        else:
+            correction_factors = torch.zeros((b, self.num_corruptions, new_height, new_width), dtype=torch.float, device=x.device)
+        x = torch.cat([x, correction_factors], dim=1)
 
         d1 = self.input_block(x)
         d2 = self.down1(d1)

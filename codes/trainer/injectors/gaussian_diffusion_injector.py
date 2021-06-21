@@ -54,7 +54,7 @@ class GaussianDiffusionInferenceInjector(Injector):
         self.sampling_fn = self.diffusion.ddim_sample_loop if use_ddim else self.diffusion.p_sample_loop
         self.model_input_keys = opt_get(opt, ['model_input_keys'], [])
         self.use_ema_model = opt_get(opt, ['use_ema'], False)
-        self.zero_noise = opt_get(opt, ['zero_noise'], False)
+        self.noise_style = opt_get(opt, ['noise_type'], 'random')  # 'zero', 'fixed' or 'random'
 
     def forward(self, state):
         if self.use_ema_model:
@@ -66,7 +66,13 @@ class GaussianDiffusionInferenceInjector(Injector):
         with torch.no_grad():
             output_shape = (self.output_batch_size, 3, model_inputs['low_res'].shape[-2] * self.output_scale_factor,
                             model_inputs['low_res'].shape[-1] * self.output_scale_factor)
-            noise = torch.zeros(output_shape, device=model_inputs['low_res'].device) if self.zero_noise else None
+            noise = None
+            if self.noise_style == 'zero':
+                noise = torch.zeros(output_shape, device=model_inputs['low_res'].device)
+            elif self.noise_style == 'fixed':
+                if not hasattr(self, 'fixed_noise') or self.fixed_noise.shape != output_shape:
+                    self.fixed_noise = torch.randn(output_shape, device=model_inputs['low_res'].device)
+                noise = self.fixed_noise
             gen = self.sampling_fn(gen, output_shape, noise=noise, model_kwargs=model_inputs, progress=True)
             if self.undo_n1_to_1:
                 gen = (gen + 1) / 2

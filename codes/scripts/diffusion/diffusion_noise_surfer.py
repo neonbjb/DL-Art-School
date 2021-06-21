@@ -75,7 +75,7 @@ if __name__ == "__main__":
         im = im[:,dh:-dh]
     if dw > 0:
         im = im[:,:,dw:-dw]
-    im = im.unsqueeze(0)
+    im = im[:3].unsqueeze(0)
 
     # Build the corruption indexes we are going to use.
     correction_factors = opt['correction_factor']
