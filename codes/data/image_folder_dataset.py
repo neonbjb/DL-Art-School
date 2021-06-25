@@ -1,3 +1,4 @@
+import functools
 import glob
 import itertools
 import random
@@ -11,7 +12,7 @@ import os
 
 import torchvision
 from torch.utils.data import DataLoader
-from torchvision.transforms import Normalize
+from torchvision.transforms import Normalize, CenterCrop
 from tqdm import tqdm
 
 from data import util
@@ -21,10 +22,19 @@ from data.image_label_parser import VsNetImageLabeler
 from utils.util import opt_get
 
 
+def ndarray_center_crop(crop, img):
+    y, x, c = img.shape
+    startx = x // 2 - crop // 2
+    starty = y // 2 - crop // 2
+    return img[starty:starty + crop, startx:startx + crop, :]
+
+
 class ImageFolderDataset:
     def __init__(self, opt):
         self.opt = opt
         self.corruptor = ImageCorruptor(opt)
+        if 'center_crop_hq_sz' in opt.keys():
+            self.center_crop = functools.partial(ndarray_center_crop, opt['center_crop_hq_sz'])
         self.target_hq_size = opt['target_size'] if 'target_size' in opt.keys() else None
         self.multiple = opt['force_multiple'] if 'force_multiple' in opt.keys() else 1
         self.scale = opt['scale']
@@ -132,6 +142,8 @@ class ImageFolderDataset:
 
     def __getitem__(self, item):
         hq = util.read_img(None, self.image_paths[item], rgb=True)
+        if hasattr(self, 'center_crop'):
+            hq = self.center_crop(hq)
         if not self.disable_flip and random.random() < .5:
             hq = hq[:, ::-1, :]
 
@@ -223,25 +235,41 @@ class ImageFolderDataset:
 if __name__ == '__main__':
     opt = {
         'name': 'amalgam',
-        'paths': ['E:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_256_full'],
+        'paths': ['E:\\4k6k\\datasets\\ns_images\\imagesets\\256_only_humans_masked'],
         'weights': [1],
         'target_size': 256,
-        'force_multiple': 1,
         'scale': 2,
         'corrupt_before_downsize': True,
         'fetch_alt_image': False,
         'disable_flip': True,
-        'fixed_corruptions': [ 'jpeg-broad', 'gaussian_blur' ],
+        'fixed_corruptions': [ 'jpeg-medium' ],
         'num_corrupts_per_image': 0,
         'corruption_blur_scale': 0
     }
 
-    ds = DataLoader(ImageFolderDataset(opt), shuffle=True, num_workers=0)
+    ds = DataLoader(ImageFolderDataset(opt), shuffle=True, num_workers=4, batch_size=64)
     import os
-    output_path = 'E:\\4k6k\\datasets\\ns_images\\128_unsupervised'
+    output_path = 'F:\\tmp'
     os.makedirs(output_path, exist_ok=True)
+    res = []
     for i, d in tqdm(enumerate(ds)):
-        lq = d['lq']
-        #torchvision.utils.save_image(lq[:,:,16:-16,:], f'{output_path}\\{i+500000}.png')
+        '''
+        x = d['hq']
+        b,c,h,w = x.shape
+        x_c = x.view(c*b, h, w)
+        x_c = torch.view_as_real(torch.fft.rfft(x_c))
+        # Log-normalize spectrogram
+        x_c = (x_c.abs() ** 2).clip(min=1e-8, max=1e16)
+        x_c = torch.log(x_c)
+        res.append(x_c)
+        if i % 100 == 99:
+            stacked = torch.cat(res, dim=0)
+            print(stacked.mean(dim=[0,1,2]), stacked.std(dim=[0,1,2]))
+        '''
+
+        for k, v in d.items():
+            if isinstance(v, torch.Tensor) and len(v.shape) >= 3:
+                os.makedirs(f'{output_path}\\{k}', exist_ok=True)
+                torchvision.utils.save_image(v, f'{output_path}\\{k}\\{i}.png')
         if i >= 200000:
             break

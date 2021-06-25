@@ -4,25 +4,28 @@ import time
 import argparse
 
 import os
+
+from torchvision.transforms import CenterCrop
+
+from trainer.ExtensibleTrainer import ExtensibleTrainer
 from utils import options as option
 import utils.util as util
 from data import create_dataset, create_dataloader
-from models import create_model
 from tqdm import tqdm
 import torch
 import torchvision
 
 
 if __name__ == "__main__":
-    bin_path = "f:\\binned"
-    good_path = "f:\\good"
+    bin_path = "f:\\tmp\\binned"
+    good_path = "f:\\tmp\\good"
     os.makedirs(bin_path, exist_ok=True)
     os.makedirs(good_path, exist_ok=True)
 
 
     torch.backends.cudnn.benchmark = True
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../../options/discriminator_filter.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/train_quality_detectors/train_resnet_jpeg.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     opt['dist'] = False
@@ -43,7 +46,7 @@ if __name__ == "__main__":
         logger.info('Number of test images in [{:s}]: {:d}'.format(dataset_opt['name'], len(test_set)))
         test_loaders.append(test_loader)
 
-    model = create_model(opt)
+    model = ExtensibleTrainer(opt)
     fea_loss = 0
     for test_loader in test_loaders:
         test_set_name = test_loader.dataset.opt['name']
@@ -55,19 +58,17 @@ if __name__ == "__main__":
         tq = tqdm(test_loader)
         removed = 0
         means = []
-        dataset_mean = -7.133
-        for data in tq:
-            model.feed_data(data, need_GT=True)
+        for k, data in enumerate(tq):
+            model.feed_data(data, k)
             model.test()
-            results = model.eval_state['discriminator_out'][0]
-            means.append(torch.mean(results).item())
-            print(sum(means)/len(means), torch.mean(results), torch.max(results), torch.min(results))
+            results = torch.argmax(torch.nn.functional.softmax(model.eval_state['logits'][0], dim=-1), dim=1)
             for i in range(results.shape[0]):
-                #if results[i] < .8:
-                #    os.remove(data['GT_path'][i])
-                #    removed += 1
-                imname = osp.basename(data['GT_path'][i])
-                if results[i]-dataset_mean > 1:
-                    torchvision.utils.save_image(data['hq'][i], osp.join(bin_path, imname))
+                if results[i] == 0:
+                    imname = osp.basename(data['HQ_path'][i])
+                    # For VERIFICATION:
+                    #torchvision.utils.save_image(data['hq'][i], osp.join(bin_path, imname))
+                    # 4 REALZ:
+                    os.remove(data['HQ_path'][i])
+                    removed += 1
 
         print("Removed %i/%i images" % (removed, len(test_set)))

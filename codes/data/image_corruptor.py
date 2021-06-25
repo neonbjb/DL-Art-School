@@ -9,6 +9,8 @@ from io import BytesIO
 
 
 # Get a rough visualization of the above distribution. (Y-axis is meaningless, just spreads data)
+from utils.util import opt_get
+
 '''
 if __name__ == '__main__':
     import numpy as np
@@ -23,13 +25,15 @@ if __name__ == '__main__':
 class ImageCorruptor:
     def __init__(self, opt):
         self.opt = opt
+        self.reset_random()
         self.blur_scale = opt['corruption_blur_scale'] if 'corruption_blur_scale' in opt.keys() else 1
         self.fixed_corruptions = opt['fixed_corruptions'] if 'fixed_corruptions' in opt.keys() else []
         self.num_corrupts = opt['num_corrupts_per_image'] if 'num_corrupts_per_image' in opt.keys() else 0
+        self.cosine_bias = opt_get(opt, ['cosine_bias'], True)
         if self.num_corrupts == 0:
             return
-        self.random_corruptions = opt['random_corruptions'] if 'random_corruptions' in opt.keys() else []
-        self.reset_random()
+        else:
+            self.random_corruptions = opt['random_corruptions'] if 'random_corruptions' in opt.keys() else []
 
     def reset_random(self):
         if 'random_seed' in self.opt.keys():
@@ -41,7 +45,10 @@ class ImageCorruptor:
     # Return is on [0,1] with a bias towards 0.
     def get_rand(self):
         r = self.rand.random()
-        return 1 - cos(r * pi / 2)
+        if self.cosine_bias:
+            return 1 - cos(r * pi / 2)
+        else:
+            return r
 
     def corrupt_images(self, imgs, return_entropy=False):
         if self.num_corrupts == 0 and not self.fixed_corruptions:
@@ -82,10 +89,10 @@ class ImageCorruptor:
             img = (img // quant_div) * quant_div
             img = img / 255
         elif 'gaussian_blur' in aug:
-            img = cv2.GaussianBlur(img, (0,0), rand_val*1.5)
+            img = cv2.GaussianBlur(img, (0,0), self.blur_scale*rand_val*1.5)
         elif 'motion_blur' in aug:
             # Motion blur
-            intensity = self.blur_scale * rand_val * 3 + 1
+            intensity = self.blur_scale*rand_val * 3 + 1
             angle = random.randint(0,360)
             k = np.zeros((intensity, intensity), dtype=np.float32)
             k[(intensity - 1) // 2, :] = np.ones(intensity, dtype=np.float32)

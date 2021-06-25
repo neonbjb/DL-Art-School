@@ -13,14 +13,14 @@ import torch
 def main():
     split_img = False
     opt = {}
-    opt['n_thread'] = 4
-    opt['compression_level'] = 90  # JPEG compression quality rating.
+    opt['n_thread'] = 8
+    opt['compression_level'] = 95  # JPEG compression quality rating.
     # CV_IMWRITE_PNG_COMPRESSION from 0 to 9. A higher value means a smaller size and longer
     # compression time. If read raw images during training, use 0 for faster IO speed.
 
     opt['dest'] = 'file'
-    opt['input_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'
-    opt['save_folder'] = 'F:\\4k6k\\datasets\\ns_images\\imagesets\\256_with_ref_v5'
+    opt['input_folder'] = 'E:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new'
+    opt['save_folder'] = 'E:\\4k6k\\datasets\\ns_images\\imagesets\\256_only_humans_masked_pt2'
     opt['crop_sz'] = [256, 512]  # the size of each sub-image
     opt['step'] = [256, 512]  # step of the sliding crop window
     opt['exclusions'] = [[],[]] # image names matching these terms wont be included in the processing.
@@ -28,6 +28,8 @@ def main():
     opt['resize_final_img'] = [1, .5]
     opt['only_resize'] = False
     opt['vertical_split'] = False
+    opt['use_masking'] = True
+    opt['mask_path'] = 'E:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new_masks'
     opt['input_image_max_size_before_being_halved'] = 5500  # As described, images larger than this dimensional size will be halved before anything else is done.
                                                             # This helps prevent images from cameras with "false-megapixels" from polluting the dataset.
                                                             # False-megapixel=lots of noise at ultra-high res.
@@ -150,7 +152,7 @@ class TiledDataset(data.Dataset):
             # Wrap in a tuple to align with split mode.
             return (self.get(index, False, False), None)
 
-    def get_for_scale(self, img, crop_sz, step, resize_factor, ref_resize_factor):
+    def get_for_scale(self, img, mask, crop_sz, step, resize_factor, ref_resize_factor):
         thres_sz = self.opt['thres_sz']
         h, w, c = img.shape
 
@@ -172,6 +174,15 @@ class TiledDataset(data.Dataset):
             for y in w_space:
                 index += 1
                 crop_img = img[x:x + crop_sz, y:y + crop_sz, :]
+                if mask is not None:
+                    def mask_map(inp):
+                        mask_factor = 256 / (crop_sz * ref_resize_factor)
+                        return int(inp * mask_factor)
+                    crop_mask = mask[mask_map(x):mask_map(x+crop_sz),
+                                mask_map(y):mask_map(y+crop_sz),
+                                :]
+                    if crop_mask.mean() < 255 / 2:  # If at least 50% of the image isn't made up of the type of pixels we want to process, ignore this tile.
+                        continue
                 # Center point needs to be resized by ref_resize_factor - since it is relative to the reference image.
                 center_point = (int((x + crop_sz // 2) // ref_resize_factor), int((y + crop_sz // 2) // ref_resize_factor))
                 crop_img = np.ascontiguousarray(crop_img)
@@ -185,9 +196,10 @@ class TiledDataset(data.Dataset):
     def get(self, index, split_mode, left_img):
         path = self.images[index]
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-
         if img is None or len(img.shape) == 2:
             return None
+
+        mask = cv2.imread(os.path.join(self.opt['mask_path'], os.path.basename(path) + ".png"), cv2.IMREAD_UNCHANGED) if self.opt['use_masking'] else None
 
         h, w, c = img.shape
 
@@ -248,7 +260,7 @@ class TiledDataset(data.Dataset):
                     break
             if excluded:
                 continue
-            results.extend(self.get_for_scale(img, crop_sz, step, resize_factor, ref_resize_factor))
+            results.extend(self.get_for_scale(img, mask, crop_sz, step, resize_factor, ref_resize_factor))
         return results, path
 
     def __len__(self):
