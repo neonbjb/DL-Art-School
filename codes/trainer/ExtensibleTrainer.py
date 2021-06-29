@@ -254,6 +254,13 @@ class ExtensibleTrainer(BaseModel):
                 # And finally perform optimization.
                 [e.before_optimize(state) for e in self.experiments]
                 s.do_step(step)
+
+                if s.nan_counter > 10:
+                    print("Detected NaN grads more than 10 steps in a row. Saving model weights and aborting.")
+                    self.save(step)
+                    self.save_training_state(0, step)
+                    raise ArithmeticError
+
                 # Call into custom step hooks as well as update EMA params.
                 for name, net in self.networks.items():
                     if hasattr(net, "custom_optimizer_step"):

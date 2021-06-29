@@ -1,3 +1,4 @@
+import functools
 from abc import abstractmethod
 
 import math
@@ -702,7 +703,7 @@ class ResNetEncoder(nn.Module):
     ) -> None:
         super(ResNetEncoder, self).__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = functools.partial(nn.GroupNorm, 8)
         self._norm_layer = norm_layer
 
         self.inplanes = 64
@@ -812,12 +813,10 @@ class UnetWithBuiltInLatentEncoder(nn.Module):
         }
         super().__init__()
         self.encoder = ResNetEncoder(depth=depth_map[kwargs['image_size']])
-        self.lq_jitter = ColorJitter(.05, .05, .05, .05)
         self.unet = SuperResModel(**kwargs)
 
     def forward(self, x, timesteps, alt_hq, low_res=None, **kwargs):
         latent = self.encoder(alt_hq)
-        low_res = self.lq_jitter((low_res+1)/2)*2-1
         return self.unet(x, timesteps, latent, low_res, **kwargs)
 
 

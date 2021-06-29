@@ -266,14 +266,14 @@ if __name__ == '__main__':
         'paths': ['E:\\4k6k\\datasets\\ns_images\\imagesets\\256_only_humans_masked'],
         'weights': [1],
         'target_size': 256,
-        'scale': 2,
+        'scale': 1,
         'corrupt_before_downsize': True,
         'fetch_alt_image': False,
         'fetch_alt_tiled_image': True,
         'disable_flip': True,
-        'fixed_corruptions': [ 'jpeg-medium' ],
+        'fixed_corruptions': ['lq_resampling', 'jpeg-medium', 'gaussian_blur', 'noise', 'color_jitter'],
         'num_corrupts_per_image': 0,
-        'corruption_blur_scale': 0
+        'corruption_blur_scale': 1
     }
 
     ds = DataLoader(ImageFolderDataset(opt), shuffle=True, num_workers=0, batch_size=64)

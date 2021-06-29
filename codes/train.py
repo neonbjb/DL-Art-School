@@ -97,7 +97,8 @@ class Trainer:
 
         torch.backends.cudnn.benchmark = True
         # torch.backends.cudnn.deterministic = True
-        # torch.autograd.set_detect_anomaly(True)
+        if opt_get(opt, ['anomaly_detection'], False):
+            torch.autograd.set_detect_anomaly(True)
 
         # Save the compiled opt dict to the global loaded_options variable.
         util.loaded_options = opt

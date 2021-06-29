@@ -28,6 +28,13 @@ class ConfigurableStep(Module):
         self.grads_generated = False
         self.min_total_loss = opt_step['min_total_loss'] if 'min_total_loss' in opt_step.keys() else -999999999
 
+        # This is a half-measure that can be used between anomaly_detection and running a potentially problematic
+        # trainer bare. With this turned on, the optimizer will not step() if a nan grad is detected. If a model trips
+        # this warning 10 times in a row, the training session is aborted and the model state is saved. This has a
+        # noticeable affect on training speed, but nowhere near as bad as anomaly_detection.
+        self.check_grads_for_nan = opt_get(opt_step, ['check_grads_for_nan'], False)
+        self.nan_counter = 0
+
         self.injectors = []
         if 'injectors' in self.step_opt.keys():
             injector_names = []
@@ -244,8 +251,25 @@ class ConfigurableStep(Module):
             before = opt._config['before'] if 'before' in opt._config.keys() else -1
             if before != -1 and self.env['step'] > before:
                 continue
-            self.scaler.step(opt)
-            self.scaler.update()
+
+            nan_found = False
+            if self.check_grads_for_nan:
+                for pg in opt.param_groups:
+                    for p in pg['params']:
+                        if not torch.isfinite(p.grad).any():
+                            nan_found = True
+                            break
+                    if nan_found:
+                        break
+                if nan_found:
+                    print("NaN found in grads. Throwing this step out.")
+                    self.nan_counter += 1
+                else:
+                    self.nan_counter = 0
+
+            if not nan_found:
+                self.scaler.step(opt)
+                self.scaler.update()
 
     def get_metrics(self):
         return self.loss_accumulator.as_dict()
