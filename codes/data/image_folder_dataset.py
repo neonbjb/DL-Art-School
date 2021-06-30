@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from data import util
 # Builds a dataset created from a simple folder containing a list of training/test/validation images.
-from data.image_corruptor import ImageCorruptor
+from data.image_corruptor import ImageCorruptor, kornia_color_jitter_numpy
 from data.image_label_parser import VsNetImageLabeler
 from utils.util import opt_get
 
@@ -50,6 +50,7 @@ class ImageFolderDataset:
         self.rgb_n1_to_1 = opt_get(opt, ['rgb_n1_to_1'], False)
         self.force_square = opt_get(opt, ['force_square'], True)
         self.fixed_parameters = {k: torch.tensor(v) for k, v in opt_get(opt, ['fixed_parameters'], {}).items()}
+        self.all_image_color_jitter = opt_get(opt, ['all_image_color_jitter'], 0)
         if 'normalize' in opt.keys():
             if opt['normalize'] == 'stylegan2_norm':
                 self.normalize = Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
@@ -154,6 +155,10 @@ class ImageFolderDataset:
             h, w, _ = hq.shape
             dim = min(h, w)
             hq = hq[(h - dim) // 2:dim + (h - dim) // 2, (w - dim) // 2:dim + (w - dim) // 2, :]
+
+        # Perform color jittering on the HQ image if specified. The given value should be between [0,1].
+        if self.all_image_color_jitter > 0:
+            hq = kornia_color_jitter_numpy(hq, self.all_image_color_jitter)
 
         if self.labeler:
             assert hq.shape[0] == hq.shape[1]  # This just has not been accomodated yet.
@@ -273,7 +278,8 @@ if __name__ == '__main__':
         'disable_flip': True,
         'fixed_corruptions': ['lq_resampling', 'jpeg-medium', 'gaussian_blur', 'noise', 'color_jitter'],
         'num_corrupts_per_image': 0,
-        'corruption_blur_scale': 1
+        'corruption_blur_scale': 1,
+        'all_image_color_jitter': .1,
     }
 
     ds = DataLoader(ImageFolderDataset(opt), shuffle=True, num_workers=0, batch_size=64)

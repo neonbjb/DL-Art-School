@@ -25,6 +25,16 @@ if __name__ == '__main__':
     plt.show()
 '''
 
+
+def kornia_color_jitter_numpy(img, setting):
+    if setting * 255 > 1:
+        # I'm using Kornia's ColorJitter, which requires pytorch arrays in b,c,h,w format.
+        img = torch.from_numpy(img).permute(2,0,1).unsqueeze(0)
+        img = ColorJitter(setting, setting, setting, setting)(img)
+        img = img.squeeze(0).permute(1,2,0).numpy()
+    return img
+
+
 # Performs image corruption on a list of images from a configurable set of corruption
 # options.
 class ImageCorruptor:
@@ -107,11 +117,7 @@ class ImageCorruptor:
             lo_end = 0
             hi_end = .2
             setting = rand_val * (hi_end - lo_end) + lo_end
-            if setting * 255 > 1:
-                # I'm using Kornia's ColorJitter, which requires pytorch arrays in b,c,h,w format.
-                img = torch.from_numpy(img).permute(2,0,1).unsqueeze(0)
-                img = ColorJitter(setting, setting, setting, setting)(img)
-                img = img.squeeze(0).permute(1,2,0).numpy()
+            img = kornia_color_jitter_numpy(img, setting)
         elif 'gaussian_blur' in aug:
             img = cv2.GaussianBlur(img, (0,0), self.blur_scale*rand_val*1.5)
         elif 'motion_blur' in aug:

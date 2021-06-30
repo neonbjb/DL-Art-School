@@ -661,13 +661,18 @@ class SuperResModel(UNetModel):
     """
 
     def __init__(self, image_size, in_channels, num_corruptions=0, *args, **kwargs):
-        self.num_corruptions = 0
+        self.num_corruptions = num_corruptions
         super().__init__(image_size, in_channels * 2 + num_corruptions, *args, **kwargs)
 
     def forward(self, x, timesteps, low_res=None, corruption_factor=None, **kwargs):
         b, _, new_height, new_width = x.shape
         upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
         if corruption_factor is not None:
+            if corruption_factor.shape[1] != self.num_corruptions:
+                if not hasattr(self, '_corruption_factor_warning'):
+                    print(f"Warning! Dataloader gave us {corruption_factor.shape[1]} dim but we are only processing {self.num_corruptions}. The last n corruptions will be truncated.")
+                    self._corruption_factor_warning = True
+                corruption_factor = corruption_factor[:, :self.num_corruptions]
             corruption_factor = corruption_factor.view(b, -1, 1, 1).repeat(1, 1, new_height, new_width)
         else:
             corruption_factor = torch.zeros((b, self.num_corruptions, new_height, new_width), dtype=torch.float, device=x.device)
