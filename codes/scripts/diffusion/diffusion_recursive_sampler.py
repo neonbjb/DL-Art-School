@@ -19,9 +19,9 @@ from tqdm import tqdm
 import torch
 import numpy as np
 
-# A rough copy of test.py that "surfs" along a spectrum of correction factors for a single image.
+# A rough copy of test.py that repeatedly performs SR, then downsamples the result and does it again.
 
-def forward_pass(model, data, output_dir, jc, bc):
+def forward_pass(model, data, output_dir, it):
     with torch.no_grad():
         model.feed_data(data, 0)
         model.test()
@@ -32,11 +32,11 @@ def forward_pass(model, data, output_dir, jc, bc):
     sr_img = util.tensor2img(visuals[0])  # uint8
 
     # save images
-    suffixes = [f'_blur_{int(bc*1000)}_{int(jc*1000)}',
-                f'_jpeg_{int(jc*1000)}_{int(bc*1000)}']
+    suffixes = [f'_it_{it}']
     for suffix in suffixes:
         save_img_path = osp.join(output_dir, img_name + suffix + '.png')
         util.save_img(sr_img, save_img_path)
+    return visuals
 
 
 if __name__ == "__main__":
@@ -78,20 +78,16 @@ if __name__ == "__main__":
         im = im[:,:,dw:-dw]
     im = im[:3].unsqueeze(0)
 
-    # Build the corruption indexes we are going to use.
-    jpegs = list(numpy.arange(opt['min_jpeg_correction'], opt['max_jpeg_correction'], opt['jpeg_correction_step_size']))
-    deblurs = list(numpy.arange(opt['min_blur_correction'], opt['max_blur_correction'], opt['blur_correction_step_size']))
-
     model = ExtensibleTrainer(opt)
     results_dir = osp.join(opt['path']['results_root'], os.path.basename(opt['image']))
     util.mkdir(results_dir)
-    for jpeg_correction in jpegs:
-        for blur_correction in deblurs:
-            data = {
-                'hq': im.to('cuda'),
-                'lq': im.to('cuda'),
-                'corruption_entropy': torch.tensor([[jpeg_correction, blur_correction]], device='cuda',
-                                                   dtype=torch.float),
-                'GT_path': opt['image']
-            }
-            forward_pass(model, data, results_dir, jpeg_correction, blur_correction)
+    for i in range(100):
+        data = {
+            'hq': im.to('cuda'),
+            'lq': im.to('cuda'),
+            'corruption_entropy': torch.tensor([[.3, .3]], device='cuda',
+                                               dtype=torch.float),
+            'GT_path': opt['image']
+        }
+        im = torch.nn.functional.interpolate(forward_pass(model, data, results_dir, i), scale_factor=.5, mode="area")
+        im = im * 2 - 1
