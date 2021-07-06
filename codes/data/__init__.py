@@ -2,11 +2,12 @@
 import logging
 import torch
 import torch.utils.data
+from munch import munchify
 
 from utils.util import opt_get
 
 
-def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
+def create_dataloader(dataset, dataset_opt, opt=None, sampler=None, collate_fn=None):
     phase = dataset_opt['phase']
     if phase == 'train':
         if opt_get(opt, ['dist'], False):
@@ -21,15 +22,17 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
             shuffle = True
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
                                            num_workers=num_workers, sampler=sampler, drop_last=True,
-                                           pin_memory=True)
+                                           pin_memory=True, collate_fn=collate_fn)
     else:
         batch_size = dataset_opt['batch_size'] or 1
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0,
-                                           pin_memory=True)
+                                           pin_memory=True, collate_fn=collate_fn)
 
 
-def create_dataset(dataset_opt):
+def create_dataset(dataset_opt, return_collate=False):
     mode = dataset_opt['mode']
+    collate = None
+
     # datasets for image restoration
     if mode == 'fullimage':
         from data.full_image_dataset import FullImageDataset as D
@@ -59,8 +62,19 @@ def create_dataset(dataset_opt):
         from data.random_dataset import RandomDataset as D
     elif mode == 'zipfile':
         from data.zip_file_dataset import ZipFileDataset as D
+    elif mode == 'nv_tacotron':
+        from data.audio.nv_tacotron_dataset import TextMelLoader as D
+        from data.audio.nv_tacotron_dataset import TextMelCollate as C
+        from models.tacotron2.hparams import create_hparams
+        default_params = create_hparams()
+        dataset_opt.update(default_params)
+        dataset_opt = munchify(dataset_opt)
+        collate = C(dataset_opt.n_frames_per_step)
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)
 
-    return dataset
+    if return_collate:
+        return dataset, collate
+    else:
+        return dataset

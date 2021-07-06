@@ -1,5 +1,5 @@
+# Fundamentals
 numpy
-opencv-python
 pyyaml
 tb-nightly
 future
@@ -11,12 +11,20 @@ munch
 tqdm
 scp
 tensorboard
-pytorch_fid==0.1.1
-kornia
 linear_attention_transformer
-vector_quantize_pytorch
 orjson
 einops
-gsa-pytorch
 lambda-networks
+
+# For image generation stuff
+opencv-python
+kornia
 pytorch_ssim
+gsa-pytorch
+vector_quantize_pytorch
+pytorch_fid==0.1.1
+
+# For audio generation stuff
+inflect==0.2.5
+librosa==0.6.0
+Unidecode==1.0.22

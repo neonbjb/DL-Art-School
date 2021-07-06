@@ -107,7 +107,7 @@ class Trainer:
         dataset_ratio = 1  # enlarge the size of each epoch
         for phase, dataset_opt in opt['datasets'].items():
             if phase == 'train':
-                self.train_set = create_dataset(dataset_opt)
+                self.train_set, collate_fn = create_dataset(dataset_opt, return_collate=True)
                 train_size = int(math.ceil(len(self.train_set) / dataset_opt['batch_size']))
                 total_iters = int(opt['train']['niter'])
                 self.total_epochs = int(math.ceil(total_iters / train_size))
@@ -116,15 +116,15 @@ class Trainer:
                     self.total_epochs = int(math.ceil(total_iters / (train_size * dataset_ratio)))
                 else:
                     self.train_sampler = None
-                self.train_loader = create_dataloader(self.train_set, dataset_opt, opt, self.train_sampler)
+                self.train_loader = create_dataloader(self.train_set, dataset_opt, opt, self.train_sampler, collate_fn=collate_fn)
                 if self.rank <= 0:
                     self.logger.info('Number of train images: {:,d}, iters: {:,d}'.format(
                         len(self.train_set), train_size))
                     self.logger.info('Total epochs needed: {:d} for iters {:,d}'.format(
                         self.total_epochs, total_iters))
             elif phase == 'val':
-                self.val_set = create_dataset(dataset_opt)
-                self.val_loader = create_dataloader(self.val_set, dataset_opt, opt, None)
+                self.val_set, collate_fn = create_dataset(dataset_opt, return_collate=True)
+                self.val_loader = create_dataloader(self.val_set, dataset_opt, opt, None, collate_fn=collate_fn)
                 if self.rank <= 0:
                     self.logger.info('Number of val images in [{:s}]: {:d}'.format(
                         dataset_opt['name'], len(self.val_set)))
