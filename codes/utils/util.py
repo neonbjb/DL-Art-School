@@ -393,6 +393,7 @@ def recursively_detach(v):
         return out
 
 def opt_get(opt, keys, default=None):
+    assert not isinstance(keys, str)  # Common mistake, better to assert.
     if opt is None:
         return default
     ret = opt

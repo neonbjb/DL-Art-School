@@ -16,19 +16,25 @@ class GeneratorInjector(Injector):
     def __init__(self, opt, env):
         super(GeneratorInjector, self).__init__(opt, env)
         self.grad = opt['grad'] if 'grad' in opt.keys() else True
+        self.method = opt_get(opt, ['method'], None)  # If specified, this method is called instead of __call__()
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
+
+        if self.method is not None and hasattr(gen, 'module'):
+            gen = gen.module  # Dereference DDP wrapper.
+        method = gen if self.method is None else getattr(gen, self.method)
+
         with autocast(enabled=self.env['opt']['fp16']):
             if isinstance(self.input, list):
                 params = extract_params_from_state(self.input, state)
             else:
                 params = [state[self.input]]
             if self.grad:
-                results = gen(*params)
+                results = method(*params)
             else:
                 with torch.no_grad():
-                    results = gen(*params)
+                    results = method(*params)
         new_state = {}
         if isinstance(self.output, list):
             # Only dereference tuples or lists, not tensors.
