@@ -4,11 +4,11 @@ from munch import munchify
 from torch.autograd import Variable
 from torch import nn
 from torch.nn import functional as F
-from layers import ConvNorm, LinearNorm
+from models.tacotron2.layers import ConvNorm, LinearNorm
 from models.tacotron2.hparams import create_hparams
 from trainer.networks import register_model
-from taco_utils import to_gpu, get_mask_from_lengths
-from utils.util import opt_get
+from models.tacotron2.taco_utils import get_mask_from_lengths
+from utils.util import opt_get, checkpoint
 
 
 class LocationLayer(nn.Module):
@@ -74,7 +74,7 @@ class Attention(nn.Module):
         attention_hidden_state: attention rnn last output
         memory: encoder outputs
         processed_memory: processed encoder outputs
-        attention_weights_cat: previous and cummulative attention weights
+        attention_weights_cat: previous and cumulative attention weights
         mask: binary mask for padded data
         """
         alignment = self.get_alignment_energies(
@@ -408,8 +408,7 @@ class Decoder(nn.Module):
         mel_outputs, gate_outputs, alignments = [], [], []
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
             decoder_input = decoder_inputs[len(mel_outputs)]
-            mel_output, gate_output, attention_weights = self.decode(
-                decoder_input)
+            mel_output, gate_output, attention_weights = self.decode(decoder_input)
             mel_outputs += [mel_output.squeeze(1)]
             gate_outputs += [gate_output.squeeze(1)]
             alignments += [attention_weights]
@@ -474,23 +473,10 @@ class Tacotron2(nn.Module):
         self.decoder = Decoder(hparams)
         self.postnet = Postnet(hparams)
 
-    def parse_batch(self, batch):
-        text_padded, input_lengths, mel_padded, gate_padded, \
-            output_lengths = batch
-        text_padded = to_gpu(text_padded).long()
-        input_lengths = to_gpu(input_lengths).long()
-        max_len = torch.max(input_lengths.data).item()
-        mel_padded = to_gpu(mel_padded).float()
-        gate_padded = to_gpu(gate_padded).float()
-        output_lengths = to_gpu(output_lengths).long()
-
-        return (
-            (text_padded, input_lengths, mel_padded, max_len, output_lengths),
-            (mel_padded, gate_padded))
-
     def parse_output(self, outputs, output_lengths=None):
         if self.mask_padding and output_lengths is not None:
-            mask = ~get_mask_from_lengths(output_lengths)
+            mask_fill = outputs[0].shape[-1]
+            mask = ~get_mask_from_lengths(output_lengths, mask_fill)
             mask = mask.expand(self.n_mel_channels, mask.size(0), mask.size(1))
             mask = mask.permute(1, 0, 2)
 
@@ -500,8 +486,7 @@ class Tacotron2(nn.Module):
 
         return outputs
 
-    def forward(self, inputs):
-        text_inputs, text_lengths, mels, max_len, output_lengths = inputs
+    def forward(self, text_inputs, text_lengths, mels, output_lengths):
         text_lengths, output_lengths = text_lengths.data, output_lengths.data
 
         embedded_inputs = self.embedding(text_inputs).transpose(1, 2)
@@ -535,9 +520,8 @@ class Tacotron2(nn.Module):
 
 @register_model
 def register_nv_tacotron2(opt_net, opt):
-    kw = opt_get(opt_net, ['kwargs'], {})
     hparams = create_hparams()
-    hparams.update(kw)
+    hparams.update(opt_net)
     hparams = munchify(hparams)
     return Tacotron2(hparams)
 

@@ -275,6 +275,10 @@ class ExtensibleTrainer(BaseModel):
         # Record visual outputs for usage in debugging and testing.
         if 'visuals' in self.opt['logger'].keys() and self.rank <= 0 and step % self.opt['logger']['visual_debug_rate'] == 0:
             def fix_image(img):
+                if opt_get(self.opt, ['logger', 'is_mel_spectrogram'], False):
+                    img = img.unsqueeze(dim=1)
+                    # Normalize so spectrogram is easier to view.
+                    img = (img - img.mean()) / img.std()
                 if img.shape[1] > 3:
                     img = img[:, :3, :, :]
                 if opt_get(self.opt, ['logger', 'reverse_n1_to_1'], False):

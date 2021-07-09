@@ -67,8 +67,8 @@ def create_dataset(dataset_opt, return_collate=False):
         from data.audio.nv_tacotron_dataset import TextMelCollate as C
         from models.tacotron2.hparams import create_hparams
         default_params = create_hparams()
-        dataset_opt.update(default_params)
-        dataset_opt = munchify(dataset_opt)
+        default_params.update(dataset_opt)
+        dataset_opt = munchify(default_params)
         collate = C(dataset_opt.n_frames_per_step)
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))

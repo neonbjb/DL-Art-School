@@ -111,8 +111,13 @@ class TextMelCollate():
             gate_padded[i, mel.size(1)-1:] = 1
             output_lengths[i] = mel.size(1)
 
-        return text_padded, input_lengths, mel_padded, gate_padded, \
-            output_lengths
+        return {
+            'padded_text': text_padded,
+            'input_lengths': input_lengths,
+            'padded_mel': mel_padded,
+            'padded_gate': gate_padded,
+            'output_lengths': output_lengths
+        }
 
 
 if __name__ == '__main__':

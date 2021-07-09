@@ -27,6 +27,7 @@ class ConfigurableStep(Module):
         self.scaler = GradScaler(enabled=self.opt['fp16'])
         self.grads_generated = False
         self.min_total_loss = opt_step['min_total_loss'] if 'min_total_loss' in opt_step.keys() else -999999999
+        self.clip_grad_eps = opt_get(opt_step, ['clip_grad_eps'], None)
 
         # This is a half-measure that can be used between anomaly_detection and running a potentially problematic
         # trainer bare. With this turned on, the optimizer will not step() if a nan grad is detected. If a model trips
@@ -266,6 +267,13 @@ class ConfigurableStep(Module):
                     self.nan_counter += 1
                 else:
                     self.nan_counter = 0
+
+            if self.clip_grad_eps is not None:
+                for pg in opt.param_groups:
+                    grad_norm = torch.nn.utils.clip_grad_norm_(pg['params'], self.clip_grad_eps)
+                    if torch.isnan(grad_norm):
+                        nan_found = True
+                        self.nan_counter += 1
 
             if not nan_found:
                 self.scaler.step(opt)
