@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import trainer.losses as L
 import numpy as np
 
-from kornia.filters import filter2D
+from kornia.filters import filter2d
 from linear_attention_transformer import ImageLinearAttention
 from torch import nn
 from torch.autograd import grad as torch_grad
@@ -156,7 +156,7 @@ class Blur(nn.Module):
     def forward(self, x):
         f = self.f
         f = f[None, None, :] * f[None, :, None]
-        return filter2D(x, f, normalized=True)
+        return filter2d(x, f, normalized=True)
 
 
 # one layer of self-attention and feedforward, for images

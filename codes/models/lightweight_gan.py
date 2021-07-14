@@ -15,7 +15,7 @@ import trainer.losses as L
 import torchvision
 from PIL import Image
 from einops import rearrange, reduce
-from kornia import filter2D
+from kornia import filter2d
 from torch import nn, einsum
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -319,7 +319,7 @@ class Blur(nn.Module):
     def forward(self, x):
         f = self.f
         f = f[None, None, :] * f[None, :, None]
-        return filter2D(x, f, normalized=True)
+        return filter2d(x, f, normalized=True)
 
 
 # dataset

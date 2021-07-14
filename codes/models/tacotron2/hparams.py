@@ -1,4 +1,4 @@
-import tensorflow as tf
+#import tensorflow as tf
 from models.tacotron2.text import symbols
 
 
@@ -84,12 +84,5 @@ def create_hparams(hparams_string=None, verbose=False):
         batch_size=64,
         mask_padding=True  # set model's padded outputs to padded values
     )
-
-    if hparams_string:
-        tf.logging.info('Parsing command line hparams: %s', hparams_string)
-        hparams.parse(hparams_string)
-
-    if verbose:
-        tf.logging.info('Final parsed hparams: %s', hparams.values())
 
     return hparams

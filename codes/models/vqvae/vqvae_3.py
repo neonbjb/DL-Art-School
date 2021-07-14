@@ -1,5 +1,4 @@
 import torch
-from kornia import filter2D
 from torch import nn
 from torch.nn import functional as F
 
