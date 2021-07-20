@@ -59,6 +59,9 @@ def create_loss(opt_loss, env):
     elif type == 'nv_tacotron2_loss':
         from models.tacotron2.loss import Tacotron2Loss
         return Tacotron2Loss(opt_loss, env)
+    elif type == 'fastspeech_loss':
+        from models.fastspeech2.loss import FastSpeech2Loss
+        return FastSpeech2Loss(opt_loss, env)
     else:
         raise NotImplementedError
 

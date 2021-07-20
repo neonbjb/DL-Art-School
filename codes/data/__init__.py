@@ -70,6 +70,8 @@ def create_dataset(dataset_opt, return_collate=False):
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
         collate = C(dataset_opt.n_frames_per_step)
+    elif mode == 'fastspeech2':
+        from data.audio.fastspeech2_dataset import Dataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)
