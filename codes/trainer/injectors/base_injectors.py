@@ -434,7 +434,31 @@ class DecomposeDimensionInjector(Injector):
         shape = list(inp.shape)
         del dims[self.dim]
         del shape[self.dim]
-        return {self.output: inp.permute([self.dim] + dims).reshape((-1,) + tuple(shape[1:]))}
+
+        # Compute the reverse permutation and shape arguments needed to undo this operation.
+        rev_shape = [inp.shape[self.dim]] + shape.copy()
+        rev_permute = list(range(len(inp.shape)))[1:]  # Looks like [1,2,3]
+        rev_permute = rev_permute[:self.dim] + [0] + (rev_permute[self.dim:] if self.dim < len(rev_permute) else [])
+
+        return {self.output: inp.permute([self.dim] + dims).reshape((-1,) + tuple(shape[1:])),
+                f'{self.output}_reverse_shape': rev_shape,
+                f'{self.output}_reverse_permute': rev_permute}
+
+
+# Undoes a decompose.
+class RecomposeDimensionInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.rev_shape_key = opt['reverse_shape']
+        self.rev_permute_key = opt['reverse_permute']
+
+    def forward(self, state):
+        inp = state[self.input]
+        rev_shape = state[self.rev_shape_key]
+        rev_permute = state[self.rev_permute_key]
+        out = inp.reshape(rev_shape)
+        out = out.permute(rev_permute).contiguous()
+        return {self.output: out}
 
 
 # Performs normalization across fixed constants.
@@ -447,6 +471,19 @@ class NormalizeInjector(Injector):
     def forward(self, state):
         inp = state[self.input]
         out = (inp - self.shift) / self.scale
+        return {self.output: out}
+
+
+# Performs normalization across fixed constants.
+class DenormalizeInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.shift = opt['shift']
+        self.scale = opt['scale']
+
+    def forward(self, state):
+        inp = state[self.input]
+        out = inp * self.scale + self.shift
         return {self.output: out}
 
 

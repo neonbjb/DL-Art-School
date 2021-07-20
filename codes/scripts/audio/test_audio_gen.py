@@ -19,11 +19,15 @@ def forward_pass(model, denoiser, data, output_dir, opt, b):
     with torch.no_grad():
         model.feed_data(data, 0)
         model.test()
-    waveforms = model.eval_state[opt['eval']['output_state']][0]
-    waveforms = denoiser(waveforms)
-    for i in range(waveforms.shape[0]):
-        audio = waveforms[i][0].cpu().numpy()
+    pred_waveforms = model.eval_state[opt['eval']['output_state']][0]
+    pred_waveforms = denoiser(pred_waveforms)
+    ground_truth_waveforms = model.eval_state[opt['eval']['ground_truth']][0]
+    ground_truth_waveforms = denoiser(ground_truth_waveforms)
+    for i in range(pred_waveforms.shape[0]):
+        audio = pred_waveforms[i][0].cpu().numpy()
         wavfile.write(osp.join(output_dir, f'{b}_{i}.wav'), 22050, audio)
+        audio = ground_truth_waveforms[i][0].cpu().numpy()
+        wavfile.write(osp.join(output_dir, f'{b}_{i}_ground_truth.wav'), 22050, audio)
 
 
 if __name__ == "__main__":
@@ -36,7 +40,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     want_metrics = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_tacotron2_lj.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_vqvae_audio_lj.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
