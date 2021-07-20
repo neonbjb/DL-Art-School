@@ -28,3 +28,5 @@ pytorch_fid==0.1.1
 inflect==0.2.5
 librosa==0.6.0
 Unidecode==1.0.22
+tgt == 1.4.4
+pyworld == 0.2.10

@@ -419,3 +419,38 @@ class NoiseInjector(Injector):
     def forward(self, state):
         shape = (state[self.input].shape[0],) + self.shape
         return {self.output: torch.randn(shape, device=state[self.input].device)}
+
+
+# Incorporates the specified dimension into the batch dimension.
+class DecomposeDimensionInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.dim = opt['dim']
+        assert self.dim != 0  # Cannot decompose the batch dimension
+
+    def forward(self, state):
+        inp = state[self.input]
+        dims = list(range(len(inp.shape)))  # Looks like [0,1,2,3]
+        shape = list(inp.shape)
+        del dims[self.dim]
+        del shape[self.dim]
+        return {self.output: inp.permute([self.dim] + dims).reshape((-1,) + tuple(shape[1:]))}
+
+
+# Performs normalization across fixed constants.
+class NormalizeInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.shift = opt['shift']
+        self.scale = opt['scale']
+
+    def forward(self, state):
+        inp = state[self.input]
+        out = (inp - self.shift) / self.scale
+        return {self.output: out}
+
+
+
+if __name__ == '__main__':
+    inj = DecomposeDimensionInjector({'dim':2, 'in': 'x', 'out': 'y'}, None)
+    print(inj({'x':torch.randn(10,3,64,64)})['y'].shape)

@@ -116,17 +116,24 @@ class TextMelCollate():
             'input_lengths': input_lengths,
             'padded_mel': mel_padded,
             'padded_gate': gate_padded,
-            'output_lengths': output_lengths
+            'output_lengths': output_lengths,
         }
 
 
 if __name__ == '__main__':
     params = {
         'mode': 'nv_tacotron',
-        'path': 'E:\\4k6k\\datasets\\audio\\LJSpeech-1.1\\ljs_audio_text_train_filelist.txt',
+        'path': 'E:\\audio\\LJSpeech-1.1\\ljs_audio_text_train_filelist.txt',
 
     }
     from data import create_dataset
     ds = create_dataset(params)
-    j = ds[0]
-    print(j)
+    i = 0
+    m = []
+    for b in ds:
+        m.append(b)
+        i += 1
+        if i > 9999:
+            break
+    m=torch.stack(m)
+    print(m.mean(), m.std())
