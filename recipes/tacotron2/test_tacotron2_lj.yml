@@ -1,0 +1,74 @@
+#### general settings
+name: test_tacotron2_lj
+use_tb_logger: true
+gpu_ids: [0]
+start_step: -1
+fp16: false
+checkpointing_enabled: true
+wandb: false
+
+datasets:
+  train:
+    name: lj
+    n_workers: 0
+    batch_size: 1
+    mode: nv_tacotron
+    path: E:\4k6k\datasets\audio\LJSpeech-1.1\ljs_audio_text_train_filelist.txt
+
+networks:
+  mel_gen:
+    type: generator
+    which_model_G: nv_tacotron2
+    args:
+      encoder_kernel_size: 5
+      encoder_n_convolutions: 3
+      encoder_embedding_dim: 512
+      decoder_rnn_dim: 1024
+      prenet_dim: 256
+      max_decoder_steps: 1000
+      attention_rnn_dim: 1024
+      attention_dim: 128
+      attention_location_n_filters: 32
+      attention_location_kernel_size: 31
+      postnet_embedding_dim: 512
+      postnet_kernel_size: 5
+      postnet_n_convolutions: 5
+  waveglow:
+    type: generator
+    which_model_G: nv_waveglow
+    args:
+      n_mel_channels: 80
+      n_flows: 12
+      n_group: 8
+      n_early_every: 4
+      n_early_size: 2
+      WN_config:
+        n_layers: 8
+        n_channels: 256
+        kernel_size: 3
+
+#### path
+path:
+  pretrain_model_mel_gen: ../experiments/train_tacotron2_lj/models/22000_mel_gen_ema.pth
+  pretrain_model_waveglow: ../experiments/waveglow_256channels_universal_v5.pth
+  strict_load: true
+  #resume_state: ../experiments/train_imgset_unet_diffusion/training_state/54000.state
+
+steps:        
+  generator:
+    training: mel_gen
+    injectors:
+      mel:
+        type: generator
+        generator: mel_gen
+        in: [padded_text, input_lengths, padded_mel, output_lengths]
+        out: [mel_outputs, mel_outputs_postnet, gate_outputs, alignments]
+      wave:
+        type: generator
+        generator: waveglow
+        method: infer
+        in: mel_outputs
+        out: waveform
+
+eval:
+  output_state: waveform
