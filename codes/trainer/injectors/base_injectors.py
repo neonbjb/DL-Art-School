@@ -426,6 +426,7 @@ class DecomposeDimensionInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
         self.dim = opt['dim']
+        self.cutoff_dim = opt_get(opt, ['cutoff_dim'], -1)
         assert self.dim != 0  # Cannot decompose the batch dimension
 
     def forward(self, state):
@@ -440,7 +441,11 @@ class DecomposeDimensionInjector(Injector):
         rev_permute = list(range(len(inp.shape)))[1:]  # Looks like [1,2,3]
         rev_permute = rev_permute[:self.dim] + [0] + (rev_permute[self.dim:] if self.dim < len(rev_permute) else [])
 
-        return {self.output: inp.permute([self.dim] + dims).reshape((-1,) + tuple(shape[1:])),
+        out = inp.permute([self.dim] + dims).reshape((-1,) + tuple(shape[1:]))
+        if self.cutoff_dim > -1:
+            out = out[:self.cutoff_dim]
+
+        return {self.output: out,
                 f'{self.output}_reverse_shape': rev_shape,
                 f'{self.output}_reverse_permute': rev_permute}
 
