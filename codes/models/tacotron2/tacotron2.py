@@ -32,7 +32,7 @@ class LocationLayer(nn.Module):
 
 class Attention(nn.Module):
     def __init__(self, attention_rnn_dim, embedding_dim, attention_dim,
-                 attention_location_n_filters, attention_location_kernel_size):
+                 attention_location_n_filters=32, attention_location_kernel_size=31):
         super(Attention, self).__init__()
         self.query_layer = LinearNorm(attention_rnn_dim, attention_dim,
                                       bias=False, w_init_gain='tanh')
@@ -528,6 +528,9 @@ def register_nv_tacotron2(opt_net, opt):
 
 if __name__ == '__main__':
     tron = register_nv_tacotron2({}, {})
-    inputs = torch.randint(high=24, size=(1,12)), torch.tensor([12]), torch.randn((1,80,749)), 800, torch.tensor([749])
-    out = tron(inputs)
+    inputs = torch.randint(high=24, size=(1,12)), \
+             torch.tensor([12]), \
+             torch.randn((1,80,749)), \
+             torch.tensor([749])
+    out = tron(*inputs)
     print(out)

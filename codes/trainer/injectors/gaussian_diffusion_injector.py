@@ -35,6 +35,39 @@ class GaussianDiffusionInjector(Injector):
                 self.output_x_start_key: diffusion_outputs['x_start_predicted']}
 
 
+class AutoregressiveGaussianDiffusionInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.generator = opt['generator']
+        self.output_variational_bounds_key = opt['out_key_vb_loss']
+        self.output_x_start_key = opt['out_key_x_start']
+        opt['diffusion_args']['betas'] = get_named_beta_schedule(**opt['beta_schedule'])
+        opt['diffusion_args']['use_timesteps'] = space_timesteps(opt['beta_schedule']['num_diffusion_timesteps'],
+                                                                 [opt['beta_schedule']['num_diffusion_timesteps']])
+        self.diffusion = SpacedDiffusion(**opt['diffusion_args'])
+        self.schedule_sampler = create_named_schedule_sampler(opt['sampler_type'], self.diffusion)
+        self.model_input_keys = opt_get(opt, ['model_input_keys'], [])
+        self.model_output_keys = opt['model_output_keys']
+        self.model_eps_pred_key = opt['prediction_key']
+
+    def forward(self, state):
+        gen = self.env['generators'][self.opt['generator']]
+        hq = state[self.input]
+        model_inputs = {k: state[v] for k, v in self.model_input_keys.items()}
+        t, weights = self.schedule_sampler.sample(hq.shape[0], hq.device)
+        diffusion_outputs = self.diffusion.autoregressive_training_losses(gen, hq, t, self.model_output_keys,
+                                                                          self.model_eps_pred_key,
+                                                                          model_kwargs=model_inputs)
+        if isinstance(self.schedule_sampler, LossAwareSampler):
+            self.schedule_sampler.update_with_local_losses(t, diffusion_outputs['losses'])
+        outputs = {k: diffusion_outputs[k] for k in self.model_output_keys}
+        outputs.update({self.output: diffusion_outputs['mse'],
+                self.output_variational_bounds_key: diffusion_outputs['vb'],
+                self.output_x_start_key: diffusion_outputs['x_start_predicted']})
+        return outputs
+
+
+
 # Performs inference using a network trained to predict a reverse diffusion process, which nets a image.
 class GaussianDiffusionInferenceInjector(Injector):
     def __init__(self, opt, env):

@@ -441,6 +441,7 @@ class UNetModel(nn.Module):
         use_scale_shift_norm=False,
         resblock_updown=False,
         use_new_attention_order=False,
+        use_raw_y_as_embedding=False,
     ):
         super().__init__()
 
@@ -471,6 +472,8 @@ class UNetModel(nn.Module):
 
         if self.num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+        self.use_raw_y_as_embedding = use_raw_y_as_embedding
+        assert (self.num_classes is not None) != use_raw_y_as_embedding  # These are mutually-exclusive.
 
         self.input_blocks = nn.ModuleList(
             [
@@ -630,16 +633,14 @@ class UNetModel(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert (y is not None) == (
-            self.num_classes is not None
-        ), "must specify y if and only if the model is class-conditional"
-
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
         if self.num_classes is not None:
             assert y.shape == (x.shape[0],)
             emb = emb + self.label_emb(y)
+        if self.use_raw_y_as_embedding:
+            emb = emb + y
 
         h = x.type(self.dtype)
         for module in self.input_blocks:

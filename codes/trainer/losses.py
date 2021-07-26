@@ -121,7 +121,13 @@ class CrossEntropy(ConfigurableLoss):
     def __init__(self, opt, env):
         super().__init__(opt, env)
         self.opt = opt
-        self.ce = nn.CrossEntropyLoss()
+        self.subtype = opt_get(opt, ['subtype'], 'ce')
+        if self.subtype == 'ce':
+            self.ce = nn.CrossEntropyLoss()
+        elif self.subtype == 'bce':
+            self.ce = nn.BCEWithLogitsLoss()
+        else:
+            assert False
 
     def forward(self, _, state):
         logits = state[self.opt['logits']]
@@ -135,8 +141,14 @@ class CrossEntropy(ConfigurableLoss):
             logits = logits * mask
         if self.opt['swap_channels']:
             logits = logits.permute(0,2,3,1).contiguous()
-        assert labels.max()+1 <= logits.shape[-1]
-        return self.ce(logits.view(-1, logits.size(-1)), labels.view(-1))
+        if self.subtype == 'bce':
+            logits = logits.reshape(-1, 1)
+            labels = labels.reshape(-1, 1)
+        else:
+            logits = logits.view(-1, logits.size(-1))
+            labels = labels.view(-1)
+            assert labels.max()+1 <= logits.shape[-1]
+        return self.ce(logits, labels)
 
 
 class PixLoss(ConfigurableLoss):

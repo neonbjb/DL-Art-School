@@ -10,6 +10,15 @@ from utils.util import opt_get
 from utils.weight_scheduler import get_scheduler_for_opt
 
 
+class SqueezeInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.dim = opt['dim']
+
+    def forward(self, state):
+        return {self.output: state[self.input].squeeze(dim=self.dim)}
+
+
 # Uses a generator to synthesize an image from [in] and injects the results into [out]
 # Note that results are *not* detached.
 class GeneratorInjector(Injector):

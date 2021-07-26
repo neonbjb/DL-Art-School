@@ -23,6 +23,8 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
         self.load_mel_from_disk = hparams.load_mel_from_disk
+        self.return_wavs = hparams.return_wavs
+        assert not (self.load_mel_from_disk and self.return_wavs)
         self.stft = layers.TacotronSTFT(
             hparams.filter_length, hparams.hop_length, hparams.win_length,
             hparams.n_mel_channels, hparams.sampling_rate, hparams.mel_fmin,
@@ -47,8 +49,11 @@ class TextMelLoader(torch.utils.data.Dataset):
             audio_norm = audio / self.max_wav_value
             audio_norm = audio_norm.unsqueeze(0)
             audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
-            melspec = self.stft.mel_spectrogram(audio_norm)
-            melspec = torch.squeeze(melspec, 0)
+            if self.return_wavs:
+                melspec = audio_norm
+            else:
+                melspec = self.stft.mel_spectrogram(audio_norm)
+                melspec = torch.squeeze(melspec, 0)
         else:
             melspec = torch.from_numpy(np.load(filename))
             assert melspec.size(0) == self.stft.n_mel_channels, (
@@ -124,13 +129,18 @@ if __name__ == '__main__':
     params = {
         'mode': 'nv_tacotron',
         'path': 'E:\\audio\\LJSpeech-1.1\\ljs_audio_text_train_filelist.txt',
-
+        'phase': 'train',
+        'n_workers': 0,
+        'batch_size': 2,
+        'return_wavs': True,
     }
-    from data import create_dataset
-    ds = create_dataset(params)
+    from data import create_dataset, create_dataloader
+
+    ds, c = create_dataset(params, return_collate=True)
+    dl = create_dataloader(ds, params, collate_fn=c)
     i = 0
     m = []
-    for b in ds:
+    for b in dl:
         m.append(b)
         i += 1
         if i > 9999:

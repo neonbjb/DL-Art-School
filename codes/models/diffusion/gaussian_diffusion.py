@@ -817,6 +817,81 @@ class GaussianDiffusion:
 
         return terms
 
+    def autoregressive_training_losses(self, model, x_start, t, model_output_keys, gd_out_key, model_kwargs=None, noise=None):
+        """
+        Compute training losses for a single timestep.
+
+        :param model: the model to evaluate loss on.
+        :param x_start: the [N x C x ...] tensor of inputs.
+        :param t: a batch of timestep indices.
+        :param model_kwargs: if not None, a dict of extra keyword arguments to
+            pass to the model. This can be used for conditioning.
+        :param noise: if specified, the specific Gaussian noise to try to remove.
+        :return: a dict with the key "loss" containing a tensor of shape [N].
+                 Some mean or variance settings may also have other keys.
+        """
+        if model_kwargs is None:
+            model_kwargs = {}
+        if noise is None:
+            noise = th.randn_like(x_start)
+        x_t = self.q_sample(x_start, t, noise=noise)
+        x_tn1 = self.q_sample(x_start, t-1, noise=noise)
+
+        terms = {}
+
+        if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
+            assert False  # not currently supported for this type of diffusion.
+        elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
+            model_outputs = model(x_t, x_tn1, self._scale_timesteps(t), **model_kwargs)
+            terms.update({k: o for k, o in zip(model_output_keys, model_outputs)})
+            model_output = terms[gd_out_key]
+            if self.model_var_type in [
+                ModelVarType.LEARNED,
+                ModelVarType.LEARNED_RANGE,
+            ]:
+                B, C = x_t.shape[:2]
+                assert model_output.shape == (B, C, 2, *x_t.shape[2:])
+                model_output, model_var_values = model_output[:, :, 0], model_output[:, :, 1]
+                # Learn the variance using the variational bound, but don't let
+                # it affect our mean prediction.
+                frozen_out = th.cat([model_output.detach(), model_var_values], dim=1)
+                terms["vb"] = self._vb_terms_bpd(
+                    model=lambda *args, r=frozen_out: r,
+                    x_start=x_start,
+                    x_t=x_t,
+                    t=t,
+                    clip_denoised=False,
+                )["output"]
+                if self.loss_type == LossType.RESCALED_MSE:
+                    # Divide by 1000 for equivalence with initial implementation.
+                    # Without a factor of 1/1000, the VB term hurts the MSE term.
+                    terms["vb"] *= self.num_timesteps / 1000.0
+
+            if self.model_mean_type == ModelMeanType.PREVIOUS_X:
+                target = self.q_posterior_mean_variance(
+                    x_start=x_start, x_t=x_t, t=t
+                )[0]
+                x_start_pred = torch.zeros(x_start)  # Not supported.
+            elif self.model_mean_type == ModelMeanType.START_X:
+                target = x_start
+                x_start_pred = model_output
+            elif self.model_mean_type == ModelMeanType.EPSILON:
+                target = noise
+                x_start_pred = self._predict_xstart_from_eps(x_t, t, model_output)
+            else:
+                raise NotImplementedError(self.model_mean_type)
+            assert model_output.shape == target.shape == x_start.shape
+            terms["mse"] = mean_flat((target - model_output) ** 2)
+            terms["x_start_predicted"] = x_start_pred
+            if "vb" in terms:
+                terms["loss"] = terms["mse"] + terms["vb"]
+            else:
+                terms["loss"] = terms["mse"]
+        else:
+            raise NotImplementedError(self.loss_type)
+
+        return terms
+
     def _prior_bpd(self, x_start):
         """
         Get the prior KL term for the variational lower-bound, measured in
