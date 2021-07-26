@@ -24,6 +24,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.sampling_rate = hparams.sampling_rate
         self.load_mel_from_disk = hparams.load_mel_from_disk
         self.return_wavs = hparams.return_wavs
+        self.input_sample_rate = hparams.input_sample_rate
         assert not (self.load_mel_from_disk and self.return_wavs)
         self.stft = layers.TacotronSTFT(
             hparams.filter_length, hparams.hop_length, hparams.win_length,
@@ -43,12 +44,14 @@ class TextMelLoader(torch.utils.data.Dataset):
     def get_mel(self, filename):
         if not self.load_mel_from_disk:
             audio, sampling_rate = load_wav_to_torch(filename)
-            if sampling_rate != self.stft.sampling_rate:
-                raise ValueError("{} {} SR doesn't match target {} SR".format(
-                    sampling_rate, self.stft.sampling_rate))
+            if sampling_rate != self.input_sample_rate:
+                raise ValueError(f"Input sampling rate does not match specified rate {self.input_sample_rate}")
             audio_norm = audio / self.max_wav_value
             audio_norm = audio_norm.unsqueeze(0)
             audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
+            if self.input_sample_rate != self.sampling_rate:
+                ratio = self.sampling_rate / self.input_sample_rate
+                audio_norm = torch.nn.functional.interpolate(audio_norm.unsqueeze(0), scale_factor=ratio, mode='area').squeeze(0)
             if self.return_wavs:
                 melspec = audio_norm
             else:
@@ -133,6 +136,8 @@ if __name__ == '__main__':
         'n_workers': 0,
         'batch_size': 2,
         'return_wavs': True,
+        'input_sample_rate': 22050,
+        'sampling_rate': 8000
     }
     from data import create_dataset, create_dataloader
 

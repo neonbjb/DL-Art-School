@@ -15,10 +15,10 @@ from utils.util import opt_get, checkpoint
 
 
 class WavDecoder(nn.Module):
-    def __init__(self, dec_channels, K_ms=40, sample_rate=24000, dropout_probability=.1):
+    def __init__(self, dec_channels, K_ms=40, sample_rate=8000, dropout_probability=.1):
         super().__init__()
         self.dec_channels = dec_channels
-        self.K = int(sample_rate * (K_ms/1000))  # 960 with the defaults
+        self.K = int(sample_rate * (K_ms/1000))
         self.clarifier = UNetModel(image_size=self.K,
                                    in_channels=1,
                                    model_channels=dec_channels // 4,  # This is a requirement to enable to load the embedding produced by the decoder into the unet model.
@@ -189,7 +189,7 @@ class WaveTacotron2(nn.Module):
         if self.mask_padding and output_lengths is not None:
             mask_fill = outputs[0].shape[-1]
             mask = ~get_mask_from_lengths(output_lengths, mask_fill)
-            mask = mask.expand(mask.size(0), 2, mask.size(1))
+            mask = mask.unsqueeze(1).repeat(1,2,1)
 
             outputs[0].data.masked_fill_(mask, 0.0)
             outputs[0] = outputs[0].unsqueeze(1)  # Re-add channel dimension.
