@@ -3,15 +3,17 @@ import torch
 from munch import munchify
 from torch.autograd import Variable
 from torch import nn
-from torch.nn import functional as F
+from torch.nn import functional as F, Flatten
 
-from models.diffusion.unet_diffusion import UNetModel
+from models.arch_util import ConvGnSilu
+from models.diffusion.unet_diffusion import UNetModel, AttentionPool2d
 from models.tacotron2.layers import ConvNorm, LinearNorm
 from models.tacotron2.hparams import create_hparams
 from models.tacotron2.tacotron2 import Prenet, Attention, Encoder
 from trainer.networks import register_model
 from models.tacotron2.taco_utils import get_mask_from_lengths
 from utils.util import opt_get, checkpoint
+
 
 
 class WavDecoder(nn.Module):
@@ -24,13 +26,18 @@ class WavDecoder(nn.Module):
                                    model_channels=dec_channels // 4,  # This is a requirement to enable to load the embedding produced by the decoder into the unet model.
                                    out_channels=2,  # 2 channels: eps_pred and variance_pred
                                    num_res_blocks=2,
-                                   attention_resolutions=(16,32),
+                                   attention_resolutions=(8,),
                                    dims=1,
                                    dropout=.1,
-                                   channel_mult=(1,1,1,2,4,8),
+                                   channel_mult=(1,2,4,8),
                                    use_raw_y_as_embedding=True)
         assert self.K % 64 == 0  # Otherwise the UNetModel breaks.
-        self.pre_rnn = Prenet(self.K, [dec_channels, dec_channels])
+        self.pre_rnn = nn.Sequential(ConvGnSilu(1,32,kernel_size=5,convnd=nn.Conv1d),
+                                     ConvGnSilu(32,64,kernel_size=5,stride=4,convnd=nn.Conv1d),
+                                     ConvGnSilu(64,128,kernel_size=5,stride=4,convnd=nn.Conv1d),
+                                     ConvGnSilu(128,256,kernel_size=5,stride=4,convnd=nn.Conv1d),
+                                     ConvGnSilu(256,dec_channels,kernel_size=1,convnd=nn.Conv1d),
+                                     AttentionPool2d(self.K//64,dec_channels,dec_channels//4))
         self.attention_rnn = nn.LSTMCell(dec_channels*2, dec_channels)
         self.attention_layer = Attention(dec_channels, dec_channels, dec_channels)
         self.decoder_rnn = nn.LSTMCell(dec_channels*2, dec_channels, 1)
@@ -47,7 +54,7 @@ class WavDecoder(nn.Module):
 
         wavs = torch.stack(wavs, dim=1)  # wavs.shape = (b,s,K) where s=decoder sequence length
         return wavs, padding_needed
-
+ 
     def prepare_decoder_inputs(self, inp):
         # inp.shape = (b,s,K) chunked waveform.
         b,s,K = inp.shape
@@ -135,24 +142,25 @@ class WavDecoder(nn.Module):
 
         return diffusion_eps[:,:,:-padding_added], gate_outputs[:,:-padding_added], alignments[:,:-padding_added]
 
-    def forward(self, wav, wav_corrected, timesteps, text_enc, memory_lengths):
+    def forward(self, wav_noised, wav_real, timesteps, text_enc, memory_lengths):
         '''
         Performs a training forward pass with the given data.
-        :param wav: (b,n) diffused waveform tensor on the interval [-1,1]
-        :param wav_corrected: (b,n) waveform tensor that has had one step of diffusion correction over <wav>
+        :param wav_noised: (b,n) diffused waveform tensor on the interval [-1,1]
+        :param wav_real: (b,n) actual waveform tensor
         :param text_enc: (b,e) embedding post-encoder with e=self.dec_channels
         '''
 
         # Start by splitting up the provided waveforms into discrete segments.
-        wavs, padding_added = self.chunk_wav(wav)
-        wavs_corrected, _ = self.chunk_wav(wav_corrected)
-        wavs_corrected = self.prepare_decoder_inputs(wavs_corrected)
-        wavs_corrected = checkpoint(self.pre_rnn, wavs_corrected)
+        wav_noised, padding_added = self.chunk_wav(wav_noised)
+        wav_real, _ = self.chunk_wav(wav_real)
+        wav_real = self.prepare_decoder_inputs(wav_real)
+        b,s,K = wav_real.shape
+        wav_real = checkpoint(self.pre_rnn, wav_real.reshape(b*s,1,K)).reshape(b,s,self.dec_channels)
 
         self.initialize_decoder_states(text_enc, mask=~get_mask_from_lengths(memory_lengths))
         decoder_contexts, gate_outputs, alignments = [], [], []
-        while len(decoder_contexts) < wavs_corrected.size(1):
-            decoder_input = wavs_corrected[:, len(decoder_contexts)]
+        while len(decoder_contexts) < wav_real.size(1):
+            decoder_input = wav_real[:, len(decoder_contexts)]
             dec_context, gate_output, attention_weights = self.produce_context(decoder_input)
             decoder_contexts += [dec_context.squeeze(1)]
             gate_outputs += [gate_output.squeeze(1)]
@@ -163,8 +171,8 @@ class WavDecoder(nn.Module):
         diffusion_emb = torch.stack(decoder_contexts, dim=1)
         b,s,c = diffusion_emb.shape
         diffusion_emb = diffusion_emb.reshape(b*s,c)
-        wavs = wavs.reshape(b*s,1,self.K)
-        diffusion_eps = self.clarifier(wavs, timesteps.repeat(s), diffusion_emb).reshape(b,s,2,self.K)
+        wav_noised = wav_noised.reshape(b*s,1,self.K)
+        diffusion_eps = self.clarifier(wav_noised, timesteps.repeat(s), diffusion_emb).reshape(b,s,2,self.K)
         # Recombine diffusion outputs across the sequence into a single prediction.
         diffusion_eps, gate_outputs, alignments = self.recombine(diffusion_eps, gate_outputs, alignments, padding_added)
         return diffusion_eps, gate_outputs, alignments

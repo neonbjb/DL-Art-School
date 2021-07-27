@@ -395,11 +395,11 @@ class ConvGnLelu(nn.Module):
 ''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
     kernel sizes. '''
 class ConvGnSilu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, num_groups=8, weight_init_factor=1):
+    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, num_groups=8, weight_init_factor=1, convnd=nn.Conv2d):
         super(ConvGnSilu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        self.conv = convnd(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
         if norm:
             self.gn = nn.GroupNorm(num_groups, filters_out)
         else:
@@ -411,7 +411,7 @@ class ConvGnSilu(nn.Module):
 
         # Init params.
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
+            if isinstance(m, convnd):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.silu else 'linear')
                 m.weight.data *= weight_init_factor
                 if m.bias is not None:

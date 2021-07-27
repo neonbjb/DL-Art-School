@@ -47,7 +47,7 @@ class AttentionPool2d(nn.Module):
         b, c, *_spatial = x.shape
         x = x.reshape(b, c, -1)  # NC(HW)
         x = th.cat([x.mean(dim=-1, keepdim=True), x], dim=-1)  # NC(HW+1)
-        x = x + self.positional_embedding[None, :, :].to(x.dtype)  # NC(HW+1)
+        x = x + self.positional_embedding[None, :, :x.shape[-1]].to(x.dtype)  # NC(HW+1)
         x = self.qkv_proj(x)
         x = self.attention(x)
         x = self.c_proj(x)
@@ -98,7 +98,12 @@ class Upsample(nn.Module):
         self.use_conv = use_conv
         self.dims = dims
         if use_conv:
-            self.conv = conv_nd(dims, self.channels, self.out_channels, 3, padding=1)
+            ksize = 3
+            pad = 1
+            if dims == 1:
+                ksize = 5
+                pad = 2
+            self.conv = conv_nd(dims, self.channels, self.out_channels, ksize, padding=pad)
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -106,6 +111,8 @@ class Upsample(nn.Module):
             x = F.interpolate(
                 x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest"
             )
+        elif self.dims == 1:
+            x = F.interpolate(x, scale_factor=4, mode="nearest")
         else:
             x = F.interpolate(x, scale_factor=2, mode="nearest")
         if self.use_conv:
@@ -129,10 +136,19 @@ class Downsample(nn.Module):
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.dims = dims
-        stride = 2 if dims != 3 else (1, 2, 2)
+        ksize = 3
+        pad = 1
+        if dims == 1:
+            stride = 4
+            ksize = 5
+            pad = 2
+        elif dims == 2:
+            stride = 2
+        else:
+            stride = (1,2,2)
         if use_conv:
             self.op = conv_nd(
-                dims, self.channels, self.out_channels, 3, stride=stride, padding=1
+                dims, self.channels, self.out_channels, ksize, stride=stride, padding=pad
             )
         else:
             assert self.channels == self.out_channels
