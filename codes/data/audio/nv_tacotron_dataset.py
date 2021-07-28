@@ -3,11 +3,13 @@ import random
 import numpy as np
 import torch
 import torch.utils.data
+from tqdm import tqdm
 
 import models.tacotron2.layers as layers
 from models.tacotron2.taco_utils import load_wav_to_torch, load_filepaths_and_text
 
 from models.tacotron2.text import text_to_sequence
+from utils.util import opt_get
 
 
 class TextMelLoader(torch.utils.data.Dataset):
@@ -23,8 +25,8 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
         self.load_mel_from_disk = hparams.load_mel_from_disk
-        self.return_wavs = hparams.return_wavs
-        self.input_sample_rate = hparams.input_sample_rate
+        self.return_wavs = opt_get(hparams, ['return_wavs'], False)
+        self.input_sample_rate = opt_get(hparams, ['input_sample_rate'], self.sampling_rate)
         assert not (self.load_mel_from_disk and self.return_wavs)
         self.stft = layers.TacotronSTFT(
             hparams.filter_length, hparams.hop_length, hparams.win_length,
@@ -134,10 +136,10 @@ if __name__ == '__main__':
         'path': 'E:\\audio\\LJSpeech-1.1\\ljs_audio_text_train_filelist.txt',
         'phase': 'train',
         'n_workers': 0,
-        'batch_size': 2,
-        'return_wavs': True,
-        'input_sample_rate': 22050,
-        'sampling_rate': 8000
+        'batch_size': 16,
+        #'return_wavs': True,
+        #'input_sample_rate': 22050,
+        #'sampling_rate': 8000
     }
     from data import create_dataset, create_dataloader
 
@@ -145,10 +147,10 @@ if __name__ == '__main__':
     dl = create_dataloader(ds, params, collate_fn=c)
     i = 0
     m = []
-    for b in dl:
-        m.append(b)
-        i += 1
-        if i > 9999:
-            break
+    max_text = 0
+    max_mel = 0
+    for b in tqdm(dl):
+        max_mel = max(max_mel, b['padded_mel'].shape[2])
+        max_text = max(max_text, b['padded_text'].shape[1])
     m=torch.stack(m)
     print(m.mean(), m.std())
