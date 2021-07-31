@@ -3,6 +3,8 @@ import logging
 import random
 import argparse
 
+import torchvision
+
 import utils
 import utils.options as option
 import utils.util as util
@@ -19,11 +21,20 @@ def forward_pass(model, denoiser, data, output_dir, opt, b):
     with torch.no_grad():
         model.feed_data(data, 0)
         model.test()
+
     pred_waveforms = model.eval_state[opt['eval']['output_state']][0]
     pred_waveforms = denoiser(pred_waveforms)
     ground_truth_waveforms = model.eval_state[opt['eval']['ground_truth']][0]
     ground_truth_waveforms = denoiser(ground_truth_waveforms)
     for i in range(pred_waveforms.shape[0]):
+        # Output predicted mels and waveforms.
+        pred_mel = model.eval_state[opt['eval']['pred_mel']][i]
+        pred_mel = ((pred_mel - pred_mel.mean()) / max(abs(pred_mel.min()), pred_mel.max())).unsqueeze(1)
+        torchvision.utils.save_image(pred_mel, osp.join(output_dir, f'{b}_{i}_pred_mel.png'))
+        gt_mel = model.eval_state[opt['eval']['ground_truth_mel']][i]
+        gt_mel = ((gt_mel - gt_mel.mean()) / max(abs(gt_mel.min()), gt_mel.max())).unsqueeze(1)
+        torchvision.utils.save_image(gt_mel, osp.join(output_dir, f'{b}_{i}_gt_mel.png'))
+
         audio = pred_waveforms[i][0].cpu().numpy()
         wavfile.write(osp.join(output_dir, f'{b}_{i}.wav'), 22050, audio)
         audio = ground_truth_waveforms[i][0].cpu().numpy()

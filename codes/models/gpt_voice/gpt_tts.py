@@ -1,25 +1,17 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from munch import munchify
 from tqdm import tqdm
 
 from models.arch_util import ConvGnSilu
+from models.gpt_voice.pixelshuffle_1d import PixelUnshuffle1D, PixelShuffle1D
+from models.tacotron2 import hparams
 from models.tacotron2.taco_utils import get_mask_from_lengths
+from models.tacotron2.tacotron2 import Postnet
 from models.tacotron2.text import symbols
 from models.gpt_voice.min_gpt import GPT, GPTConfig
 from trainer.networks import register_model
-
-
-# A Conv1d that masks out kernel elements ahead of the current location.
-class CausalConv1d(nn.Conv1d):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.kernel_mask = torch.ones_like(self.weight)
-        self.kernel_mask[:, :, -(self.kernel_size[0]//2):] = 0
-
-    def forward(self, input):
-        self.kernel_mask = self.kernel_mask.to(input.device)
-        return self._conv_forward(input, self.weight * self.kernel_mask, self.bias)
 
 
 class GptTts(nn.Module):
@@ -36,24 +28,26 @@ class GptTts(nn.Module):
         self.text_embedding = nn.Embedding(number_symbols, model_dim)
         # Whenever we process MEL frames, we need to be careful to use casually masked convolutions to avoid adding bias
         # into the model which we cannot provide in inference.
-        self.mel_encoder = nn.Sequential(ConvGnSilu(mel_dim, model_dim//2, kernel_size=5, convnd=CausalConv1d),
-                                         ConvGnSilu(model_dim//2, model_dim, kernel_size=5, stride=2, convnd=CausalConv1d))
+        self.mel_encoder = nn.Sequential(ConvGnSilu(mel_dim, model_dim//2, kernel_size=1, convnd=nn.Conv1d),
+                                         PixelUnshuffle1D(2),
+                                         ConvGnSilu(model_dim, model_dim, kernel_size=1, convnd=nn.Conv1d),
+                                         ConvGnSilu(model_dim, model_dim, kernel_size=1, convnd=nn.Conv1d))
         # *_tags are additively applied to
         self.text_tags = nn.Parameter(torch.randn(1, 1, model_dim)/256.0)
         self.separator = nn.Parameter(torch.randn(1, 1, model_dim))
         self.audio_tags = nn.Parameter(torch.randn(1, 1, model_dim)/256.0)
+        self.text_preprocess_xformer = GPT(GPTConfig(max_symbols_per_phrase, n_layer=2, n_head=2, n_embd=model_dim))
         self.gpt = GPT(GPTConfig(1+max_symbols_per_phrase+max_mel_frames//2, n_embd=model_dim, n_head=8))
 
-        self.gate_head = nn.Sequential(ConvGnSilu(model_dim, model_dim, kernel_size=5, convnd=CausalConv1d),
-                                       nn.Upsample(scale_factor=2, mode='nearest'),
-                                       ConvGnSilu(model_dim, model_dim//2, kernel_size=5, convnd=CausalConv1d),
-                                       # No need for causal convolutions when kernel_size=1
-                                       nn.Conv1d(model_dim//2, 1, kernel_size=1))
-        self.mel_head = nn.Sequential(ConvGnSilu(model_dim, model_dim, kernel_size=5, convnd=CausalConv1d),
-                                      nn.Upsample(scale_factor=2, mode='nearest'),
-                                      ConvGnSilu(model_dim, model_dim//2, kernel_size=5, convnd=CausalConv1d),
-                                      ConvGnSilu(model_dim//2, model_dim//2, kernel_size=5, convnd=CausalConv1d),
-                                      ConvGnSilu(model_dim//2, mel_dim, kernel_size=1, activation=False, norm=False, convnd=nn.Conv1d))
+        self.gate_head = nn.Sequential(ConvGnSilu(model_dim, model_dim, kernel_size=1, convnd=nn.Conv1d),
+                                      PixelShuffle1D(2),
+                                      ConvGnSilu(model_dim//2, model_dim//2, kernel_size=1, convnd=nn.Conv1d),
+                                      ConvGnSilu(model_dim//2, 1, kernel_size=1, norm=False, activation=False, convnd=nn.Conv1d))
+        self.mel_head = nn.Sequential(ConvGnSilu(model_dim, model_dim, kernel_size=1, convnd=nn.Conv1d),
+                                      PixelShuffle1D(2),
+                                      ConvGnSilu(model_dim//2, model_dim//2, kernel_size=1, convnd=nn.Conv1d),
+                                      ConvGnSilu(model_dim//2, mel_dim, kernel_size=1, norm=False, activation=False, convnd=nn.Conv1d))
+        #self.postnet = Postnet(munchify(hparams.create_hparams()))
 
     def forward(self, text_inputs, mel_targets, output_lengths):
         # Pad mel_targets to be a multiple of 2
@@ -62,13 +56,14 @@ class GptTts(nn.Module):
             mel_targets = F.pad(mel_targets, (0,1))
 
         text_emb = self.text_embedding(text_inputs)
+        text_emb = self.text_preprocess_xformer(text_emb, text_emb.shape[1])
         text_emb = text_emb + self.text_tags
         mel_emb = self.mel_encoder(mel_targets).permute(0,2,1)
         mel_emb = mel_emb + self.audio_tags
         emb = torch.cat([text_emb,
                          self.separator.repeat(text_emb.shape[0],1,1),
                          mel_emb], dim=1)
-        enc = self.gpt(emb)
+        enc = self.gpt(emb, text_emb.shape[1])
         mel_portion = enc[:, text_emb.shape[1]+1:].permute(0,2,1)
         gates = self.gate_head(mel_portion).squeeze(1)
         mel_pred = self.mel_head(mel_portion)
@@ -82,6 +77,9 @@ class GptTts(nn.Module):
         if padded:
             mel_pred = mel_pred[:, :, :-1]
             gates = gates[:, :-1]
+
+        #postnet_mel_pred = self.postnet(mel_pred)
+        #return mel_pred, postnet_mel_pred, gates
         return mel_pred, gates
 
     def test_guide(self, mel_guide, amount=50):
@@ -95,15 +93,16 @@ class GptTts(nn.Module):
         GATE_THRESHOLD = .95
 
         text_emb = self.text_embedding(text_inputs)
+        text_emb = self.text_preprocess_xformer(text_emb, text_emb.shape[1])
         text_emb = text_emb + self.text_tags
         b,s,c = text_emb.shape
         emb = torch.cat([text_emb,
-                         self.separator.repeat(text_emb.shape[0],1,1)], dim=1)
+                         self.separator.repeat(text_emb.shape[0],1,1),], dim=1)
                          #self.test_guide(mel_guide)], dim=1)
         completed = torch.zeros((b,), device=text_inputs.device, dtype=torch.bool)
         output = None
         for i in tqdm(range(self.max_mel_frames)):
-            enc = self.gpt(emb)
+            enc = self.gpt(emb, text_emb.shape[1])
             inferred = enc[:,s:,:].permute(0,2,1)
             # Create output frames.
             inferred_mel_frame = self.mel_head(inferred)[:,:,-MEL_HEAD_EXPANSION:]
@@ -143,9 +142,10 @@ if __name__ == '__main__':
                torch.randn(2,80,747),
                torch.tensor([600,747]))
     print(m.shape)
+    #print(p.shape)
     print(g.shape)
 
-    o = gpt.infer(torch.randint(high=24, size=(2,60)))
-    print(o.shape)
+    #o = gpt.infer(torch.randint(high=24, size=(2,60)))
+    #print(o.shape)
 
 

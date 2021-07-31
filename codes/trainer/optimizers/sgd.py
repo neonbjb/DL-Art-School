@@ -54,7 +54,7 @@ class SGDNoBiasMomentum(Optimizer):
                 if weight_decay != 0:
                     d_p = d_p.add(p, alpha=weight_decay)
                 # **this is the only modification over standard torch.optim.SGD:
-                is_bn_or_bias = (hasattr(p, 'is_bn') and p.is_bn) or (hasattr(p, 'is_bias') and p.is_bias)
+                is_bn_or_bias = (hasattr(p, 'is_norm') and p.is_bn) or (hasattr(p, 'is_bias') and p.is_bias)
                 if not is_bn_or_bias and momentum != 0:
                     param_state = self.state[p]
                     if 'momentum_buffer' not in param_state:
