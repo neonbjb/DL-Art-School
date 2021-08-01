@@ -271,6 +271,6 @@ def register_vqvae_audio(opt_net, opt):
 
 
 if __name__ == '__main__':
-    model = VQVAE(in_channel=-1, conv_module=nn.Conv1d, conv_transpose_module=nn.ConvTranspose1d)
-    res=model(torch.randn(1,224))
+    model = VQVAE(in_channel=80, conv_module=nn.Conv1d, conv_transpose_module=nn.ConvTranspose1d)
+    res=model(torch.randn(1,80,224))
     print(res[0].shape)

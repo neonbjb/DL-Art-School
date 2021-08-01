@@ -10,6 +10,20 @@ from utils.util import opt_get
 from utils.weight_scheduler import get_scheduler_for_opt
 
 
+class PadInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.multiple = opt['multiple']
+
+    def forward(self, state):
+        ldim = state[self.input].shape[-1]
+        mod = self.multiple-(ldim % self.multiple)
+        t = state[self.input]
+        if mod != 0:
+            t = torch.nn.functional.pad(t, (0, mod))
+        return {self.output: t}
+
+
 class SqueezeInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
