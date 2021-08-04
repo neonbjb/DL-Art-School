@@ -236,6 +236,16 @@ class VQVAE(nn.Module):
 
         return quant_t, quant_b, diff_t + diff_b, id_t, id_b
 
+    def encode_only_quantized(self, input):
+        qt, qb, d, idt, idb = self.encode(input)
+        # Interleave top and bottom so top comes first and bottom comes second, such that the output looks like
+        # [t0,b0,b1,t1,b1,b2,t2,b3,b4....]
+        b, s = idt.shape
+        idt = idt.view(b, s, 1)
+        idb = idb.reshape(b, 2, s).permute(0,2,1).contiguous()
+        ids = torch.cat([idt, idb], dim=2).reshape(b, s*3)
+        return ids
+
     def decode(self, quant_t, quant_b):
         upsample_t = self.upsample_t(quant_t)
         quant = torch.cat([upsample_t, quant_b], 1)
@@ -245,13 +255,24 @@ class VQVAE(nn.Module):
 
     def decode_code(self, code_t, code_b):
         quant_t = self.quantize_t.embed_code(code_t)
-        quant_t = quant_t.permute((0,3,1,2) if len(input) == 4 else (0,2,1))
+        quant_t = quant_t.permute((0,3,1,2) if len(code_t.shape) == 4 else (0,2,1))
         quant_b = self.quantize_b.embed_code(code_b)
-        quant_b = quant_b.permute((0,3,1,2) if len(input) == 4 else (0,2,1))
+        quant_b = quant_b.permute((0,3,1,2) if len(code_t.shape) == 4 else (0,2,1))
 
         dec = self.decode(quant_t, quant_b)
 
         return dec
+
+    # Performs decode_code() with the outputs from encode_only_quantized.
+    def decode_code_joined(self, input):
+        b, s = input.shape
+        assert s % 3 == 0  # If not, this tensor didn't come from encode_only_quantized.
+        s = s // 3
+
+        input = input.reshape(b, s, 3).permute(0,2,1).contiguous()
+        t = input[:,0,:]
+        b = input[:,1:,:].reshape(b, 2*s)
+        return self.decode_code(t, b)
 
 
 @register_model
@@ -272,5 +293,7 @@ def register_vqvae_audio(opt_net, opt):
 
 if __name__ == '__main__':
     model = VQVAE(in_channel=80, conv_module=nn.Conv1d, conv_transpose_module=nn.ConvTranspose1d)
-    res=model(torch.randn(1,80,224))
+    #res=model(torch.randn(1,80,2048))
+    e = model.encode_only_quantized(torch.randn(1, 80, 2048))
+    model.decode_code_joined(e)
     print(res[0].shape)

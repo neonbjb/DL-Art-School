@@ -16,6 +16,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+from utils.util import checkpoint, sequential_checkpoint
+
 logger = logging.getLogger(__name__)
 
 class GPTConfig:
@@ -56,7 +58,7 @@ class CausalSelfAttention(nn.Module):
                                      .view(1, 1, config.block_size, config.block_size))
         self.n_head = config.n_head
 
-    def forward(self, x, text_block_size):
+    def forward(self, x):
         B, T, C = x.size()
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -66,12 +68,10 @@ class CausalSelfAttention(nn.Module):
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.mask[:,:,:T,:T].logical_or(
-            F.pad(torch.ones((B,self.n_head,text_block_size,text_block_size), device=x.device), (0, T-text_block_size, 0, T-text_block_size))) == 0,
-                              float('-inf'))
+        att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
-        y = att @ v  # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
@@ -93,19 +93,22 @@ class Block(nn.Module):
             nn.Dropout(config.resid_pdrop),
         )
 
-    def forward(self, x, text_block_size):
-        x = x + self.attn(self.ln1(x), text_block_size)
+    def forward(self, x):
+        x = x + self.attn(self.ln1(x))
         x = x + self.mlp(self.ln2(x))
         return x
 
 class GPT(nn.Module):
     """  the full GPT language model, with a context size of block_size """
 
-    def __init__(self, config):
+    def __init__(self, config, do_pos_emb=True):
         super().__init__()
 
         # input embedding stem
-        self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
+        if do_pos_emb:
+            self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
+        else:
+            self.pos_emb = None
         self.drop = nn.Dropout(config.embd_pdrop)
         # transformer
         self.blocks = nn.Sequential(*[Block(config) for _ in range(config.n_layer)])
@@ -173,14 +176,14 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
         return optimizer
 
-    def forward(self, embeddings, text_block_sizes):
+    def forward(self, embeddings):
         b, t, c = embeddings.size()
         assert t <= self.block_size, "Cannot forward, model block size is exhausted."
 
         # forward the GPT model
-        position_embeddings = self.pos_emb[:, :t, :]  # each position maps to a (learnable) vector
-        x = self.drop(embeddings + position_embeddings)
-        for block in self.blocks:
-            x = block(x, text_block_sizes)
+        if self.pos_emb is not None:
+            embeddings = embeddings + self.pos_emb[:, :t, :]  # each position maps to a (learnable) vector
+        x = self.drop(embeddings)
+        x = sequential_checkpoint(self.blocks, 4, x)
 
         return x

@@ -81,7 +81,9 @@ class ConfigurableStep(Module):
             norm_modules = (nn.BatchNorm2d, nn.InstanceNorm2d, nn.BatchNorm1d, nn.InstanceNorm1d,
                             nn.BatchNorm3d, nn.InstanceNorm3d, nn.GroupNorm, nn.LayerNorm)
             emb_modules = (nn.Embedding, nn.EmbeddingBag)
-            params_notweights = set()
+            param_names_notweights = set()
+            all_param_names = set()
+            param_map = {}
             for mn, m in net.named_modules():
                 for k, v in m.named_parameters():
                     v.is_bias = k.endswith(".bias")
@@ -89,8 +91,11 @@ class ConfigurableStep(Module):
                     v.is_norm = isinstance(m, norm_modules)
                     v.is_emb = isinstance(m, emb_modules)
 
+                    fpn = '%s.%s' % (mn, k) if mn else k  # full param name
+                    all_param_names.add(fpn)
+                    param_map[fpn] = v
                     if v.is_bias or v.is_norm or v.is_emb:
-                        params_notweights.add(v)
+                        param_names_notweights.add(fpn)
 
                     # Some models can specify some parameters to be in different groups.
                     param_group = "default"
@@ -106,7 +111,8 @@ class ConfigurableStep(Module):
                     else:
                         if self.env['rank'] <= 0:
                             logger.warning('Params [{:s}] will not optimize.'.format(k))
-            params_weights = set(net.parameters()) ^ params_notweights
+            params_notweights = [param_map[k] for k in sorted(list(param_names_notweights))]
+            params_weights = [param_map[k] for k in sorted(list(all_param_names ^ param_names_notweights))]
 
             if 'optimizer' not in self.step_opt.keys() or self.step_opt['optimizer'] == 'adam':
                 opt = torch.optim.Adam(list(optim_params.values()), lr=opt_config['lr'],
@@ -114,8 +120,8 @@ class ConfigurableStep(Module):
                                        betas=(opt_config['beta1'], opt_config['beta2']))
             elif self.step_opt['optimizer'] == 'adamw':
                 groups = [
-                    { 'params': list(params_weights), 'weight_decay': opt_get(opt_config, ['weight_decay'], 0) },
-                    { 'params': list(params_notweights), 'weight_decay': 0  }
+                    { 'params': params_weights, 'weight_decay': opt_get(opt_config, ['weight_decay'], 0) },
+                    { 'params': params_notweights, 'weight_decay': 0 }
                 ]
                 opt = torch.optim.AdamW(groups, lr=opt_config['lr'],
                                        weight_decay=opt_get(opt_config, ['weight_decay'], 1e-2),
@@ -189,6 +195,9 @@ class ConfigurableStep(Module):
             training_net = self.get_network_for_name(self.step_opt['training'])
             if no_ddp_sync and hasattr(training_net, 'no_sync'):
                 with training_net.no_sync():
+                    injected = inj(local_state)
+            elif opt_get(inj.opt, ['no_grad'], False):
+                with torch.no_grad():
                     injected = inj(local_state)
             else:
                 injected = inj(local_state)
