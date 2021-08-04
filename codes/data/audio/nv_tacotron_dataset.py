@@ -41,7 +41,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         audiopath = os.path.join(self.path, audiopath)
         text = self.get_text(text)
         mel = self.get_mel(audiopath)
-        return (text, mel)
+        return (text, mel, audiopath_and_text[0])
 
     def get_mel(self, filename):
         if not self.load_mel_from_disk:
@@ -88,7 +88,7 @@ class TextMelCollate():
         """Collate's training batch from normalized text and mel-spectrogram
         PARAMS
         ------
-        batch: [text_normalized, mel_normalized]
+        batch: [text_normalized, mel_normalized, filename]
         """
         # Right zero-pad all one-hot text sequences to max input length
         input_lengths, ids_sorted_decreasing = torch.sort(
@@ -121,12 +121,15 @@ class TextMelCollate():
             gate_padded[i, mel.size(1)-1:] = 1
             output_lengths[i] = mel.size(1)
 
+        filenames = [j[2] for j in batch]
+
         return {
             'padded_text': text_padded,
             'input_lengths': input_lengths,
             'padded_mel': mel_padded,
             'padded_gate': gate_padded,
             'output_lengths': output_lengths,
+            'filenames': filenames
         }
 
 

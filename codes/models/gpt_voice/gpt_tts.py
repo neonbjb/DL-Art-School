@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from munch import munchify
+from torch import LongTensor
 from tqdm import tqdm
 
 from models.arch_util import ConvGnSilu
@@ -45,26 +46,6 @@ class GptTts(nn.Module):
         self.mel_head = nn.Linear(model_dim, self.MEL_DICTIONARY_SIZE)
 
     def forward(self, text_inputs, text_lengths, mel_targets, output_lengths):
-        output_lengths = output_lengths * 3 // 8  # The data we are dealing with has been compressed by the vqvae.
-        # Add the stop tokens to the end of the texts and mels. Theoretically this would be better done at the dataloader level.
-        batch_range = torch.arange(0, text_inputs.shape[0])
-        text_inputs = F.pad(text_inputs, (0,1))
-        text_inputs.index_put_((batch_range, text_lengths), torch.tensor([self.TEXT_STOP_TOKEN], dtype=torch.long, device=text_inputs.device))
-        text_lengths = text_lengths + 1
-        mel_targets = F.pad(mel_targets, (0,1))
-        mel_targets.index_put_((batch_range, output_lengths), torch.tensor([self.MEL_STOP_TOKEN], dtype=torch.long, device=text_inputs.device))
-        output_lengths = output_lengths + 1
-        # Add the start tokens to the beginnings of the texts and mels.
-        text_inputs = F.pad(text_inputs, (1,0), value=self.TEXT_START_TOKEN)
-        text_lengths = text_lengths + 1
-        mel_targets = F.pad(mel_targets, (1,0), value=self.MEL_START_TOKEN)
-        output_lengths = output_lengths + 1
-        # Add padding as well. This also should realistically be done at the dataloader level.
-        text_pad_mask = ~get_mask_from_lengths(text_lengths, text_inputs.shape[1])
-        text_inputs.data.masked_fill_(text_pad_mask, self.TEXT_PAD_TOKEN)
-        mel_pad_mask = ~get_mask_from_lengths(output_lengths, mel_targets.shape[1])
-        mel_targets.data.masked_fill_(mel_pad_mask, self.MEL_PAD_TOKEN)
-
         text_emb = self.text_embedding(text_inputs)
         text_emb = text_emb + self.text_pos_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device))
         mel_emb = self.mel_embedding(mel_targets)
@@ -81,62 +62,43 @@ class GptTts(nn.Module):
         # Compute loss
         loss_text = F.cross_entropy(text_logits.permute(0,2,1)[:,:,1:], text_inputs[:,1:], reduction='none')
         loss_mel = F.cross_entropy(mel_logits.permute(0,2,1)[:,:,1:], mel_targets[:,1:], reduction='none')
+
         # Apply a reduction factor across MEL_PAD and TEXT_PAD tokens.
         pad_loss_reduction_factor = .01
+        text_pad_mask = ~get_mask_from_lengths(text_lengths, text_inputs.shape[1])
+        mel_pad_mask = ~get_mask_from_lengths(output_lengths, mel_targets.shape[1])
         loss_text = loss_text * torch.ones_like(loss_text).masked_fill_(text_pad_mask[:,1:], pad_loss_reduction_factor)
         loss_mel = loss_mel * torch.ones_like(loss_mel).masked_fill_(mel_pad_mask[:,1:], pad_loss_reduction_factor)
 
         # Fix up mel_logits so it can go into a VAE decoder as well.
         mel_codes = torch.argmax(F.softmax(mel_logits, dim=-1), dim=-1)
-        mel_codes = mel_codes[:,1:]
-        mel_codes = mel_codes * torch.ones_like(mel_codes).masked_fill_(mel_pad_mask[:,1:], 0)
-        mel_codes = mel_codes[:,:-1]
+        mel_codes = mel_codes[:,1:-1]  # Strip off first and last tokens (START+STOP were added by the dataloader)
+        mel_codes = mel_codes * torch.ones_like(mel_codes).masked_fill_(mel_pad_mask[:,1:-1], 0)
         extra_mask = mel_codes < self.MEL_DICTIONARY_SIZE-3  # The VAE doesn't know about START/STOP/PAD
         mel_codes = mel_codes * extra_mask
 
         return loss_text.mean(), loss_mel.mean(), mel_codes
 
-    def inference(self, text_inputs, mel_guide):
-        MEL_HEAD_EXPANSION = 2
-        GATE_THRESHOLD = .95
-
+    def inference(self, text_inputs):
         text_emb = self.text_embedding(text_inputs)
-        text_emb = self.text_preprocess_xformer(text_emb, text_emb.shape[1])
-        text_emb = text_emb + self.text_tags
-        b,s,c = text_emb.shape
-        emb = torch.cat([text_emb,
-                         self.separator.repeat(text_emb.shape[0],1,1),], dim=1)
-                         #self.test_guide(mel_guide)], dim=1)
-        completed = torch.zeros((b,), device=text_inputs.device, dtype=torch.bool)
-        output = None
-        for i in tqdm(range(self.max_mel_frames)):
-            enc = self.gpt(emb, text_emb.shape[1])
-            inferred = enc[:,s:,:].permute(0,2,1)
-            # Create output frames.
-            inferred_mel_frame = self.mel_head(inferred)[:,:,-MEL_HEAD_EXPANSION:]
-            inferred_mel_frame = inferred_mel_frame * (~completed).float().view(b,1,1)
-            if output is None:
-                output = inferred_mel_frame
-            else:
-                output = torch.cat([output, inferred_mel_frame], dim=2)
+        text_emb = text_emb + self.text_pos_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device))
 
-            # Test termination condition
-            gate = F.sigmoid(self.gate_head(inferred)).max(dim=-1).values  # TODO: accept single-frame terminations.
-            completed = completed.logical_or((gate > GATE_THRESHOLD).squeeze(1))  # This comprises a latch - but that may not be wise.
-            if torch.all(completed):
-                break
+        mel_seq = [self.MEL_START_TOKEN, 0]
+        while mel_seq[-1] != self.MEL_STOP_TOKEN and len(mel_seq) < self.max_mel_frames:
+            mel_emb = self.mel_embedding(LongTensor(mel_seq, device=text_inputs.device))
+            mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_seq.shape[1], device=mel_seq.device))
+            emb = torch.cat([text_emb, mel_emb], dim=1)
+            enc = self.gpt(emb)
+            mel_logits = self.final_norm(enc[:, text_emb.shape[1]:])
+            mel_logits = self.mel_head(mel_logits)
+            mel_codes = torch.argmax(F.softmax(mel_logits, dim=-1), dim=-1)
+            mel_seq[-1] = mel_codes[-1]
+            mel_seq.append(0)
 
-            # Apply inferred mel_frames to emb for next pass.
-            mel_emb = self.mel_encoder(output).permute(0,2,1)
-            mel_emb = mel_emb + self.audio_tags
-            emb = torch.cat([text_emb,
-                             self.separator.repeat(text_emb.shape[0],1,1),
-                             mel_emb], dim=1)
-            if i == self.max_mel_frames//2:
-                print("Warning! Inference hit mel frame cap without encountering a stop token.")
-                break
+        if len(mel_seq) >= self.max_mel_frames:
+            print("Warning! Encountered frame limit before a stop token. Output is likely wrong.")
 
-        return output
+        return mel_seq[:-1]
 
 
 @register_model

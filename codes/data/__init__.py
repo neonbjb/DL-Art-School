@@ -70,6 +70,10 @@ def create_dataset(dataset_opt, return_collate=False):
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
         collate = C(dataset_opt.n_frames_per_step)
+    elif mode == 'gpt_tts':
+        from data.audio.gpt_tts_dataset import GptTtsDataset as D
+        from data.audio.gpt_tts_dataset import GptTtsCollater as C
+        collate = C(dataset_opt)
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)
