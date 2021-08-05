@@ -18,7 +18,8 @@ def get_scheduler_for_name(name, optimizers, scheduler_opt):
                                              weights=scheduler_opt['restart_weights'],
                                              gamma=scheduler_opt['lr_gamma'],
                                              clear_state=scheduler_opt['clear_state'],
-                                             force_lr=scheduler_opt['force_lr'])
+                                             force_lr=scheduler_opt['force_lr'],
+                                             warmup_steps=scheduler_opt['warmup_steps'])
         elif name == 'ProgressiveMultiStepLR':
             sched = ProgressiveMultiStepLR(o, scheduler_opt['gen_lr_steps'],
                                              scheduler_opt['progressive_starts'],
@@ -55,7 +56,7 @@ class ProgressiveMultiStepLR(_LRScheduler):
 
 class MultiStepLR_Restart(_LRScheduler):
     def __init__(self, optimizer, milestones, restarts=None, weights=None, gamma=0.1,
-                 clear_state=False, force_lr=False, last_epoch=-1):
+                 clear_state=False, force_lr=False, last_epoch=-1, warmup_steps=0):
         self.milestones = Counter(milestones)
         self.gamma = gamma
         self.clear_state = clear_state
@@ -63,11 +64,13 @@ class MultiStepLR_Restart(_LRScheduler):
         self.restarts = [v + 1 for v in self.restarts]
         self.restart_weights = weights if weights else [1]
         self.force_lr = force_lr
+        self.warmup_steps = warmup_steps
         assert len(self.restarts) == len(
             self.restart_weights), 'restarts and their weights do not match.'
         super(MultiStepLR_Restart, self).__init__(optimizer, last_epoch)
 
     def get_lr(self):
+        # Note to self: for the purposes of this trainer, "last_epoch" should read "last_step"
         if self.force_lr:
             return [group['initial_lr'] for group in self.optimizer.param_groups]
         if self.last_epoch in self.restarts:
@@ -75,6 +78,9 @@ class MultiStepLR_Restart(_LRScheduler):
                 self.optimizer.state = defaultdict(dict)
             weight = self.restart_weights[self.restarts.index(self.last_epoch)]
             return [group['initial_lr'] * weight for group in self.optimizer.param_groups]
+        if self.last_epoch < self.warmup_steps:
+            factor = 1 - (self.warmup_steps - self.last_epoch) / self.warmup_steps
+            return [group['initial_lr'] * factor for group in self.optimizer.param_groups]
         if self.last_epoch not in self.milestones:
             return [group['lr'] for group in self.optimizer.param_groups]
         return [
@@ -148,8 +154,8 @@ if __name__ == "__main__":
     restart_weights = [1, 1, 1]
 
     scheduler = MultiStepLR_Restart(optimizer, lr_steps, restarts, restart_weights, gamma=0.5,
-                                    clear_state=False)
-
+                                    clear_state=False, warmup_steps=20000)
+    '''
     ##############################
     # Cosine Annealing Restart
     ##############################
@@ -165,11 +171,12 @@ if __name__ == "__main__":
 
     scheduler = CosineAnnealingLR_Restart(optimizer, T_period, warmup=10000, eta_min=1e-8, restarts=restarts,
                                           weights=restart_weights)
+    '''
 
     ##############################
     # Draw figure
     ##############################
-    N_iter = 500000
+    N_iter = 100000
     lr_l = list(range(N_iter))
     for i in range(N_iter):
         scheduler.step()

@@ -1,24 +1,22 @@
 import os
-import random
-import numpy as np
+
 import torch
+import torch.nn.functional as F
 import torch.utils.data
 from torch import LongTensor
 from tqdm import tqdm
 
-import models.tacotron2.layers as layers
-from models.tacotron2.taco_utils import load_wav_to_torch, load_filepaths_and_text
-
-from models.tacotron2.text import text_to_sequence
-from utils.util import opt_get
+from models.tacotron2.taco_utils import load_filepaths_and_text
 from models.tacotron2.text import symbols
-import torch.nn.functional as F
+from models.tacotron2.text import text_to_sequence
 
 
 class GptTtsDataset(torch.utils.data.Dataset):
-    NUMBER_SYMBOLS = len(symbols)+3
-    TEXT_START_TOKEN = LongTensor([NUMBER_SYMBOLS-3])
-    TEXT_STOP_TOKEN = LongTensor([NUMBER_SYMBOLS-2])
+    MAX_SYMBOLS_PER_PHRASE = 200
+    NUMBER_SYMBOLS = len(symbols)
+    NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS + MAX_SYMBOLS_PER_PHRASE + 2
+    TEXT_START_TOKEN = LongTensor([NUMBER_TEXT_TOKENS-1])
+    TEXT_STOP_TOKEN = LongTensor([NUMBER_TEXT_TOKENS-2])
 
     def __init__(self, opt):
         self.path = os.path.dirname(opt['path'])
@@ -49,11 +47,11 @@ class GptTtsDataset(torch.utils.data.Dataset):
 
 
 class GptTtsCollater():
-    NUMBER_SYMBOLS = len(symbols)+3
-    TEXT_PAD_TOKEN = NUMBER_SYMBOLS-1
+    MAX_SYMBOLS_PER_PHRASE = 200
+    NUMBER_SYMBOLS = len(symbols)
+    NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS + MAX_SYMBOLS_PER_PHRASE + 2
 
     def __init__(self, opt):
-
         self.MEL_DICTIONARY_SIZE = opt['mel_vocab_size']+3
         self.MEL_PAD_TOKEN = self.MEL_DICTIONARY_SIZE-1
 
@@ -64,9 +62,13 @@ class GptTtsCollater():
         max_mel_len = max(mel_lens)
         texts = []
         qmels = []
+        # This is the sequential "background" tokens that are used as padding for text tokens, as specified in the DALLE paper.
+        text_range_embedding = torch.arange(max_text_len) + self.NUMBER_SYMBOLS
         for b in batch:
             text, qmel, _ = b
-            texts.append(F.pad(text, (0, max_text_len-len(text)), value=self.TEXT_PAD_TOKEN))
+            text = F.pad(text, (0, max_text_len-len(text)), value=0)
+            text = torch.where(text == 0, text_range_embedding, text)
+            texts.append(text)
             qmels.append(F.pad(qmel, (0, max_mel_len-len(qmel)), value=self.MEL_PAD_TOKEN))
 
         filenames = [j[2] for j in batch]
