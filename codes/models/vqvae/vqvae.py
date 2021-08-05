@@ -184,6 +184,7 @@ class VQVAE(nn.Module):
         self.unsqueeze_channels = in_channel == -1
         in_channel = abs(in_channel)
 
+        self.codebook_size = codebook_size
         self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=4, conv_module=conv_module)
         self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2, conv_module=conv_module)
         self.quantize_conv_t = conv_module(channel, codebook_dim, 1)
@@ -238,12 +239,9 @@ class VQVAE(nn.Module):
 
     def encode_only_quantized(self, input):
         qt, qb, d, idt, idb = self.encode(input)
-        # Interleave top and bottom so top comes first and bottom comes second, such that the output looks like
-        # [t0,b0,b1,t1,b1,b2,t2,b3,b4....]
-        b, s = idt.shape
-        idt = idt.view(b, s, 1)
-        idb = idb.reshape(b, 2, s).permute(0,2,1).contiguous()
-        ids = torch.cat([idt, idb], dim=2).reshape(b, s*3)
+        # Append top and bottom into the same sequence, adding the codebook length onto the top to discriminate it.
+        idt += self.codebook_size
+        ids = torch.cat([idt, idb], dim=1)
         return ids
 
     def decode(self, quant_t, quant_b):
@@ -269,9 +267,9 @@ class VQVAE(nn.Module):
         assert s % 3 == 0  # If not, this tensor didn't come from encode_only_quantized.
         s = s // 3
 
-        input = input.reshape(b, s, 3).permute(0,2,1).contiguous()
-        t = input[:,0,:]
-        b = input[:,1:,:].reshape(b, 2*s)
+        # This doesn't work with batching. TODO: fixme.
+        t = input[:,:s] - self.codebook_size
+        b = input[:,s:]
         return self.decode_code(t, b)
 
 
@@ -295,5 +293,5 @@ if __name__ == '__main__':
     model = VQVAE(in_channel=80, conv_module=nn.Conv1d, conv_transpose_module=nn.ConvTranspose1d)
     #res=model(torch.randn(1,80,2048))
     e = model.encode_only_quantized(torch.randn(1, 80, 2048))
-    model.decode_code_joined(e)
-    print(res[0].shape)
+    k = model.decode_code_joined(e)
+    print(k.shape)

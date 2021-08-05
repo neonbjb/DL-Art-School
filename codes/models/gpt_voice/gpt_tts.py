@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.gpt_voice.lucidrains_gpt import Transformer
+from models.gpt_voice.min_gpt import GPT, GPTConfig
 from models.tacotron2.taco_utils import get_mask_from_lengths
 from models.tacotron2.text import symbols
 from trainer.networks import register_model
@@ -12,7 +13,7 @@ class GptTts(nn.Module):
     MAX_SYMBOLS_PER_PHRASE = 200
     NUMBER_SYMBOLS = len(symbols)
     NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS + MAX_SYMBOLS_PER_PHRASE + 2
-    MEL_DICTIONARY_SIZE = 512+3
+    MEL_DICTIONARY_SIZE = 1024+3
     MEL_START_TOKEN = MEL_DICTIONARY_SIZE-3
     MEL_STOP_TOKEN = MEL_DICTIONARY_SIZE-2
 
@@ -27,8 +28,8 @@ class GptTts(nn.Module):
         self.mel_embedding = nn.Embedding(self.MEL_DICTIONARY_SIZE, model_dim)
         self.text_pos_embedding = nn.Embedding(self.MAX_SYMBOLS_PER_PHRASE, model_dim)
         self.mel_pos_embedding = nn.Embedding(max_mel_frames, model_dim)
-        #self.gpt = GPT(GPTConfig(1+max_symbols_per_phrase+max_mel_frames, n_embd=model_dim, n_head=8), do_pos_emb=False)
-        self.gpt = Transformer(dim=model_dim, depth=8, seq_len=1+self.MAX_SYMBOLS_PER_PHRASE+max_mel_frames, heads=8)
+        self.gpt = GPT(GPTConfig(1+self.MAX_SYMBOLS_PER_PHRASE+max_mel_frames, n_layer=8, n_embd=model_dim, n_head=8), do_pos_emb=False)
+        #self.gpt = Transformer(dim=model_dim, depth=8, seq_len=1+self.MAX_SYMBOLS_PER_PHRASE+max_mel_frames, heads=8)
 
         self.final_norm = nn.LayerNorm(model_dim)
         self.text_head = nn.Linear(model_dim, self.NUMBER_TEXT_TOKENS)
