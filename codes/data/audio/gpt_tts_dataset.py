@@ -73,10 +73,14 @@ class GptTtsCollater():
 
         filenames = [j[2] for j in batch]
 
+        padded_qmel_gt = torch.stack(qmels)[:, 1:-1]
+        padded_qmel_gt = padded_qmel_gt * (padded_qmel_gt < 512)
+
         return {
             'padded_text': torch.stack(texts),
             'input_lengths': LongTensor(text_lens),
             'padded_qmel': torch.stack(qmels),
+            'padded_qmel_gt': padded_qmel_gt,
             'output_lengths': LongTensor(mel_lens),
             'filenames': filenames
         }
