@@ -39,14 +39,17 @@ def cv2torch(cv, batchify=True):
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
+def is_wav_file(filename):
+    return filename.endswith('.wav')
 
-def _get_paths_from_images(path):
+
+def _get_paths_from_images(path, qualifier=is_image_file):
     """get image path list from image folder"""
     assert os.path.isdir(path), '{:s} is not a valid directory'.format(path)
     images = []
     for dirpath, _, fnames in sorted(os.walk(path)):
         for fname in sorted(fnames):
-            if is_image_file(fname) and 'ref.jpg' not in fname:
+            if qualifier(fname) and 'ref.jpg' not in fname:
                 img_path = os.path.join(dirpath, fname)
                 images.append(img_path)
     if not images:
@@ -64,7 +67,7 @@ def _get_paths_from_lmdb(dataroot):
     return paths, sizes
 
 
-def get_image_paths(data_type, dataroot, weights=[]):
+def get_image_paths(data_type, dataroot, weights=[], qualifier=is_image_file):
     """get image path list
     support lmdb or image files"""
     paths, sizes = None, None
@@ -82,11 +85,11 @@ def get_image_paths(data_type, dataroot, weights=[]):
                     if weights:
                         extends = weights[i]
                     for j in range(extends):
-                        paths.extend(_get_paths_from_images(r))
+                        paths.extend(_get_paths_from_images(r, qualifier))
                 paths = sorted(paths)
                 sizes = len(paths)
             else:
-                paths = sorted(_get_paths_from_images(dataroot))
+                paths = sorted(_get_paths_from_images(dataroot, qualifier))
                 sizes = len(paths)
         else:
             raise NotImplementedError('data_type [{:s}] is not recognized.'.format(data_type))
@@ -117,9 +120,9 @@ def read_img(env, path, size=None, rgb=False):
         stream = open(path, "rb")
         bytes = bytearray(stream.read())
         img = cv2.imdecode(np.asarray(bytes, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
-    elif env is 'lmdb':
+    elif env == 'lmdb':
         img = _read_img_lmdb(env, path, size)
-    elif env is 'buffer':
+    elif env == 'buffer':
         img = cv2.imdecode(path, cv2.IMREAD_UNCHANGED)
     else:
         raise NotImplementedError("Unsupported env: %s" % (env,))

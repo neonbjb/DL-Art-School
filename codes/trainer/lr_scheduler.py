@@ -4,6 +4,8 @@ from collections import defaultdict
 import torch
 from torch.optim.lr_scheduler import _LRScheduler
 
+from utils.util import opt_get
+
 
 def get_scheduler_for_name(name, optimizers, scheduler_opt):
     schedulers = []
@@ -19,7 +21,7 @@ def get_scheduler_for_name(name, optimizers, scheduler_opt):
                                              gamma=scheduler_opt['lr_gamma'],
                                              clear_state=scheduler_opt['clear_state'],
                                              force_lr=scheduler_opt['force_lr'],
-                                             warmup_steps=scheduler_opt['warmup_steps'])
+                                             warmup_steps=opt_get(scheduler_opt, ['warmup_steps'], 0))
         elif name == 'ProgressiveMultiStepLR':
             sched = ProgressiveMultiStepLR(o, scheduler_opt['gen_lr_steps'],
                                              scheduler_opt['progressive_starts'],

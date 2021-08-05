@@ -74,6 +74,8 @@ def create_dataset(dataset_opt, return_collate=False):
         from data.audio.gpt_tts_dataset import GptTtsDataset as D
         from data.audio.gpt_tts_dataset import GptTtsCollater as C
         collate = C(dataset_opt)
+    elif mode == 'wavfile_clips':
+        from data.audio.wavfile_dataset import WavfileDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)
