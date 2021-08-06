@@ -3,10 +3,13 @@ import random
 
 import torch
 import torch.utils.data
+import torchaudio
 from tqdm import tqdm
 
+from data.audio.wav_aug import WavAugmentor
 from data.util import get_image_paths, is_wav_file
 from models.tacotron2.taco_utils import load_wav_to_torch
+from utils.util import opt_get
 
 
 class WavfileDataset(torch.utils.data.Dataset):
@@ -20,9 +23,15 @@ class WavfileDataset(torch.utils.data.Dataset):
             print("Building cache..")
             self.audiopaths = get_image_paths('img', opt['path'], qualifier=is_wav_file)[0]
             torch.save(self.audiopaths, cache_path)
+
+        # Parse options
+        self.sampling_rate = opt_get(opt, ['sampling_rate'], 24000)
+        self.augment = opt_get(opt, ['do_augmentation'], False)
         self.max_wav_value = 32768.0
-        self.sampling_rate = 24000
+
         self.window = 2 * self.sampling_rate
+        if self.augment:
+            self.augmentor = WavAugmentor()
 
     def get_audio_for_index(self, index):
         audiopath = self.audiopaths[index]
@@ -46,8 +55,12 @@ class WavfileDataset(torch.utils.data.Dataset):
                 continue
             j = random.randint(0, audio_norm.shape[0] - self.window)
             clip1 = audio_norm[j:j+self.window]
+            if self.augment:
+                clip1 = self.augmentor.augment(clip1, self.sampling_rate)
             j = random.randint(0, audio_norm.shape[0]-self.window)
             clip2 = audio_norm[j:j+self.window]
+            if self.augment:
+                clip2 = self.augmentor.augment(clip2, self.sampling_rate)
 
         return {
             'clip1': clip1.unsqueeze(0),
@@ -66,16 +79,14 @@ if __name__ == '__main__':
         'phase': 'train',
         'n_workers': 0,
         'batch_size': 16,
+        'do_augmentation': True,
     }
     from data import create_dataset, create_dataloader, util
 
     ds, c = create_dataset(params, return_collate=True)
     dl = create_dataloader(ds, params, collate_fn=c)
     i = 0
-    m = []
-    max_text = 0
-    max_mel = 0
     for b in tqdm(dl):
-        pass
-    m=torch.stack(m)
-    print(m.mean(), m.std())
+        torchaudio.save(f'{i}_clip1.wav', b['clip1'], ds.sampling_rate)
+        torchaudio.save(f'{i}_clip2.wav', b['clip2'], ds.sampling_rate)
+        i += 1

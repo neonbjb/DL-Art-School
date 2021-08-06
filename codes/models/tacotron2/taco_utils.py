@@ -2,7 +2,6 @@ import numpy as np
 from scipy.io.wavfile import read
 import torch
 
-
 def get_mask_from_lengths(lengths, max_len=None):
     if max_len is None:
         max_len = torch.max(lengths).item()
