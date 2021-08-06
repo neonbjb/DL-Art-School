@@ -28,8 +28,8 @@ class GptTts(nn.Module):
         self.mel_embedding = nn.Embedding(self.MEL_DICTIONARY_SIZE, model_dim)
         self.text_pos_embedding = nn.Embedding(self.MAX_SYMBOLS_PER_PHRASE, model_dim)
         self.mel_pos_embedding = nn.Embedding(max_mel_frames, model_dim)
-        self.gpt = GPT(GPTConfig(1+self.MAX_SYMBOLS_PER_PHRASE+max_mel_frames, n_layer=8, n_embd=model_dim, n_head=8), do_pos_emb=False)
-        #self.gpt = Transformer(dim=model_dim, depth=8, seq_len=1+self.MAX_SYMBOLS_PER_PHRASE+max_mel_frames, heads=8)
+        #self.gpt = GPT(GPTConfig(1+self.MAX_SYMBOLS_PER_PHRASE+max_mel_frames, n_layer=8, n_embd=model_dim, n_head=8), do_pos_emb=False)
+        self.gpt = Transformer(dim=model_dim, depth=8, seq_len=1+self.MAX_SYMBOLS_PER_PHRASE+max_mel_frames, heads=8)
 
         self.final_norm = nn.LayerNorm(model_dim)
         self.text_head = nn.Linear(model_dim, self.NUMBER_TEXT_TOKENS)
