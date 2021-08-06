@@ -40,14 +40,14 @@ class WavAugmentor:
         ]
         band_effect = random.choice(band_effects)
         volume_effects = [
-            ['loudness', rdi(10,-10)],
+            ['loudness', rdi(10,-2)],
             ['overdrive', rdi(20,0), rdi(20,0)],
         ]
         vol_effect = random.choice(volume_effects)
         effects = [speed_effect, band_effect, vol_effect]
+        out, sr = torchaudio.sox_effects.apply_effects_tensor(wav, sample_rate, effects)
         # Add a variable amount of noise
-        out = wav + torch.rand_like(wav) * random.random() * .05
-        out, sr = torchaudio.sox_effects.apply_effects_tensor(out, sample_rate, effects)
+        out = out + torch.rand_like(out) * random.random() * .05
         return out
 
 
