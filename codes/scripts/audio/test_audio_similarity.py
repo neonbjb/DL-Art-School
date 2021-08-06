@@ -20,12 +20,13 @@ if __name__ == '__main__':
             clip = clip[:,0]
         clip = clip[:window].unsqueeze(0)
         clip = clip / 32768.0  # Normalize
+        clip = clip + torch.rand_like(clip) * .03  # Noise (this is how the model was trained)
         assert sr == 24000
         clips.append(clip)
     clips = torch.stack(clips, dim=0)
 
     resnet = resnet34()
-    sd = torch.load('../experiments/train_byol_audio_clips/models/66000_generator.pth')
+    sd = torch.load('../experiments/train_byol_audio_clips/models/57000_generator.pth')
     sd = extract_byol_model_from_state_dict(sd)
     resnet.load_state_dict(sd)
     embedding = resnet(clips, return_pool=True)

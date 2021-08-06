@@ -23,7 +23,9 @@ class WavAugmentor:
         pass
 
     def augment(self, wav, sample_rate):
-        speed_effect = ['speed', rdstr(.7, 1)]
+        speed_effect = ['speed', rdstr(.8, 1)]
+        '''
+        Band effects are disabled until I can audit them better.
         band_effects = [
             ['reverb', '-w'],
             ['reverb'],
@@ -39,15 +41,16 @@ class WavAugmentor:
             ['sinc', '3k-4k']
         ]
         band_effect = random.choice(band_effects)
+        '''
         volume_effects = [
             ['loudness', rdi(10,-2)],
             ['overdrive', rdi(20,0), rdi(20,0)],
         ]
         vol_effect = random.choice(volume_effects)
-        effects = [speed_effect, band_effect, vol_effect]
+        effects = [speed_effect, vol_effect]
         out, sr = torchaudio.sox_effects.apply_effects_tensor(wav, sample_rate, effects)
         # Add a variable amount of noise
-        out = out + torch.rand_like(out) * random.random() * .05
+        out = out + torch.rand_like(out) * random.random() * .03
         return out
 
 
