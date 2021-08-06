@@ -63,8 +63,8 @@ class WavfileDataset(torch.utils.data.Dataset):
                 clip2 = self.augmentor.augment(clip2, self.sampling_rate)
 
         return {
-            'clip1': clip1,
-            'clip2': clip2,
+            'clip1': clip1[0, :].unsqueeze(0),
+            'clip2': clip2[0, :].unsqueeze(0),
             'path': filename,
         }
 
@@ -83,10 +83,11 @@ if __name__ == '__main__':
     }
     from data import create_dataset, create_dataloader, util
 
-    ds, c = create_dataset(params, return_collate=True)
+    ds = create_dataset(params, return_collate=True)
     dl = create_dataloader(ds, params, collate_fn=c)
     i = 0
     for b in tqdm(dl):
-        torchaudio.save(f'{i}_clip1.wav', b['clip1'], ds.sampling_rate)
-        torchaudio.save(f'{i}_clip2.wav', b['clip2'], ds.sampling_rate)
-        i += 1
+        for b_ in range(16):
+            torchaudio.save(f'{i}_clip1_{b_}.wav', b['clip1'][b_], ds.sampling_rate)
+            torchaudio.save(f'{i}_clip2_{b_}.wav', b['clip2'][b_], ds.sampling_rate)
+            i += 1
