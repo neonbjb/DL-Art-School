@@ -125,8 +125,11 @@ class DiscreteVAE(nn.Module):
         return images
 
     def get_debug_values(self, step, __):
-        # Report annealing schedule
-        return {'histogram_codes': self.codes}
+        if self.record_codes:
+            # Report annealing schedule
+            return {'histogram_codes': self.codes}
+        else:
+            return {}
 
     @torch.no_grad()
     @eval_decorator
