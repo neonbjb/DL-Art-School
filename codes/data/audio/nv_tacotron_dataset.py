@@ -138,8 +138,8 @@ if __name__ == '__main__':
         'mode': 'nv_tacotron',
         'path': 'E:\\audio\\LJSpeech-1.1\\ljs_audio_text_train_filelist.txt',
         'phase': 'train',
-        'n_workers': 0,
-        'batch_size': 16,
+        'n_workers': 1,
+        'batch_size': 32,
         #'return_wavs': True,
         #'input_sample_rate': 22050,
         #'sampling_rate': 8000
@@ -149,11 +149,9 @@ if __name__ == '__main__':
     ds, c = create_dataset(params, return_collate=True)
     dl = create_dataloader(ds, params, collate_fn=c)
     i = 0
-    m = []
-    max_text = 0
-    max_mel = 0
-    for b in tqdm(dl):
-        max_mel = max(max_mel, b['padded_mel'].shape[2])
-        max_text = max(max_text, b['padded_text'].shape[1])
-    m=torch.stack(m)
-    print(m.mean(), m.std())
+    m = None
+    for i, b in tqdm(enumerate(dl)):
+        pm = b['padded_mel']
+        pm = torch.nn.functional.pad(pm, (0, 800-pm.shape[-1]))
+        m = pm if m is None else torch.cat([m, pm], dim=0)
+        print(m.mean(), m.std())

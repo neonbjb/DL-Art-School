@@ -201,12 +201,16 @@ class DirectLoss(ConfigurableLoss):
         self.opt = opt
         self.inverted = opt['inverted'] if 'inverted' in opt.keys() else False
         self.key = opt['key']
+        self.anneal = opt_get(opt, ['annealing_termination_step'], 0)
 
     def forward(self, _, state):
         if self.inverted:
-            return -torch.mean(state[self.key])
+            loss = -torch.mean(state[self.key])
         else:
-            return torch.mean(state[self.key])
+            loss = torch.mean(state[self.key])
+        if self.anneal > 0:
+            loss = loss * (1 - (self.anneal - min(self.env['step'], self.anneal)) / self.anneal)
+        return loss
 
 
 class FeatureLoss(ConfigurableLoss):
