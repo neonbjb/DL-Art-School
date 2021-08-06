@@ -40,7 +40,7 @@ class WavfileDataset(torch.utils.data.Dataset):
         if sampling_rate != self.sampling_rate:
             raise ValueError(f"Input sampling rate does not match specified rate {self.sampling_rate}")
         audio_norm = audio / self.max_wav_value
-        audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
+        audio_norm = audio_norm.unsqueeze(0)
         return audio_norm, audiopath
 
     def __getitem__(self, index):
@@ -49,22 +49,22 @@ class WavfileDataset(torch.utils.data.Dataset):
         while clip1 is None and clip2 is None:
             # Split audio_norm into two tensors of equal size.
             audio_norm, filename = self.get_audio_for_index(index)
-            if audio_norm.shape[0] < self.window * 2:
+            if audio_norm.shape[1] < self.window * 2:
                 # Try next index. This adds a bit of bias and ideally we'd filter the dataset rather than do this.
                 index = (index + 1) % len(self)
                 continue
-            j = random.randint(0, audio_norm.shape[0] - self.window)
-            clip1 = audio_norm[j:j+self.window]
+            j = random.randint(0, audio_norm.shape[1] - self.window)
+            clip1 = audio_norm[:, j:j+self.window]
             if self.augment:
                 clip1 = self.augmentor.augment(clip1, self.sampling_rate)
-            j = random.randint(0, audio_norm.shape[0]-self.window)
-            clip2 = audio_norm[j:j+self.window]
+            j = random.randint(0, audio_norm.shape[1]-self.window)
+            clip2 = audio_norm[:, j:j+self.window]
             if self.augment:
                 clip2 = self.augmentor.augment(clip2, self.sampling_rate)
 
         return {
-            'clip1': clip1.unsqueeze(0),
-            'clip2': clip2.unsqueeze(0),
+            'clip1': clip1,
+            'clip2': clip2,
             'path': filename,
         }
 

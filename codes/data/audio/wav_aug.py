@@ -53,7 +53,7 @@ class WavAugmentor:
 
 if __name__ == '__main__':
     sample, _ = load_wav_to_torch('obama1.wav')
-    sample = sample.permute(1,0) / 32768.0
+    sample = sample / 32768.0
     aug = WavAugmentor()
     for j in range(10):
         out = aug.augment(sample, 24000)
