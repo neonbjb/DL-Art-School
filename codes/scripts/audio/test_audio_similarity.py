@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from data.util import is_wav_file, get_image_paths
-from models.audio_resnet import resnet34
+from models.audio_resnet import resnet34, resnet50
 from models.tacotron2.taco_utils import load_wav_to_torch
 from scripts.byol.byol_extract_wrapped_model import extract_byol_model_from_state_dict
 
@@ -20,13 +20,13 @@ if __name__ == '__main__':
             clip = clip[:,0]
         clip = clip[:window].unsqueeze(0)
         clip = clip / 32768.0  # Normalize
-        clip = clip + torch.rand_like(clip) * .03  # Noise (this is how the model was trained)
+        #clip = clip + torch.rand_like(clip) * .03  # Noise (this is how the model was trained)
         assert sr == 24000
         clips.append(clip)
     clips = torch.stack(clips, dim=0)
 
-    resnet = resnet34()
-    sd = torch.load('../experiments/train_byol_audio_clips/models/57000_generator.pth')
+    resnet = resnet50()
+    sd = torch.load('../experiments/train_byol_audio_clips/models/8000_generator.pth')
     sd = extract_byol_model_from_state_dict(sd)
     resnet.load_state_dict(sd)
     embedding = resnet(clips, return_pool=True)

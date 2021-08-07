@@ -134,9 +134,10 @@ class DiscreteVAE(nn.Module):
     @torch.no_grad()
     @eval_decorator
     def get_codebook_indices(self, images):
-        logits = self(images, return_logits = True)
-        codebook_indices = logits.argmax(dim = 1).flatten(1)
-        return codebook_indices
+        img = self.norm(images)
+        logits = self.encoder(img).permute((0,2,3,1) if len(img.shape) == 4 else (0,2,1))
+        sampled, commitment_loss, codes = self.codebook(logits)
+        return codes
 
     def decode(
         self,

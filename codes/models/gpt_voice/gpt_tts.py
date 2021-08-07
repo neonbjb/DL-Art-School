@@ -13,14 +13,14 @@ class GptTts(nn.Module):
     MAX_SYMBOLS_PER_PHRASE = 200
     NUMBER_SYMBOLS = len(symbols)
     NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS + MAX_SYMBOLS_PER_PHRASE + 2
-    MEL_DICTIONARY_SIZE = 1024+3
+    MEL_DICTIONARY_SIZE = 512+3
     MEL_START_TOKEN = MEL_DICTIONARY_SIZE-3
     MEL_STOP_TOKEN = MEL_DICTIONARY_SIZE-2
 
     def __init__(self):
         super().__init__()
         model_dim = 512
-        max_mel_frames = 900 * 3 // 8  #  900 is the max number of MEL frames. The VQVAE outputs 3/8 of the input mel as tokens.
+        max_mel_frames = 900 * 1 // 4  #  900 is the max number of MEL frames. The VQVAE outputs 1/8 of the input mel as tokens.
 
         self.model_dim = model_dim
         self.max_mel_frames = max_mel_frames
