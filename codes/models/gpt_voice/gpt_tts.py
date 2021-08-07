@@ -114,7 +114,7 @@ class GptTts(nn.Module):
 
 @register_model
 def register_gpt_tts(opt_net, opt):
-    return GptTts(**opt_get(opt_net, ['kwargs'], {})
+    return GptTts(**opt_get(opt_net, ['kwargs'], {}))
 
 
 if __name__ == '__main__':
