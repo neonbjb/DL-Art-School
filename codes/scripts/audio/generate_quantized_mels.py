@@ -63,6 +63,6 @@ if __name__ == "__main__":
 
             wavfiles = data['filenames']
             quantized = model.eval_state[opt['eval']['quantized_mels']][0]
-            for i, wavfile in enumerate(wavfiles):
-                qmelfile = wavfile.replace('wavs/', 'quantized_mels/') + '.pth'
+            for i, filename in enumerate(wavfiles):
+                qmelfile = filename.replace('wavs/', 'quantized_mels/') + '.pth'
                 torch.save(quantized[i], os.path.join(outpath, qmelfile))

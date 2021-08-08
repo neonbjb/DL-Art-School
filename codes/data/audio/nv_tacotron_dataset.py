@@ -98,9 +98,11 @@ class TextMelCollate():
 
         text_padded = torch.LongTensor(len(batch), max_input_len)
         text_padded.zero_()
+        filenames = []
         for i in range(len(ids_sorted_decreasing)):
             text = batch[ids_sorted_decreasing[i]][0]
             text_padded[i, :text.size(0)] = text
+            filenames.append(batch[ids_sorted_decreasing[i]][2])
 
         # Right zero-pad mel-spec
         num_mels = batch[0][1].size(0)
@@ -121,7 +123,6 @@ class TextMelCollate():
             gate_padded[i, mel.size(1)-1:] = 1
             output_lengths[i] = mel.size(1)
 
-        filenames = [j[2] for j in batch]
 
         return {
             'padded_text': text_padded,

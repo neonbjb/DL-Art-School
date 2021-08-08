@@ -97,6 +97,9 @@ class GptTts(nn.Module):
 
         return mel_seq
 
+    def inference_beam(self, text_inputs):
+        pass
+
 
 @register_model
 def register_gpt_tts(opt_net, opt):
