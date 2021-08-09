@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from munch import munchify
 
 from models.gpt_voice.lucidrains_gpt import Transformer
-from models.gpt_voice.min_gpt import GPT, GPTConfig
 from models.tacotron2.taco_utils import get_mask_from_lengths
 from models.tacotron2.text import symbols
 from trainer.networks import register_model
