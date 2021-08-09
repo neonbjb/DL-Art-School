@@ -14,6 +14,7 @@ from trainer.steps import ConfigurableStep
 from trainer.experiments.experiments import get_experiment_for_name
 import torchvision.utils as utils
 
+from utils.loss_accumulator import LossAccumulator, InfStorageLossAccumulator
 from utils.util import opt_get, denormalize
 
 logger = logging.getLogger('base')
@@ -312,6 +313,7 @@ class ExtensibleTrainer(BaseModel):
         for net in self.netsG.values():
             net.eval()
 
+        accum_metrics = InfStorageLossAccumulator()
         with torch.no_grad():
             # This can happen one of two ways: Either a 'validation injector' is provided, in which case we run that.
             # Or, we run the entire chain of steps in "train" mode and use eval.output_state.
@@ -327,7 +329,7 @@ class ExtensibleTrainer(BaseModel):
                 # Iterate through the steps, performing them one at a time.
                 state = self.dstate
                 for step_num, s in enumerate(self.steps):
-                    ns = s.do_forward_backward(state, 0, step_num, train=False)
+                    ns = s.do_forward_backward(state, 0, step_num, train=False, loss_accumulator=accum_metrics)
                     for k, v in ns.items():
                         state[k] = [v]
 
@@ -340,6 +342,7 @@ class ExtensibleTrainer(BaseModel):
 
         for net in self.netsG.values():
             net.train()
+        return accum_metrics
 
     # Fetches a summary of the log.
     def get_current_log(self, step):

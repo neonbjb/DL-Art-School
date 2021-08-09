@@ -150,7 +150,7 @@ class Attention(nn.Module):
 
         out = torch.einsum('b h i j, b h j d -> b h i d', attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
-        out =  self.to_out(out)
+        out = self.to_out(out)
         return out
 
 

@@ -138,6 +138,11 @@ class Trainer:
         ### Evaluators
         self.evaluators = []
         if 'eval' in opt.keys() and 'evaluators' in opt['eval'].keys():
+            # In "pure" mode, we propagate through the normal training steps, but use validation data instead and average
+            # the total loss. A validation dataloader is required.
+            if opt_get(opt, ['eval', 'pure'], False):
+                assert hasattr(self, 'val_loader')
+
             for ev_key, ev_opt in opt['eval']['evaluators'].items():
                 self.evaluators.append(create_evaluator(self.model.networks[ev_opt['for']],
                                                         ev_opt, self.model.env))
@@ -213,50 +218,27 @@ class Trainer:
                 shutil.copytree(self.tb_logger_path, alt_tblogger)
 
         #### validation
-        if opt['datasets'].get('val', None) and self.current_step % opt['train']['val_freq'] == 0:
-            if opt['model'] in ['sr', 'srgan', 'corruptgan', 'spsrgan',
-                                'extensibletrainer'] and self.rank <= 0:  # image restoration validation
-                avg_psnr = 0.
-                avg_fea_loss = 0.
-                idx = 0
-                val_tqdm = tqdm(self.val_loader)
-                for val_data in val_tqdm:
-                    idx += 1
-                    for b in range(len(val_data['HQ_path'])):
-                        img_name = os.path.splitext(os.path.basename(val_data['HQ_path'][b]))[0]
-                        img_dir = os.path.join(opt['path']['val_images'], img_name)
-
-                        util.mkdir(img_dir)
-
-                        self.model.feed_data(val_data, self.current_step)
-                        self.model.test()
-
-                        visuals = self.model.get_current_visuals()
-                        if visuals is None:
-                            continue
-
-                        sr_img = util.tensor2img(visuals['rlt'][b])  # uint8
-                        # calculate PSNR
-                        if self.val_compute_psnr:
-                            gt_img = util.tensor2img(visuals['hq'][b])  # uint8
-                            sr_img, gt_img = util.crop_border([sr_img, gt_img], opt['scale'])
-                            avg_psnr += util.calculate_psnr(sr_img, gt_img)
-
-                        # Save SR images for reference
-                        img_base_name = '{:s}_{:d}.png'.format(img_name, self.current_step)
-                        save_img_path = os.path.join(img_dir, img_base_name)
-                        util.save_img(sr_img, save_img_path)
-
-                avg_psnr = avg_psnr / idx
-                avg_fea_loss = avg_fea_loss / idx
-
-                # log
-                self.logger.info('# Validation # PSNR: {:.4e} Fea: {:.4e}'.format(avg_psnr, avg_fea_loss))
-
-                # tensorboard logger
-                if opt['use_tb_logger'] and 'debug' not in opt['name'] and self.rank <= 0:
-                    self.tb_logger.add_scalar('val_psnr', avg_psnr, self.current_step)
-                    self.tb_logger.add_scalar('val_fea', avg_fea_loss, self.current_step)
+        if opt_get(opt, ['eval', 'pure'], False) and self.current_step % opt['train']['val_freq'] == 0:
+            metrics = []
+            for val_data in tqdm(self.val_loader):
+                self.model.feed_data(val_data, self.current_step)
+                metrics.append(self.model.test())
+            reduced_metrics = {}
+            for metric in metrics:
+                for k, v in metric.as_dict().items():
+                    if isinstance(v, torch.Tensor) and len(v.shape) == 0:
+                        if k in reduced_metrics.keys():
+                            reduced_metrics[k].append(v)
+                        else:
+                            reduced_metrics[k] = [v]
+            if self.rank <= 0:
+                for k, v in reduced_metrics.items():
+                    val = torch.stack(v).mean().item()
+                    self.tb_logger.add_scalar(k, val, self.current_step)
+                    print(f">>Eval {k}: {val}")
+                if opt['wandb']:
+                    import wandb
+                    wandb.log({k: torch.stack(v).mean().item() for k,v in reduced_metrics.items()})
 
         if len(self.evaluators) != 0 and self.current_step % opt['train']['val_freq'] == 0:
             eval_dict = {}
@@ -300,7 +282,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_lrdvae_audio_lj.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_gpt_tts_lj.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()

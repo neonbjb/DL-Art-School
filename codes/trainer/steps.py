@@ -165,12 +165,13 @@ class ConfigurableStep(Module):
     # Performs all forward and backward passes for this step given an input state. All input states are lists of
     # chunked tensors. Use grad_accum_step to dereference these steps. Should return a dict of tensors that later
     # steps might use. These tensors are automatically detached and accumulated into chunks.
-    def do_forward_backward(self, state, grad_accum_step, amp_loss_id, train=True, no_ddp_sync=False):
+    def do_forward_backward(self, state, grad_accum_step, amp_loss_id, train=True, no_ddp_sync=False, loss_accumulator=None):
         local_state = {}  # <-- Will store the entire local state to be passed to injectors & losses.
         new_state = {}  # <-- Will store state values created by this step for returning to ExtensibleTrainer.
         for k, v in state.items():
             local_state[k] = v[grad_accum_step]
         local_state['train_nets'] = str(self.get_networks_trained())
+        loss_accumulator = self.loss_accumulator if loss_accumulator is None else loss_accumulator
 
         # Some losses compute backward() internally. Accommodate this by stashing the amp_loss_id in env.
         self.env['amp_loss_id'] = amp_loss_id
@@ -204,7 +205,7 @@ class ConfigurableStep(Module):
             local_state.update(injected)
             new_state.update(injected)
 
-        if train and len(self.losses) > 0:
+        if len(self.losses) > 0:
             # Finally, compute the losses.
             total_loss = 0
             for loss_name, loss in self.losses.items():
@@ -223,14 +224,14 @@ class ConfigurableStep(Module):
                 total_loss += l * self.weights[loss_name]
                 # Record metrics.
                 if isinstance(l, torch.Tensor):
-                    self.loss_accumulator.add_loss(loss_name, l)
+                    loss_accumulator.add_loss(loss_name, l)
                 for n, v in loss.extra_metrics():
-                    self.loss_accumulator.add_loss("%s_%s" % (loss_name, n), v)
+                    loss_accumulator.add_loss("%s_%s" % (loss_name, n), v)
                     loss.clear_metrics()
 
             # In some cases, the loss could not be set (e.g. all losses have 'after')
-            if isinstance(total_loss, torch.Tensor):
-                self.loss_accumulator.add_loss("%s_total" % (self.get_training_network_name(),), total_loss)
+            if train and isinstance(total_loss, torch.Tensor):
+                loss_accumulator.add_loss("%s_total" % (self.get_training_network_name(),), total_loss)
                 reset_required = total_loss < self.min_total_loss
 
                 # Scale the loss down by the accumulation factor.
@@ -245,7 +246,7 @@ class ConfigurableStep(Module):
                     # way to simply bypass backward. If you want a more efficient way to specify a min_loss, use or
                     # implement it at the loss level.
                     self.get_network_for_name(self.step_opt['training']).zero_grad()
-                    self.loss_accumulator.increment_metric("%s_skipped_steps" % (self.get_training_network_name(),))
+                    loss_accumulator.increment_metric("%s_skipped_steps" % (self.get_training_network_name(),))
 
                 self.grads_generated = True
 
