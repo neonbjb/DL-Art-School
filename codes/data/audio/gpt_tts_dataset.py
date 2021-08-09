@@ -57,7 +57,8 @@ class GptTtsCollater():
 
     def __call__(self, batch):
         text_lens = [len(x[0]) for x in batch]
-        max_text_len = max(text_lens)
+        #max_text_len = max(text_lens)
+        max_text_len = self.MAX_SYMBOLS_PER_PHRASE  # This forces all outputs to have the full 200 characters. Testing if this makes a difference.
         mel_lens = [len(x[1]) for x in batch]
         max_mel_len = max(mel_lens)
         texts = []
