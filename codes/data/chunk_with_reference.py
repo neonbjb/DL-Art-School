@@ -10,7 +10,7 @@ from utils.util import opt_get
 class ChunkWithReference:
     def __init__(self, opt, path):
         self.path = path.path
-        self.tiles, _ = util.get_image_paths('img', self.path)
+        self.tiles, _ = util.find_files_of_type('img', self.path)
         self.need_metadata = opt_get(opt, ['strict'], False) or opt_get(opt, ['needs_metadata'], False)
         self.need_ref = opt_get(opt, ['need_ref'], False)
         if 'ignore_first' in opt.keys():

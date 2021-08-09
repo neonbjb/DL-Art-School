@@ -39,7 +39,7 @@ class TiledDataset(data.Dataset):
     def __init__(self, opt):
         self.opt = opt
         input_folder = opt['input_folder']
-        self.images = data_util.get_image_paths('img', input_folder)[0]
+        self.images = data_util.find_files_of_type('img', input_folder)[0]
         print("Found %i images" % (len(self.images),))
 
     def __getitem__(self, index):

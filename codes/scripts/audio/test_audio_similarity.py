@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from data.util import is_wav_file, get_image_paths
+from data.util import is_wav_file, find_files_of_type
 from models.audio_resnet import resnet34, resnet50
 from models.tacotron2.taco_utils import load_wav_to_torch
 from scripts.byol.byol_extract_wrapped_model import extract_byol_model_from_state_dict
@@ -12,7 +12,7 @@ from scripts.byol.byol_extract_wrapped_model import extract_byol_model_from_stat
 if __name__ == '__main__':
     window = 48000
     root_path = 'D:\\tmp\\clips'
-    paths = get_image_paths('img', root_path, qualifier=is_wav_file)[0]
+    paths = find_files_of_type('img', root_path, qualifier=is_wav_file)[0]
     clips = []
     for path in paths:
         clip, sr = load_wav_to_torch(os.path.join(root_path, path))

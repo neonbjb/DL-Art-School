@@ -29,17 +29,17 @@ class FullImageDataset(data.Dataset):
         self.LQ_env, self.GT_env = None, None
         self.force_multiple = self.opt['force_multiple'] if 'force_multiple' in self.opt.keys() else 1
 
-        self.paths_GT, self.sizes_GT = util.get_image_paths(self.data_type, opt['dataroot_GT'], opt['dataroot_GT_weights'])
+        self.paths_GT, self.sizes_GT = util.find_files_of_type(self.data_type, opt['dataroot_GT'], opt['dataroot_GT_weights'])
         if 'dataroot_LQ' in opt.keys():
             self.paths_LQ = []
             if isinstance(opt['dataroot_LQ'], list):
                 # Multiple LQ data sources can be given, in case there are multiple ways of corrupting a source image and
                 # we want the model to learn them all.
                 for dr_lq in opt['dataroot_LQ']:
-                    lq_path, self.sizes_LQ = util.get_image_paths(self.data_type, dr_lq)
+                    lq_path, self.sizes_LQ = util.find_files_of_type(self.data_type, dr_lq)
                     self.paths_LQ.append(lq_path)
             else:
-                lq_path, self.sizes_LQ = util.get_image_paths(self.data_type, opt['dataroot_LQ'])
+                lq_path, self.sizes_LQ = util.find_files_of_type(self.data_type, opt['dataroot_LQ'])
                 self.paths_LQ.append(lq_path)
 
         assert self.paths_GT, 'Error: GT path is empty.'

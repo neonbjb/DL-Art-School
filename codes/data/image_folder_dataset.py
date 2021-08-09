@@ -85,7 +85,7 @@ class ImageFolderDataset:
                     imgs = torch.load(cache_path)
                 else:
                     print("Building image folder cache, this can take some time for large datasets..")
-                    imgs = util.get_image_paths('img', path)[0]
+                    imgs = util.find_files_of_type('img', path)[0]
                     torch.save(imgs, cache_path)
                 for w in range(weight):
                     self.image_paths.extend(imgs)

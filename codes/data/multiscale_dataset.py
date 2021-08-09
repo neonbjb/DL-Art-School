@@ -40,7 +40,7 @@ class MultiScaleDataset(data.Dataset):
         self.num_scales = self.opt['num_scales']
         self.hq_size_cap = self.tile_size * 2 ** self.num_scales
         self.scale = self.opt['scale']
-        self.paths_hq, self.sizes_hq = util.get_image_paths(self.data_type, opt['paths'], [1 for _ in opt['paths']])
+        self.paths_hq, self.sizes_hq = util.find_files_of_type(self.data_type, opt['paths'], [1 for _ in opt['paths']])
         self.corruptor = ImageCorruptor(opt)
 
 

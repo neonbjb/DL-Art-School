@@ -7,7 +7,7 @@ import torchaudio
 from tqdm import tqdm
 
 from data.audio.wav_aug import WavAugmentor
-from data.util import get_image_paths, is_wav_file
+from data.util import find_files_of_type, is_wav_file
 from models.tacotron2.taco_utils import load_wav_to_torch
 from utils.util import opt_get
 
@@ -21,7 +21,7 @@ class WavfileDataset(torch.utils.data.Dataset):
             self.audiopaths = torch.load(cache_path)
         else:
             print("Building cache..")
-            self.audiopaths = get_image_paths('img', opt['path'], qualifier=is_wav_file)[0]
+            self.audiopaths = find_files_of_type('img', opt['path'], qualifier=is_wav_file)[0]
             torch.save(self.audiopaths, cache_path)
 
         # Parse options

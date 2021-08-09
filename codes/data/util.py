@@ -39,8 +39,14 @@ def cv2torch(cv, batchify=True):
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
+
 def is_wav_file(filename):
     return filename.endswith('.wav')
+
+
+def is_audio_file(filename):
+    AUDIO_EXTENSIONS = ['.wav', '.mp3', '.wma', 'm4b']
+    return any(filename.endswith(extension) for extension in AUDIO_EXTENSIONS)
 
 
 def _get_paths_from_images(path, qualifier=is_image_file):
@@ -67,32 +73,30 @@ def _get_paths_from_lmdb(dataroot):
     return paths, sizes
 
 
-def get_image_paths(data_type, dataroot, weights=[], qualifier=is_image_file):
-    """get image path list
-    support lmdb or image files"""
-    paths, sizes = None, None
-    if dataroot is not None:
-        if data_type == 'lmdb':
-            paths, sizes = _get_paths_from_lmdb(dataroot)
-        elif data_type == 'img':
-            if isinstance(dataroot, list):
-                paths = []
-                for i in range(len(dataroot)):
-                    r = dataroot[i]
-                    extends = 1
+def find_audio_files(dataroot, include_nonwav=False):
+    if include_nonwav:
+        return find_files_of_type(None, dataroot, qualifier=is_audio_file)[0]
+    else:
+        return find_files_of_type(None, dataroot, qualifier=is_wav_file)[0]
 
-                    # Weights have the effect of repeatedly adding the paths from the given root to the final product.
-                    if weights:
-                        extends = weights[i]
-                    for j in range(extends):
-                        paths.extend(_get_paths_from_images(r, qualifier))
-                paths = sorted(paths)
-                sizes = len(paths)
-            else:
-                paths = sorted(_get_paths_from_images(dataroot, qualifier))
-                sizes = len(paths)
-        else:
-            raise NotImplementedError('data_type [{:s}] is not recognized.'.format(data_type))
+
+def find_files_of_type(data_type, dataroot, weights=[], qualifier=is_image_file):
+    if isinstance(dataroot, list):
+        paths = []
+        for i in range(len(dataroot)):
+            r = dataroot[i]
+            extends = 1
+
+            # Weights have the effect of repeatedly adding the paths from the given root to the final product.
+            if weights:
+                extends = weights[i]
+            for j in range(extends):
+                paths.extend(_get_paths_from_images(r, qualifier))
+        paths = sorted(paths)
+        sizes = len(paths)
+    else:
+        paths = sorted(_get_paths_from_images(dataroot, qualifier))
+        sizes = len(paths)
     return paths, sizes
 
 

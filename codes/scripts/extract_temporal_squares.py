@@ -115,7 +115,7 @@ class VideoClipDataset(data.Dataset):
             os.makedirs(frames_out, exist_ok=False)
             n = random.randint(5, 30)
             self.extract_n_frames(path, frames_out, start, n)
-            frames = data_util.get_image_paths('img', frames_out)[0]
+            frames = data_util.find_files_of_type('img', frames_out)[0]
             assert len(frames) == n
             img_runs.append(([self.get_image_tensor(frame) for frame in frames], frames_out))
             start += random.randint(2,5)
