@@ -221,7 +221,7 @@ class Trainer:
         if opt_get(opt, ['eval', 'pure'], False) and self.current_step % opt['train']['val_freq'] == 0:
             metrics = []
             for val_data in tqdm(self.val_loader):
-                self.model.feed_data(val_data, self.current_step)
+                self.model.feed_data(val_data, self.current_step, perform_micro_batching=False)
                 metrics.append(self.model.test())
             reduced_metrics = {}
             for metric in metrics:
