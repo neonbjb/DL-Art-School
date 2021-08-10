@@ -238,7 +238,7 @@ class Trainer:
                     print(f">>Eval {k}: {val}")
                 if opt['wandb']:
                     import wandb
-                    wandb.log({k: torch.stack(v).mean().item() for k,v in reduced_metrics.items()})
+                    wandb.log({f'eval_{k}': torch.stack(v).mean().item() for k,v in reduced_metrics.items()})
 
         if len(self.evaluators) != 0 and self.current_step % opt['train']['val_freq'] == 0:
             eval_dict = {}
