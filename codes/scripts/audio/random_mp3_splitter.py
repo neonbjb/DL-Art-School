@@ -23,7 +23,7 @@ if __name__ == '__main__':
     separator = Separator('spleeter:2stems')
     files = find_audio_files(src_dir, include_nonwav=True)
     for e, file in enumerate(tqdm(files)):
-        if e < 575:
+        if e < 3055:
             continue
         file_basis = osp.relpath(file, src_dir)\
             .replace('/', '_')\
@@ -56,7 +56,7 @@ if __name__ == '__main__':
             bmax = np.abs(bg).mean()
 
             # Only output to the "good" sample dir if the ratio of background noise to vocal noise is high enough.
-            ratio = vmax / bmax
+            ratio = vmax / (bmax+.0000001)
             if ratio >= 25:  # These values were derived empirically
                 od = output_dir
                 os = clip

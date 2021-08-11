@@ -15,13 +15,17 @@ from utils.util import opt_get
 class WavfileDataset(torch.utils.data.Dataset):
 
     def __init__(self, opt):
+        cache_path = opt_get(opt, ['cache_path'], os.path.join(self.path, 'cache.pth'))  # Will fail when multiple paths specified, must be specified in this case.
         self.path = os.path.dirname(opt['path'])
-        cache_path = os.path.join(self.path, 'cache.pth')
+        if not isinstance(self.path, list):
+            self.path = [self.path]
         if os.path.exists(cache_path):
             self.audiopaths = torch.load(cache_path)
         else:
             print("Building cache..")
-            self.audiopaths = find_files_of_type('img', opt['path'], qualifier=is_wav_file)[0]
+            self.audiopaths = []
+            for p in self.path:
+                self.audiopaths.extend(find_files_of_type('img', p, qualifier=is_wav_file)[0])
             torch.save(self.audiopaths, cache_path)
 
         # Parse options
