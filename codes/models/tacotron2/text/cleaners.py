@@ -87,4 +87,5 @@ def english_cleaners(text):
   text = expand_numbers(text)
   text = expand_abbreviations(text)
   text = collapse_whitespace(text)
+  text = text.replace('"', '')
   return text
