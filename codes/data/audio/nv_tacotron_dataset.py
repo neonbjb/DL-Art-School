@@ -73,7 +73,7 @@ class TextMelLoader(torch.utils.data.Dataset):
             if sampling_rate != self.input_sample_rate:
                 if sampling_rate < self.input_sample_rate:
                     print(f'{filename} has a sample rate of {sampling_rate} which is lower than the requested sample rate of {self.input_sample_rate}. This is not a good idea.')
-                audio = torch.nn.functional.interpolate(audio.unsqueeze(0).unsqueeze(1), scale_factor=self.input_sample_rate/sampling_rate, mode='area')#
+                audio = torch.nn.functional.interpolate(audio.unsqueeze(0).unsqueeze(1), scale_factor=self.input_sample_rate/sampling_rate, mode='area', recompute_scale_factor=False)
                 audio = (audio.squeeze().clip(-1,1)+1)/2
             audio_norm = audio.unsqueeze(0)
             audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)

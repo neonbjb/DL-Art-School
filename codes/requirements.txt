@@ -30,3 +30,4 @@ librosa==0.6.0
 Unidecode==1.0.22
 tgt == 1.4.4
 pyworld == 0.2.10
+audio2numpy
