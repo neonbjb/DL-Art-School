@@ -98,17 +98,11 @@ class TextMelLoader(torch.utils.data.Dataset):
         return text_norm
 
     def __getitem__(self, index):
-        try:
-            t, m, p = self.get_mel_text_pair(self.audiopaths_and_text[index])
-            reload = False
-        except:
-            reload = True
-        if reload or (self.max_mel_len != None and m.shape[-1] > self.max_mel_len):
-            print(f"Exception {index} {reload}")
-            if not reload:
-                print(f"mel_len:{m.shape[-1]} fname: {p}")
+        t, m, p = self.get_mel_text_pair(self.audiopaths_and_text[index])
+        if self.max_mel_len is not None and m.shape[-1] > self.max_mel_len:
+            print(f"Exception {index} mel_len:{m.shape[-1]} fname: {p}")
             # It's hard to handle this situation properly. Best bet is to return the a random valid token and skew the dataset somewhat as a result.
-            rv = random.randint(0,len(self))
+            rv = random.randint(0,len(self)-1)
             return self[rv]
         return t, m, p
 
