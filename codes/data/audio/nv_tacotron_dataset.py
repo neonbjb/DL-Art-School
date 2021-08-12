@@ -103,7 +103,7 @@ class TextMelLoader(torch.utils.data.Dataset):
             reload = False
         except:
             reload = True
-        if reload and self.max_mel_len != None and m.shape[-1] > self.max_mel_len:
+        if reload or (self.max_mel_len != None and m.shape[-1] > self.max_mel_len):
             print(f"Exception {index} {reload}")
             if not reload:
                 print(f"mel_len:{m.shape[-1]} fname: {p}")
