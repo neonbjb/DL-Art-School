@@ -104,6 +104,9 @@ class TextMelLoader(torch.utils.data.Dataset):
         except:
             reload = True
         if reload and self.max_mel_len != None and m.shape[-1] > self.max_mel_len:
+            print(f"Exception {index} {reload}")
+            if not reload:
+                print(f"mel_len:{m.shape[-1]} fname: {p}")
             # It's hard to handle this situation properly. Best bet is to return the a random valid token and skew the dataset somewhat as a result.
             rv = random.randint(0,len(self))
             return self[rv]
