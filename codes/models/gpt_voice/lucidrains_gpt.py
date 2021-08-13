@@ -108,7 +108,7 @@ def stable_softmax(t, dim = -1, alpha = 32 ** 2):
 
 # classes
 class Attention(nn.Module):
-    def __init__(self, dim, seq_len, causal = True, heads = 8, dim_head = 64, dropout = 0., stable = False):
+    def __init__(self, dim, seq_len, non_causal_sequence_partition = 0, heads = 8, dim_head = 64, dropout = 0., stable = False):
         super().__init__()
         inner_dim = dim_head *  heads
         self.heads = heads
@@ -116,7 +116,7 @@ class Attention(nn.Module):
         self.scale = dim_head ** -0.5
 
         self.stable = stable
-        self.causal = causal
+        self.non_causal_sequence_partition = non_causal_sequence_partition
 
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
         self.to_out = nn.Sequential(
@@ -141,10 +141,14 @@ class Attention(nn.Module):
             dots.masked_fill_(~mask, mask_value)
             del mask
 
-        if self.causal:
-            i, j = dots.shape[-2:]
-            mask = torch.ones(i, j, device = device).triu_(j - i + 1).bool()
-            dots.masked_fill_(mask, mask_value)
+        i, j = dots.shape[-2:]
+        mask = torch.ones(i, j, device = device).triu_(j - i + 1)
+        if self.non_causal_sequence_partition > 0:
+            non_causal_mask = torch.ones((i, j), device=device)
+            non_causal_mask[:, :self.non_causal_sequence_partition] = 0
+            mask = mask * non_causal_mask
+
+        dots.masked_fill_(mask.bool(), mask_value)
 
         attn = softmax(dots, dim=-1)
 
@@ -162,21 +166,21 @@ class Transformer(nn.Module):
         depth,
         seq_len,
         reversible = False,
-        causal = True,
         heads = 8,
         dim_head = 64,
         ff_mult = 4,
         attn_dropout = 0.,
         ff_dropout = 0.,
         sparse_attn = False,
-        stable = False
+        stable = False,
+        non_causal_sequence_partition=0,
     ):
         super().__init__()
         layers = nn.ModuleList([])
         sparse_layer = cast_tuple(sparse_attn, depth)
 
         for ind, sparse_attn in zip(range(depth), sparse_layer):
-            attn = Attention(dim, stable=stable, causal = causal, seq_len = seq_len, heads = heads, dim_head = dim_head, dropout = attn_dropout)
+            attn = Attention(dim, stable=stable, non_causal_sequence_partition = non_causal_sequence_partition, seq_len = seq_len, heads = heads, dim_head = dim_head, dropout = attn_dropout)
 
             layers.append(nn.ModuleList([
                 LayerScale(dim, ind + 1, PreNorm(dim, attn)),

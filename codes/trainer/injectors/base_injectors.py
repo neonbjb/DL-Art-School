@@ -60,7 +60,7 @@ class GeneratorInjector(Injector):
                     results = method(*params)
         new_state = {}
         if isinstance(self.output, list):
-            # Only dereference tuples or lists, not tensors.
+            # Only dereference tuples or lists, not tensors. IF YOU REACH THIS ERROR, REMOVE THE BRACES AROUND YOUR OUTPUTS IN THE YAML CONFIG
             assert isinstance(results, list) or isinstance(results, tuple)
             for i, k in enumerate(self.output):
                 new_state[k] = results[i]
