@@ -5,6 +5,7 @@ datasets/*
 options/*
 codes/*.txt
 codes/wandb/*
+codes/pretrained_models/*
 data/*
 .vscode
 
