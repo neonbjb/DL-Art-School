@@ -190,23 +190,31 @@ class TextMelCollate():
         }
 
 
+def save_mel_buffer_to_file(mel, path):
+    np.save(path, mel.numpy())
+
+
+def load_mel_buffer_from_file(path):
+    return torch.tensor(np.load(path))
+
+
 def dump_mels_to_disk():
     params = {
         'mode': 'nv_tacotron',
         'path': 'E:\\audio\\MozillaCommonVoice\\en\\test.tsv',
         'phase': 'train',
         'n_workers': 0,
-        'batch_size': 32,
+        'batch_size': 1,
         'fetcher_mode': 'mozilla_cv',
-        'needs_collate': False,
-        'max_mel_length': 255800,
+        'needs_collate': True,
+        'max_mel_length': 1000,
         'max_text_length': 200,
-        'return_wavs': True,
         #'return_wavs': True,
         #'input_sample_rate': 22050,
         #'sampling_rate': 8000
     }
-    output_path = 'D:\\mozcv_mels'
+    output_path = 'D:\\dlas\\results\\mozcv_mels'
+    os.makedirs(os.path.join(output_path, 'clips'), exist_ok=True)
     from data import create_dataset, create_dataloader
     ds, c = create_dataset(params, return_collate=True)
     dl = create_dataloader(ds, params, collate_fn=c)
@@ -214,7 +222,7 @@ def dump_mels_to_disk():
         mels = b['padded_mel']
         fnames = b['filenames']
         for j, fname in enumerate(fnames):
-            torch.save(mels[j], f'{os.path.join(output_path, fname)}_mel.pth')
+            save_mel_buffer_to_file(mels[j], f'{os.path.join(output_path, fname)}_mel.npy')
 
 
 if __name__ == '__main__':
