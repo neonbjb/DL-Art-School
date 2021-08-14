@@ -1,5 +1,8 @@
 """ from https://github.com/keithito/tacotron """
 import re
+
+import torch
+
 from models.tacotron2.text import cleaners
 from models.tacotron2.text.symbols import symbols
 
@@ -44,6 +47,8 @@ def sequence_to_text(sequence):
   '''Converts a sequence of IDs back to a string'''
   result = ''
   for symbol_id in sequence:
+    if isinstance(symbol_id, torch.Tensor):
+      symbol_id = symbol_id.item()
     if symbol_id in _id_to_symbol:
       s = _id_to_symbol[symbol_id]
       # Enclose ARPAbet back in curly braces:

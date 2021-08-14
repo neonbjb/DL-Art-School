@@ -62,9 +62,9 @@ class TextMelLoader(torch.utils.data.Dataset):
         # separate filename and text
         audiopath, text = audiopath_and_text[0], audiopath_and_text[1]
         audiopath = os.path.join(self.path, audiopath)
-        text = self.get_text(text)
+        text_seq = self.get_text(text)
         mel = self.get_mel(audiopath)
-        return (text, mel, audiopath_and_text[0])
+        return (text_seq, mel, text, audiopath_and_text[0])
 
     def get_mel(self, filename):
         if not self.load_mel_from_disk:
@@ -106,30 +106,31 @@ class TextMelLoader(torch.utils.data.Dataset):
         return text_norm
 
     def __getitem__(self, index):
-        t, m, p = self.get_mel_text_pair(self.audiopaths_and_text[index])
-        if m is None or \
-            (self.max_mel_len is not None and m.shape[-1] > self.max_mel_len) or \
-            (self.max_text_len is not None and t.shape[0] > self.max_text_len):
-            if m is not None:
-                print(f"Exception {index} mel_len:{m.shape[-1]} text_len:{t.shape[0]} fname: {p}")
+        tseq, mel, text, path = self.get_mel_text_pair(self.audiopaths_and_text[index])
+        if mel is None or \
+            (self.max_mel_len is not None and mel.shape[-1] > self.max_mel_len) or \
+            (self.max_text_len is not None and tseq.shape[0] > self.max_text_len):
+            if mel is not None:
+                print(f"Exception {index} mel_len:{mel.shape[-1]} text_len:{tseq.shape[0]} fname: {path}")
             # It's hard to handle this situation properly. Best bet is to return the a random valid token and skew the dataset somewhat as a result.
             rv = random.randint(0,len(self)-1)
             return self[rv]
-        orig_output = m.shape[-1]
-        orig_text_len = t.shape[0]
+        orig_output = mel.shape[-1]
+        orig_text_len = tseq.shape[0]
         if not self.needs_collate:
-            if m.shape[-1] != self.max_mel_len:
-                m = F.pad(m, (0, self.max_mel_len - m.shape[-1]))
-            if t.shape[0] != self.max_text_len:
-                t = F.pad(t, (0, self.max_text_len - t.shape[0]))
+            if mel.shape[-1] != self.max_mel_len:
+                mel = F.pad(mel, (0, self.max_mel_len - mel.shape[-1]))
+            if tseq.shape[0] != self.max_text_len:
+                tseq = F.pad(tseq, (0, self.max_text_len - tseq.shape[0]))
             return {
-                'padded_text': t,
+                'real_text': text,
+                'padded_text': tseq,
                 'input_lengths': torch.tensor(orig_text_len, dtype=torch.long),
-                'padded_mel': m,
+                'padded_mel': mel,
                 'output_lengths': torch.tensor(orig_output, dtype=torch.long),
-                'filenames': p
+                'filenames': path
             }
-        return t, m, p
+        return tseq, mel, path, text
 
     def __len__(self):
         return len(self.audiopaths_and_text)
@@ -156,10 +157,12 @@ class TextMelCollate():
         text_padded = torch.LongTensor(len(batch), max_input_len)
         text_padded.zero_()
         filenames = []
+        real_text = []
         for i in range(len(ids_sorted_decreasing)):
             text = batch[ids_sorted_decreasing[i]][0]
             text_padded[i, :text.size(0)] = text
             filenames.append(batch[ids_sorted_decreasing[i]][2])
+            real_text.append(batch[ids_sorted_decreasing[i]][3])
 
         # Right zero-pad mel-spec
         num_mels = batch[0][1].size(0)
@@ -186,7 +189,8 @@ class TextMelCollate():
             'padded_mel': mel_padded,
             'padded_gate': gate_padded,
             'output_lengths': output_lengths,
-            'filenames': filenames
+            'filenames': filenames,
+            'real_text': real_text,
         }
 
 

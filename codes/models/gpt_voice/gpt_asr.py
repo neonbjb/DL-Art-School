@@ -5,7 +5,7 @@ from munch import munchify
 
 from models.gpt_voice.lucidrains_gpt import Transformer
 from models.tacotron2.taco_utils import get_mask_from_lengths
-from models.tacotron2.text import symbols
+from models.tacotron2.text import symbols, sequence_to_text
 from trainer.networks import register_model
 from utils.util import opt_get
 
@@ -125,11 +125,11 @@ class GptAsr(nn.Module):
             text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=mel_emb.device))
             if text_emb.shape[0] != mel_emb.shape[0]:
                 mel_emb = mel_emb.repeat(text_emb.shape[0], 1, 1)
-            emb = torch.cat([text_emb, mel_emb], dim=1)
+            emb = torch.cat([mel_emb, text_emb], dim=1)
             enc = self.gpt(emb)
-            mel_logits = self.final_norm(enc[:, text_emb.shape[1]:])
-            mel_logits = self.mel_head(mel_logits)
-            topk = sampler_fn(F.softmax(temperature * mel_logits[:, -1], dim=-1), k=beam_width)
+            text_logits = self.final_norm(enc[:, mel_emb.shape[1]:])
+            text_logits = self.text_head(text_logits)
+            topk = sampler_fn(F.softmax(temperature * text_logits[:, -1], dim=-1), k=beam_width)
             probabilities = (probabilities.repeat_interleave(beam_width, dim=0) * topk.values.flatten())
             probabilities, sort_indices = torch.sort(probabilities, descending=True)
             probabilities = probabilities[:beam_width]
@@ -140,15 +140,12 @@ class GptAsr(nn.Module):
             text_seq = text_seq[sort_indices]
             text_seq = text_seq[:beam_width]
 
-            if torch.all(torch.any(text_seq == self.MEL_STOP_TOKEN, dim=1)):
+            # PAD doubles as a stop token. PAD=0.
+            if torch.all(torch.any(text_seq == 0, dim=1)):
                 break
 
         if text_seq.shape[1] >= self.max_mel_frames:
-            print("Warning! Encountered frame limit before a stop token. Output is likely wrong.")
-
-        # Format mel_seq so that the DVAE can actually use it (it is a two-tiered DVAE)
-        text_seq = text_seq[0, 1:-1].unsqueeze(0)  # Pick most likely outcome, remove first and last tokens, which were artificially added for GPT
-        text_seq = text_seq * (text_seq < 512)      # The DVAE doesn't understand BOS/EOS/PAD tokens.
+            print("Warning! Encountered frame limit before a pad token. Output is likely wrong.")
 
         return text_seq
 
