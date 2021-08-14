@@ -1,3 +1,5 @@
+import os.path
+
 import numpy as np
 from scipy.io.wavfile import read
 import torch
@@ -18,6 +20,9 @@ def load_wav_to_torch(full_path):
 def load_filepaths_and_text(filename, split="|"):
     with open(filename, encoding='utf-8') as f:
         filepaths_and_text = [line.strip().split(split) for line in f]
+        base = os.path.dirname(filename)
+        for j in range(len(filepaths_and_text)):
+            filepaths_and_text[j][0] = os.path.join(base, filepaths_and_text[j][0])
     return filepaths_and_text
 
 

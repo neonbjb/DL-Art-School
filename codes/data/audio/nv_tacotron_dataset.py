@@ -18,7 +18,8 @@ from utils.util import opt_get
 def load_mozilla_cv(filename):
     with open(filename, encoding='utf-8') as f:
         components = [line.strip().split('\t') for line in f][1:]  # First line is the header
-        filepaths_and_text = [[f'clips/{component[1]}', component[2]] for component in components]
+        base = os.path.dirname(filename)
+        filepaths_and_text = [[os.path.join(base, f'clips/{component[1]}'), component[2]] for component in components]
     return filepaths_and_text
 
 
@@ -29,15 +30,24 @@ class TextMelLoader(torch.utils.data.Dataset):
         3) computes mel-spectrograms from audio files.
     """
     def __init__(self, hparams):
-        self.path = os.path.dirname(hparams['path'])
+        self.path = hparams['path']
+        if not isinstance(self.path, list):
+            self.path = [self.path]
+
         fetcher_mode = opt_get(hparams, ['fetcher_mode'], 'lj')
-        if fetcher_mode == 'lj':
-            fetcher_fn = load_filepaths_and_text
-        elif fetcher_mode == 'mozilla_cv':
-            fetcher_fn = load_mozilla_cv
-        else:
-            raise NotImplementedError()
-        self.audiopaths_and_text = fetcher_fn(hparams['path'])
+        if not isinstance(fetcher_mode, list):
+            fetcher_mode = [fetcher_mode]
+        assert len(self.path) == len(fetcher_mode)
+
+        self.audiopaths_and_text = []
+        for p, fm in zip(self.path, fetcher_mode):
+            if fm == 'lj' or fm == 'libritts':
+                fetcher_fn = load_filepaths_and_text
+            elif fm == 'mozilla_cv':
+                fetcher_fn = load_mozilla_cv
+            else:
+                raise NotImplementedError()
+            self.audiopaths_and_text.extend(fetcher_fn(p))
         self.text_cleaners = hparams.text_cleaners
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
@@ -61,7 +71,6 @@ class TextMelLoader(torch.utils.data.Dataset):
     def get_mel_text_pair(self, audiopath_and_text):
         # separate filename and text
         audiopath, text = audiopath_and_text[0], audiopath_and_text[1]
-        audiopath = os.path.join(self.path, audiopath)
         text_seq = self.get_text(text)
         mel = self.get_mel(audiopath)
         return (text_seq, mel, text, audiopath_and_text[0])
@@ -205,11 +214,11 @@ def load_mel_buffer_from_file(path):
 def dump_mels_to_disk():
     params = {
         'mode': 'nv_tacotron',
-        'path': 'E:\\audio\\MozillaCommonVoice\\en\\test.tsv',
+        'path': ['E:\\audio\\MozillaCommonVoice\\en\\test.tsv', 'E:\\audio\\LibriTTS\\train-other-500_list.txt'],
+        'fetcher_mode': ['mozilla_cv', 'libritts'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': 1,
-        'fetcher_mode': 'mozilla_cv',
         'needs_collate': True,
         'max_mel_length': 1000,
         'max_text_length': 200,
