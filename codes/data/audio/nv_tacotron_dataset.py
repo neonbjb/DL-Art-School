@@ -31,7 +31,6 @@ class TextMelLoader(torch.utils.data.Dataset):
     def __init__(self, hparams):
         self.path = os.path.dirname(hparams['path'])
         fetcher_mode = opt_get(hparams, ['fetcher_mode'], 'lj')
-        fetcher_fn = None
         if fetcher_mode == 'lj':
             fetcher_fn = load_filepaths_and_text
         elif fetcher_mode == 'mozilla_cv':
@@ -128,7 +127,7 @@ class TextMelLoader(torch.utils.data.Dataset):
                 'input_lengths': torch.tensor(orig_text_len, dtype=torch.long),
                 'padded_mel': m,
                 'output_lengths': torch.tensor(orig_output, dtype=torch.long),
-                'filenames': [p]
+                'filenames': p
             }
         return t, m, p
 
@@ -181,7 +180,6 @@ class TextMelCollate():
             gate_padded[i, mel.size(1)-1:] = 1
             output_lengths[i] = mel.size(1)
 
-
         return {
             'padded_text': text_padded,
             'input_lengths': input_lengths,
@@ -192,7 +190,36 @@ class TextMelCollate():
         }
 
 
+def dump_mels_to_disk():
+    params = {
+        'mode': 'nv_tacotron',
+        'path': 'E:\\audio\\MozillaCommonVoice\\en\\test.tsv',
+        'phase': 'train',
+        'n_workers': 0,
+        'batch_size': 32,
+        'fetcher_mode': 'mozilla_cv',
+        'needs_collate': False,
+        'max_mel_length': 255800,
+        'max_text_length': 200,
+        'return_wavs': True,
+        #'return_wavs': True,
+        #'input_sample_rate': 22050,
+        #'sampling_rate': 8000
+    }
+    output_path = 'D:\\mozcv_mels'
+    from data import create_dataset, create_dataloader
+    ds, c = create_dataset(params, return_collate=True)
+    dl = create_dataloader(ds, params, collate_fn=c)
+    for i, b in tqdm(enumerate(dl)):
+        mels = b['padded_mel']
+        fnames = b['filenames']
+        for j, fname in enumerate(fnames):
+            torch.save(mels[j], f'{os.path.join(output_path, fname)}_mel.pth')
+
+
 if __name__ == '__main__':
+    dump_mels_to_disk()
+    '''
     params = {
         'mode': 'nv_tacotron',
         'path': 'E:\\audio\\MozillaCommonVoice\\en\\train.tsv',
@@ -220,3 +247,4 @@ if __name__ == '__main__':
             pm = torch.nn.functional.pad(pm, (0, 800-pm.shape[-1]))
             m = pm if m is None else torch.cat([m, pm], dim=0)
             print(m.mean(), m.std())
+    '''

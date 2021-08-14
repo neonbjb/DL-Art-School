@@ -515,6 +515,26 @@ class DenormalizeInjector(Injector):
         return {self.output: out}
 
 
+# Performs normalization across fixed constants.
+class MelSpectrogramInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        from models.tacotron2.layers import TacotronSTFT
+        from munch import munchify
+        from models.tacotron2 import hparams
+        hp = munchify(hparams.create_hparams())  # Just use the default tacotron values for the MEL spectrogram. Noone uses anything else anyway.
+        self.stft = TacotronSTFT(hp.filter_length, hp.hop_length, hp.win_length,
+            hp.n_mel_channels, hp.sampling_rate, hp.mel_fmin, hp.mel_fmax)
+
+    def forward(self, state):
+        inp = state[self.input]
+        if len(inp.shape) == 3:  # Automatically squeeze out the channels dimension if it is present (assuming mono-audio)
+            inp = inp.squeeze(1)
+        assert len(inp.shape) == 2
+        self.stft = self.stft.to(inp.device)
+        return {self.output: self.stft.mel_spectrogram(inp)}
+
+
 
 if __name__ == '__main__':
     inj = DecomposeDimensionInjector({'dim':2, 'in': 'x', 'out': 'y'}, None)
