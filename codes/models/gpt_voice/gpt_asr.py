@@ -52,7 +52,7 @@ class GptAsr(nn.Module):
     MAX_SYMBOLS_PER_PHRASE = 200
     MAX_MEL_FRAMES = 1000 // 4
     NUMBER_SYMBOLS = len(symbols)
-    NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS
+    NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS+1
 
     def __init__(self, layers=8, model_dim=512, heads=8):
         super().__init__()
@@ -61,15 +61,17 @@ class GptAsr(nn.Module):
         self.max_mel_frames = self.MAX_MEL_FRAMES
         self.text_embedding = nn.Embedding(self.NUMBER_TEXT_TOKENS, model_dim)
         self.mel_encoder = MelEncoder(model_dim)
-        self.text_pos_embedding = nn.Embedding(self.MAX_SYMBOLS_PER_PHRASE, model_dim)
+        self.text_pos_embedding = nn.Embedding(self.MAX_SYMBOLS_PER_PHRASE+1, model_dim)
         self.mel_pos_embedding = nn.Embedding(self.MAX_MEL_FRAMES, model_dim)
-        self.gpt = Transformer(dim=model_dim, depth=layers, seq_len=1+self.MAX_SYMBOLS_PER_PHRASE+self.MAX_MEL_FRAMES, heads=heads,
+        self.gpt = Transformer(dim=model_dim, depth=layers, seq_len=2+self.MAX_SYMBOLS_PER_PHRASE+self.MAX_MEL_FRAMES, heads=heads,
                                attn_dropout=.1, ff_dropout=.1, non_causal_sequence_partition=self.MAX_MEL_FRAMES)
 
         self.final_norm = nn.LayerNorm(model_dim)
         self.text_head = nn.Linear(model_dim, self.NUMBER_TEXT_TOKENS)
 
     def forward(self, mel_inputs, text_targets):
+        # Pad front and back. Pad at front is the "START" token.
+        text_targets = F.pad(text_targets, (1,0), value=self.NUMBER_SYMBOLS)
         text_targets = F.pad(text_targets, (0, self.MAX_SYMBOLS_PER_PHRASE-text_targets.shape[1]))
         text_emb = self.text_embedding(text_targets)
         text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=text_targets.device))
@@ -85,9 +87,70 @@ class GptAsr(nn.Module):
         text_logits = self.final_norm(enc[:, self.MAX_MEL_FRAMES:])
         text_logits = self.text_head(text_logits)
         text_logits = text_logits.permute(0,2,1)
-        loss_text = F.cross_entropy(text_logits[:,:,1:], text_targets[:,:-1].long())
+        loss_text = F.cross_entropy(text_logits[:,:,:-1], text_targets[:,1:].long())
 
         return loss_text.mean()
+
+    def inference_beam_topk(self, mel):
+        def topk_sampler(distribution, k):
+            return torch.topk(distribution, k=k, dim=-1)
+        return self.inference_beam(mel, topk_sampler)
+
+    def inference_beam_sampled(self, mel):
+        def multinomial_sampler(distribution, k):
+            indices = torch.multinomial(distribution, num_samples=k, replacement=False)
+            values = torch.gather(distribution, dim=1, index=indices)
+            class container:
+                def __init__(self, i, v):
+                    self.indices = i
+                    self.values = v
+            return container(indices, values)
+        return self.inference_beam(mel, multinomial_sampler)
+
+    def inference_beam(self, mel_inputs, sampler_fn):
+        beam_width = 16
+        temperature = .8
+
+        b, _, s = mel_inputs.shape
+        assert b == 1  # Beam search only works on batches of one.
+        mel_emb = self.mel_encoder(mel_inputs)
+        mel_emb = F.pad(mel_emb, (0, self.MAX_MEL_FRAMES-mel_emb.shape[-1]))
+        mel_emb = mel_emb.permute(0,2,1).contiguous()
+        mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device))
+
+        text_seq = torch.full((b,1), fill_value=self.NUMBER_SYMBOLS, device=mel_emb.device)
+        probabilities = torch.ones((b,), device=mel_emb.device)
+        while len(text_seq) < self.max_mel_frames:
+            text_emb = self.text_embedding(text_seq)
+            text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=mel_emb.device))
+            if text_emb.shape[0] != mel_emb.shape[0]:
+                mel_emb = mel_emb.repeat(text_emb.shape[0], 1, 1)
+            emb = torch.cat([text_emb, mel_emb], dim=1)
+            enc = self.gpt(emb)
+            mel_logits = self.final_norm(enc[:, text_emb.shape[1]:])
+            mel_logits = self.mel_head(mel_logits)
+            topk = sampler_fn(F.softmax(temperature * mel_logits[:, -1], dim=-1), k=beam_width)
+            probabilities = (probabilities.repeat_interleave(beam_width, dim=0) * topk.values.flatten())
+            probabilities, sort_indices = torch.sort(probabilities, descending=True)
+            probabilities = probabilities[:beam_width]
+
+            text_seq = text_seq.repeat_interleave(beam_width, dim=0)
+            codes = topk.indices.flatten()
+            text_seq = torch.cat([text_seq, codes.unsqueeze(1)], dim=1)
+            text_seq = text_seq[sort_indices]
+            text_seq = text_seq[:beam_width]
+
+            if torch.all(torch.any(text_seq == self.MEL_STOP_TOKEN, dim=1)):
+                break
+
+        if text_seq.shape[1] >= self.max_mel_frames:
+            print("Warning! Encountered frame limit before a stop token. Output is likely wrong.")
+
+        # Format mel_seq so that the DVAE can actually use it (it is a two-tiered DVAE)
+        text_seq = text_seq[0, 1:-1].unsqueeze(0)  # Pick most likely outcome, remove first and last tokens, which were artificially added for GPT
+        text_seq = text_seq * (text_seq < 512)      # The DVAE doesn't understand BOS/EOS/PAD tokens.
+
+        return text_seq
 
 
 @register_model
