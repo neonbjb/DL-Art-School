@@ -79,16 +79,16 @@ class TextMelLoader(torch.utils.data.Dataset):
         if not self.load_mel_from_disk:
             if filename.endswith('.wav'):
                 audio, sampling_rate = load_wav_to_torch(filename)
-                audio = audio / self.max_wav_value
+                audio = (audio / self.max_wav_value).clip(-1,1)
             else:
                 audio, sampling_rate = audio2numpy.audio_from_file(filename)
                 audio = torch.tensor(audio)
+                audio = (audio.squeeze().clip(-1,1))
 
             if sampling_rate != self.input_sample_rate:
                 if sampling_rate < self.input_sample_rate:
                     print(f'{filename} has a sample rate of {sampling_rate} which is lower than the requested sample rate of {self.input_sample_rate}. This is not a good idea.')
                 audio = torch.nn.functional.interpolate(audio.unsqueeze(0).unsqueeze(1), scale_factor=self.input_sample_rate/sampling_rate, mode='area', recompute_scale_factor=False)
-                audio = (audio.squeeze().clip(-1,1)+1)/2
             if (audio.min() < -1).any() or (audio.max() > 1).any():
                 print(f"Error with audio ranging for {filename}; min={audio.min()} max={audio.max()}")
                 return None
@@ -119,8 +119,8 @@ class TextMelLoader(torch.utils.data.Dataset):
         if mel is None or \
             (self.max_mel_len is not None and mel.shape[-1] > self.max_mel_len) or \
             (self.max_text_len is not None and tseq.shape[0] > self.max_text_len):
-            if mel is not None:
-                print(f"Exception {index} mel_len:{mel.shape[-1]} text_len:{tseq.shape[0]} fname: {path}")
+            #if mel is not None:
+            #    print(f"Exception {index} mel_len:{mel.shape[-1]} text_len:{tseq.shape[0]} fname: {path}")
             # It's hard to handle this situation properly. Best bet is to return the a random valid token and skew the dataset somewhat as a result.
             rv = random.randint(0,len(self)-1)
             return self[rv]
