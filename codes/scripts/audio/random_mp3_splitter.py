@@ -9,11 +9,11 @@ import numpy as np
 
 
 if __name__ == '__main__':
-    src_dir = 'O:\\podcast_dumps'
+    src_dir = 'P:\\Audiobooks-Podcasts'
     #src_dir = 'E:\\audio\\books'
-    output_dir = 'D:\\data\\audio\\podcasts-split'
-    output_dir_lq = 'D:\\data\\audio\\podcasts-split-with-bg'
-    output_dir_garbage = 'D:\\data\\audio\\podcasts-split-garbage'
+    output_dir = 'D:\\data\\audio\\misc-split'
+    output_dir_lq = 'D:\\data\\audio\\misc-split-with-bg'
+    output_dir_garbage = 'D:\\data\\audio\\misc-split-garbage'
     #output_dir = 'E:\\audio\\books-clips'
     clip_length = 5  # In seconds
     sparsity = .1  # Only this proportion of the total clips are extracted as wavs.

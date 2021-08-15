@@ -51,7 +51,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.text_cleaners = hparams.text_cleaners
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
-        self.load_mel_from_disk = hparams.load_mel_from_disk
+        self.load_mel_from_disk = opt_get(hparams, ['load_mel_from_disk'], False)
         self.return_wavs = opt_get(hparams, ['return_wavs'], False)
         self.input_sample_rate = opt_get(hparams, ['input_sample_rate'], self.sampling_rate)
         assert not (self.load_mel_from_disk and self.return_wavs)
@@ -76,7 +76,11 @@ class TextMelLoader(torch.utils.data.Dataset):
         return (text_seq, mel, text, audiopath_and_text[0])
 
     def get_mel(self, filename):
-        if not self.load_mel_from_disk:
+        if self.load_mel_from_disk and os.path.exists(f'{filename}_mel.npy'):
+            melspec = torch.from_numpy(np.load(f'{filename}_mel.npy'))
+            assert melspec.size(0) == self.stft.n_mel_channels, (
+                'Mel dimension mismatch: given {}, expected {}'.format(melspec.size(0), self.stft.n_mel_channels))
+        else:
             if filename.endswith('.wav'):
                 audio, sampling_rate = load_wav_to_torch(filename)
                 audio = (audio / self.max_wav_value)
@@ -105,9 +109,6 @@ class TextMelLoader(torch.utils.data.Dataset):
                 melspec = self.stft.mel_spectrogram(audio_norm)
                 melspec = torch.squeeze(melspec, 0)
         else:
-            melspec = torch.from_numpy(np.load(filename))
-            assert melspec.size(0) == self.stft.n_mel_channels, (
-                'Mel dimension mismatch: given {}, expected {}'.format(melspec.size(0), self.stft.n_mel_channels))
 
 
         return melspec
@@ -207,10 +208,6 @@ class TextMelCollate():
 
 def save_mel_buffer_to_file(mel, path):
     np.save(path, mel.numpy())
-
-
-def load_mel_buffer_from_file(path):
-    return torch.tensor(np.load(path))
 
 
 def dump_mels_to_disk():
