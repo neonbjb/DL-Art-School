@@ -23,7 +23,7 @@ if __name__ == '__main__':
     separator = Separator('spleeter:2stems')
     files = find_audio_files(src_dir, include_nonwav=True)
     for e, file in enumerate(tqdm(files)):
-        if e < 1:
+        if e < 1092:
             continue
         file_basis = osp.relpath(file, src_dir)\
             .replace('/', '_')\

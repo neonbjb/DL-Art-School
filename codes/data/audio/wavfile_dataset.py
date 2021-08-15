@@ -15,23 +15,22 @@ from utils.util import opt_get
 class WavfileDataset(torch.utils.data.Dataset):
 
     def __init__(self, opt):
-        cache_path = opt_get(opt, ['cache_path'], os.path.join(self.path, 'cache.pth'))  # Will fail when multiple paths specified, must be specified in this case.
-        self.path = os.path.dirname(opt['path'])
-        if not isinstance(self.path, list):
-            self.path = [self.path]
+        path = opt['path']
+        cache_path = opt['cache_path']  # Will fail when multiple paths specified, must be specified in this case.
+        if not isinstance(path, list):
+            path = [path]
         if os.path.exists(cache_path):
             self.audiopaths = torch.load(cache_path)
         else:
             print("Building cache..")
             self.audiopaths = []
-            for p in self.path:
+            for p in path:
                 self.audiopaths.extend(find_files_of_type('img', p, qualifier=is_wav_file)[0])
             torch.save(self.audiopaths, cache_path)
 
         # Parse options
         self.sampling_rate = opt_get(opt, ['sampling_rate'], 24000)
         self.augment = opt_get(opt, ['do_augmentation'], False)
-        self.max_wav_value = 32768.0
 
         self.window = 2 * self.sampling_rate
         if self.augment:
@@ -39,13 +38,20 @@ class WavfileDataset(torch.utils.data.Dataset):
 
     def get_audio_for_index(self, index):
         audiopath = self.audiopaths[index]
-        filename = os.path.join(self.path, audiopath)
-        audio, sampling_rate = load_wav_to_torch(filename)
+        audio, sampling_rate = load_wav_to_torch(audiopath)
         if sampling_rate != self.sampling_rate:
-            raise ValueError(f"Input sampling rate does not match specified rate {self.sampling_rate}")
-        audio_norm = audio / self.max_wav_value
-        audio_norm = audio_norm.unsqueeze(0)
-        return audio_norm, audiopath
+            if sampling_rate < self.sampling_rate:
+                print(f'{audiopath} has a sample rate of {sampling_rate} which is lower than the requested sample rate of {self.sampling_rate}. This is not a good idea.')
+            audio = torch.nn.functional.interpolate(audio.unsqueeze(0).unsqueeze(1), scale_factor=self.sampling_rate/sampling_rate, mode='nearest', recompute_scale_factor=False).squeeze()
+
+        # Check some assumptions about audio range. This should be automatically fixed in load_wav_to_torch, but might not be in some edge cases, where we should squawk.
+        # '2' is arbitrarily chosen since it seems like audio will often "overdrive" the [-1,1] bounds.
+        if torch.any(audio > 2) or not torch.any(audio < 0):
+            print(f"Error with {audiopath}. Max={audio.max()} min={audio.min()}")
+        audio.clip_(-1, 1)
+
+        audio = audio.unsqueeze(0)
+        return audio, audiopath
 
     def __getitem__(self, index):
         clip1, clip2 = None, None

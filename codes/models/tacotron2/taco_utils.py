@@ -14,7 +14,13 @@ def get_mask_from_lengths(lengths, max_len=None):
 
 def load_wav_to_torch(full_path):
     sampling_rate, data = read(full_path)
-    return torch.FloatTensor(data.astype(np.float32)), sampling_rate
+    if data.dtype == np.int16:
+        norm_fix = 32768
+    elif data.dtype == np.float16 or data.dtype == np.float32:
+        norm_fix = 1.
+    else:
+        raise NotImplemented(f"Provided data dtype not supported: {data.dtype}")
+    return (torch.FloatTensor(data.astype(np.float32)) / norm_fix, sampling_rate)
 
 
 def load_filepaths_and_text(filename, split="|"):

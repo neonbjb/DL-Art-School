@@ -49,7 +49,6 @@ class TextMelLoader(torch.utils.data.Dataset):
                 raise NotImplementedError()
             self.audiopaths_and_text.extend(fetcher_fn(p))
         self.text_cleaners = hparams.text_cleaners
-        self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
         self.load_mel_from_disk = opt_get(hparams, ['load_mel_from_disk'], False)
         self.return_wavs = opt_get(hparams, ['return_wavs'], False)
@@ -83,7 +82,6 @@ class TextMelLoader(torch.utils.data.Dataset):
         else:
             if filename.endswith('.wav'):
                 audio, sampling_rate = load_wav_to_torch(filename)
-                audio = (audio / self.max_wav_value)
             else:
                 audio, sampling_rate = audio2numpy.audio_from_file(filename)
                 audio = torch.tensor(audio)
@@ -108,8 +106,6 @@ class TextMelLoader(torch.utils.data.Dataset):
             else:
                 melspec = self.stft.mel_spectrogram(audio_norm)
                 melspec = torch.squeeze(melspec, 0)
-        else:
-
 
         return melspec
 
