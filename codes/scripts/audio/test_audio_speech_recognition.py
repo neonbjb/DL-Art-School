@@ -22,12 +22,14 @@ def forward_pass(model, data, output_dir, opt, b):
         model.feed_data(data, 0)
         model.test()
 
-    real = data[opt['eval']['real_text']][0]
+    if 'real_text' in opt['eval'].keys():
+        real = data[opt['eval']['real_text']][0]
+        print(f'{b} Real text: "{real}"')
+
     pred_seq = model.eval_state[opt['eval']['gen_text']][0]
     pred_text = [sequence_to_text(ts) for ts in pred_seq]
     audio = model.eval_state[opt['eval']['audio']][0].cpu().numpy()
     wavfile.write(osp.join(output_dir, f'{b}_clip.wav'), 22050, audio)
-    print(f'{b} Real text: "{real}"')
     for i, text in enumerate(pred_text):
         print(f'{b} Predicted text {i}: "{text}"')
 
