@@ -23,6 +23,20 @@ def load_mozilla_cv(filename):
     return filepaths_and_text
 
 
+def load_voxpopuli(filename):
+    with open(filename, encoding='utf-8') as f:
+        lines = [line.strip().split('\t') for line in f][1:]  # First line is the header
+        base = os.path.dirname(filename)
+        filepaths_and_text = []
+        for line in lines:
+            if len(line) == 0:
+                continue
+            file, raw_text, norm_text, speaker_id, split, gender = line
+            year = file[:4]
+            filepaths_and_text.append([os.path.join(base, year, file), raw_text])
+    return filepaths_and_text
+
+
 class TextMelLoader(torch.utils.data.Dataset):
     """
         1) loads audio,text pairs
@@ -45,6 +59,8 @@ class TextMelLoader(torch.utils.data.Dataset):
                 fetcher_fn = load_filepaths_and_text
             elif fm == 'mozilla_cv':
                 fetcher_fn = load_mozilla_cv
+            elif fm == 'voxpopuli':
+                fetcher_fn = load_voxpopuli
             else:
                 raise NotImplementedError()
             self.audiopaths_and_text.extend(fetcher_fn(p))
@@ -209,14 +225,14 @@ def save_mel_buffer_to_file(mel, path):
 def dump_mels_to_disk():
     params = {
         'mode': 'nv_tacotron',
-        'path': ['E:\\audio\\MozillaCommonVoice\\en\\test.tsv', 'E:\\audio\\LibriTTS\\train-other-500_list.txt'],
-        'fetcher_mode': ['mozilla_cv', 'libritts'],
+        'path': ['Z:\\voxpopuli\\audio\\transcribed_data\\en\\asr_test.tsv'],
+        'fetcher_mode': ['voxpopuli'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': 1,
         'needs_collate': True,
-        'max_mel_length': 1000,
-        'max_text_length': 200,
+        'max_mel_length': 4000,
+        'max_text_length': 600,
         #'return_wavs': True,
         #'input_sample_rate': 22050,
         #'sampling_rate': 8000
