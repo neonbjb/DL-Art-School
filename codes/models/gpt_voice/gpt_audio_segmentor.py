@@ -49,7 +49,6 @@ class MelEncoder(nn.Module):
 
 
 class GptSegmentor(nn.Module):
-    MAX_SYMBOLS_PER_PHRASE = 200
     MAX_MEL_FRAMES = 2000 // 4
 
     def __init__(self, layers=8, model_dim=512, heads=8):
@@ -59,30 +58,28 @@ class GptSegmentor(nn.Module):
         self.max_mel_frames = self.MAX_MEL_FRAMES
         self.mel_encoder = MelEncoder(model_dim)
         self.mel_pos_embedding = nn.Embedding(self.MAX_MEL_FRAMES, model_dim)
-        self.gpt = Transformer(dim=model_dim, depth=layers, seq_len=2+self.MAX_SYMBOLS_PER_PHRASE+self.MAX_MEL_FRAMES, heads=heads,
+        self.gpt = Transformer(dim=model_dim, depth=layers, seq_len=self.MAX_MEL_FRAMES, heads=heads,
                                attn_dropout=.1, ff_dropout=.1, non_causal_sequence_partition=self.MAX_MEL_FRAMES)
 
         self.final_norm = nn.LayerNorm(model_dim)
         self.stop_head = nn.Linear(model_dim, 1)
 
-    def forward(self, mel_inputs, mel_lengths):
-        max_len = mel_lengths.max()  # This can be done in the dataset layer, but it is easier to do here.
-        mel_inputs = mel_inputs[:, :, :max_len]
-
+    def forward(self, mel_inputs, termination_points):
         mel_emb = self.mel_encoder(mel_inputs)
-        mel_lengths = mel_lengths // 4  # The encoder decimates the mel by a factor of 4.
         mel_emb = mel_emb.permute(0,2,1).contiguous()
         mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device))
 
         enc = self.gpt(mel_emb)
 
+        # The MEL gets decimated to 1/4 the size by the encoder, so we need to do the same to the termination points.
+        termination_points = F.interpolate(termination_points.unsqueeze(1), size=mel_emb.shape[1], mode='area').squeeze()
+        termination_points = (termination_points > 0).float()
+
         # Compute loss
         b, s, _ = enc.shape
-        mel_pad_mask = ~get_mask_from_lengths(mel_lengths-1, s)
-        targets = torch.zeros((b,s), device=enc.device).masked_fill_(mel_pad_mask, 1)
         stop_logits = self.final_norm(enc)
         stop_logits = self.stop_head(stop_logits)
-        loss = F.binary_cross_entropy_with_logits(stop_logits.squeeze(-1), targets)
+        loss = F.binary_cross_entropy_with_logits(stop_logits.squeeze(-1), termination_points)
 
         return loss.mean()
 
@@ -95,7 +92,7 @@ def register_gpt_segmentor(opt_net, opt):
 if __name__ == '__main__':
     gpt = GptSegmentor()
     l = gpt(torch.randn(3,80,94),
-            torch.tensor([18,42,93]))
+            torch.zeros(3,94))
     print(l.shape)
 
     #o = gpt.infer(torch.randint(high=24, size=(2,60)))
