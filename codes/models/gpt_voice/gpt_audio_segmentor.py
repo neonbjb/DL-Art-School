@@ -64,24 +64,26 @@ class GptSegmentor(nn.Module):
         self.final_norm = nn.LayerNorm(model_dim)
         self.stop_head = nn.Linear(model_dim, 1)
 
-    def forward(self, mel_inputs, termination_points):
+    def forward(self, mel_inputs, termination_points=None):
         mel_emb = self.mel_encoder(mel_inputs)
         mel_emb = mel_emb.permute(0,2,1).contiguous()
         mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device))
 
         enc = self.gpt(mel_emb)
-
-        # The MEL gets decimated to 1/4 the size by the encoder, so we need to do the same to the termination points.
-        termination_points = F.interpolate(termination_points.unsqueeze(1), size=mel_emb.shape[1], mode='area').squeeze()
-        termination_points = (termination_points > 0).float()
-
-        # Compute loss
-        b, s, _ = enc.shape
         stop_logits = self.final_norm(enc)
         stop_logits = self.stop_head(stop_logits)
-        loss = F.binary_cross_entropy_with_logits(stop_logits.squeeze(-1), termination_points)
 
-        return loss.mean()
+        if termination_points is not None:
+            # The MEL gets decimated to 1/4 the size by the encoder, so we need to do the same to the termination points.
+            termination_points = F.interpolate(termination_points.unsqueeze(1), size=mel_emb.shape[1], mode='area').squeeze()
+            termination_points = (termination_points > 0).float()
+
+            # Compute loss
+            loss = F.binary_cross_entropy_with_logits(stop_logits.squeeze(-1), termination_points)
+            return loss.mean()
+        else:
+            return stop_logits
+
 
 
 @register_model

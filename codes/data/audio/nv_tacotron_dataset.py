@@ -219,7 +219,7 @@ class TextMelCollate():
 
 
 def save_mel_buffer_to_file(mel, path):
-    np.save(path, mel.numpy())
+    np.save(path, mel.cpu().numpy())
 
 
 def dump_mels_to_disk():
