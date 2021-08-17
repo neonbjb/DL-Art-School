@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 if __name__ == '__main__':
     libri_root = 'E:\\audio\\LibriTTS'
-    basis = 'train-other-500'
+    basis = 'train-clean-360'
 
     readers = os.listdir(os.path.join(libri_root, basis))
     ofile = open(os.path.join(libri_root, f'{basis}_list.txt'), 'w', encoding='utf-8')
@@ -26,6 +26,7 @@ if __name__ == '__main__':
                     wav_file = '/'.join([basis, reader_dir, chapter_dir, f'{wav_file}.wav'])
                     if not os.path.exists(os.path.join(libri_root, wav_file)):
                         print(f'!WARNING could not open {wav_file}')
-                    ofile.write(f'{wav_file}|{normalized_text}\n')
+                    else:
+                        ofile.write(f'{wav_file}|{normalized_text}\n')
             ofile.flush()
     ofile.close()
