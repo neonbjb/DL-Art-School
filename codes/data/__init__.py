@@ -81,6 +81,8 @@ def create_dataset(dataset_opt, return_collate=False):
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
         from data.audio.stop_prediction_dataset import StopPredictionDataset as D
+    elif mode == 'stop_prediction2':
+        from data.audio.stop_prediction_dataset_2 import StopPredictionDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)

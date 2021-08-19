@@ -1,6 +1,9 @@
+import pathlib
+
 import numpy
 import torch
 from scipy.io import wavfile
+from tqdm import tqdm
 
 from models.waveglow.waveglow import WaveGlow
 
@@ -21,8 +24,12 @@ class Vocoder:
 
 
 if __name__ == '__main__':
-    inp = '3.npy'
-    mel = torch.tensor(numpy.load(inp)).to('cuda')
-    vocoder = Vocoder()
-    wav = vocoder.transform_mel_to_audio(mel)
-    wavfile.write(f'{inp}.wav', 22050, wav[0].cpu().numpy())
+    path = 'data/audio'
+    files = list(pathlib.Path(path).glob('*.npy'))
+
+    for inp in tqdm(files):
+        inp = str(inp)
+        mel = torch.tensor(numpy.load(inp)).to('cuda')
+        vocoder = Vocoder()
+        wav = vocoder.transform_mel_to_audio(mel)
+        wavfile.write(f'{inp}.wav', 22050, wav[0].cpu().numpy())

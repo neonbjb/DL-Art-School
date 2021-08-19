@@ -62,27 +62,26 @@ class GptSegmentor(nn.Module):
                                attn_dropout=.1, ff_dropout=.1, non_causal_sequence_partition=self.MAX_MEL_FRAMES)
 
         self.final_norm = nn.LayerNorm(model_dim)
+        self.start_head = nn.Linear(model_dim, 1)
         self.stop_head = nn.Linear(model_dim, 1)
 
-    def forward(self, mel_inputs, termination_points=None):
+    def forward(self, mel_inputs, start_labels=None, end_labels=None):
         mel_emb = self.mel_encoder(mel_inputs)
         mel_emb = mel_emb.permute(0,2,1).contiguous()
         mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device))
 
         enc = self.gpt(mel_emb)
-        stop_logits = self.final_norm(enc)
-        stop_logits = self.stop_head(stop_logits)
+        logits = self.final_norm(enc)
+        stop_logits = self.stop_head(logits)
+        start_logits = self.start_head(logits)
 
-        if termination_points is not None:
-            # The MEL gets decimated to 1/4 the size by the encoder, so we need to do the same to the termination points.
-            termination_points = F.interpolate(termination_points.unsqueeze(1), size=mel_emb.shape[1], mode='area').squeeze()
-            termination_points = (termination_points > 0).float()
-
+        if start_labels is not None:
             # Compute loss
-            loss = F.binary_cross_entropy_with_logits(stop_logits.squeeze(-1), termination_points)
-            return loss.mean()
+            start_loss = F.binary_cross_entropy_with_logits(start_logits.squeeze(-1), start_labels.float())
+            end_loss = F.binary_cross_entropy_with_logits(stop_logits.squeeze(-1), end_labels.float())
+            return start_loss.mean(), end_loss.mean()
         else:
-            return stop_logits
+            return start_logits, stop_logits
 
 
 

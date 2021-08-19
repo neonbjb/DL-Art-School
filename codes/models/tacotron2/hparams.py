@@ -36,7 +36,7 @@ def create_hparams(hparams_string=None, verbose=False):
         input_sample_rate=22050,  # When different from sampling_rate, dataset automatically interpolates to sampling_rate
         sampling_rate=22050,
         filter_length=1024,
-        hop_length=256,
+        hop_length=256,  # This means a MEL is 1/256th the equivalent audio.
         win_length=1024,
         n_mel_channels=80,
         mel_fmin=0.0,
