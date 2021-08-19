@@ -87,7 +87,7 @@ if __name__ == "__main__":
         sentence_number = 0
         last_detection_start = 0
         start = 0
-        clip_size = model.MAX_MEL_FRAMES
+        clip_size = model.max_mel_frames
         while start+clip_size < mels.shape[-1]:
             clip = mels[:, :, start:start+clip_size]
             preds = torch.nn.functional.sigmoid(model(clip)).squeeze(-1).squeeze(0)  # Squeeze off the batch and sigmoid dimensions, leaving only the sequence dimension.
