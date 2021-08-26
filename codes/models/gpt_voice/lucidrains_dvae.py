@@ -211,7 +211,7 @@ class DiscreteVAE(nn.Module):
             out = self.decode(codes)
 
         # reconstruction loss
-        recon_loss = self.loss_fn(img, out)
+        recon_loss = self.loss_fn(img, out, reduction='none')
 
         # This is so we can debug the distribution of codes being learned.
         if self.record_codes and self.internal_step % 50 == 0:
@@ -236,7 +236,8 @@ if __name__ == '__main__':
     #v = DiscreteVAE()
     #o=v(torch.randn(1,3,256,256))
     #print(o.shape)
-    v = DiscreteVAE(channels=1, normalization=None, positional_dims=1, num_tokens=4096, codebook_dim=4096, hidden_dim=256, stride=4, num_resnet_blocks=1, kernel_size=5, num_layers=5, use_transposed_convs=False)
+    v = DiscreteVAE(channels=80, normalization=None, positional_dims=1, num_tokens=4096, codebook_dim=4096,
+                    hidden_dim=256, stride=2, num_resnet_blocks=2, kernel_size=3, num_layers=2, use_transposed_convs=False)
     #v.eval()
-    o=v(torch.randn(1,1,4096))
+    o=v(torch.randn(1,80,256))
     print(o[-1].shape)
