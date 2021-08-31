@@ -75,7 +75,7 @@ if __name__ == "__main__":
                 continue
             pred = forward_pass(model, data, dataset_dir, opt, batch)
             pred = pred.replace('_', '')
-            output.write(f'{pred}\t{os.path.basename(data["path"][0])}')
+            output.write(f'{pred}\t{os.path.basename(data["path"][0])}\n')
             output.flush()
             batch += 1
 
