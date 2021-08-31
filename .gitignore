@@ -6,6 +6,7 @@ options/*
 codes/*.txt
 codes/wandb/*
 codes/pretrained_models/*
+codes/scripts/audio/pretrained_models/*
 data/*
 .vscode
 
