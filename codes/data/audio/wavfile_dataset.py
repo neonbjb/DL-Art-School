@@ -33,6 +33,7 @@ class WavfileDataset(torch.utils.data.Dataset):
         self.pad_to = opt_get(opt, ['pad_to_seconds'], None)
         if self.pad_to is not None:
             self.pad_to *= self.sampling_rate
+        self.min_sz = opt_get(opt, ['minimum_samples'], 0)
 
         self.augment = opt_get(opt, ['do_augmentation'], False)
         if self.augment:
@@ -89,6 +90,10 @@ class WavfileDataset(torch.utils.data.Dataset):
             else:
                 #print(f"Warning! Truncating clip {filename} from {audio_norm.shape[-1]} to {self.pad_to}")
                 audio_norm = audio_norm[:, :self.pad_to]
+
+        # Bail and try the next clip if there is not enough data.
+        if audio_norm.shape[-1] < self.min_sz:
+            return self[(index + 1) % len(self)]
 
         output = {
             'clip': audio_norm,

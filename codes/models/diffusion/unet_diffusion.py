@@ -186,6 +186,8 @@ class ResBlock(TimestepBlock):
         dims=2,
         up=False,
         down=False,
+        kernel_size=3,
+        padding=1,
     ):
         super().__init__()
         self.channels = channels
@@ -198,7 +200,7 @@ class ResBlock(TimestepBlock):
         self.in_layers = nn.Sequential(
             normalization(channels),
             nn.SiLU(),
-            conv_nd(dims, channels, self.out_channels, 3, padding=1),
+            conv_nd(dims, channels, self.out_channels, kernel_size, padding=padding),
         )
 
         self.updown = up or down
@@ -224,7 +226,7 @@ class ResBlock(TimestepBlock):
             nn.SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
+                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
             ),
         )
 
@@ -232,7 +234,7 @@ class ResBlock(TimestepBlock):
             self.skip_connection = nn.Identity()
         elif use_conv:
             self.skip_connection = conv_nd(
-                dims, channels, self.out_channels, 3, padding=1
+                dims, channels, self.out_channels, kernel_size, padding=padding
             )
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)

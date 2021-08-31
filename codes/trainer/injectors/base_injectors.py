@@ -535,6 +535,18 @@ class MelSpectrogramInjector(Injector):
         return {self.output: self.stft.mel_spectrogram(inp)}
 
 
+class RandomAudioCropInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.crop_sz = opt['crop_size']
+
+    def forward(self, state):
+        inp = state[self.input]
+        len = inp.shape[-1]
+        margin = len - self.crop_sz
+        start = random.randint(0, margin)
+        return {self.output: inp[:, :, start:start+self.crop_sz]}
+
 
 if __name__ == '__main__':
     inj = DecomposeDimensionInjector({'dim':2, 'in': 'x', 'out': 'y'}, None)

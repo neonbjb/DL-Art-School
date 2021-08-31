@@ -190,6 +190,12 @@ class DiscreteVAE(nn.Module):
         images = self.decoder(image_embeds)
         return images
 
+    def infer(self, img):
+        img = self.norm(img)
+        logits = self.encoder(img).permute((0,2,3,1) if len(img.shape) == 4 else (0,2,1))
+        sampled, commitment_loss, codes = self.codebook(logits)
+        return self.decode(codes)
+
     # Note: This module is not meant to be run in forward() except while training. It has special logic which performs
     # evaluation using quantized values when it detects that it is being run in eval() mode, which will be substantially
     # more lossy (but useful for determining network performance).
