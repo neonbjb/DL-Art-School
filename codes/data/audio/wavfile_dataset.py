@@ -92,10 +92,6 @@ class WavfileDataset(torch.utils.data.Dataset):
                 start = random.randint(0, gap-1)
                 audio_norm = audio_norm[:, start:start+self.pad_to]
 
-        # Bail and try the next clip if there is not enough data.
-        if audio_norm.shape[-1] < self.min_sz:
-            return self[(index + 1) % len(self)]
-
         output = {
             'clip': audio_norm,
             'path': filename,
