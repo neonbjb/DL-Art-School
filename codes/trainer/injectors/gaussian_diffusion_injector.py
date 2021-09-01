@@ -97,14 +97,21 @@ class GaussianDiffusionInferenceInjector(Injector):
         model_inputs = {k: state[v][:self.output_batch_size] for k, v in self.model_input_keys.items()}
         gen.eval()
         with torch.no_grad():
-            output_shape = (self.output_batch_size, 3, model_inputs['low_res'].shape[-2] * self.output_scale_factor,
-                            model_inputs['low_res'].shape[-1] * self.output_scale_factor)
+            if 'low_res' in model_inputs.keys():
+                output_shape = (self.output_batch_size, 3, model_inputs['low_res'].shape[-2] * self.output_scale_factor,
+                                model_inputs['low_res'].shape[-1] * self.output_scale_factor)
+                dev = model_inputs['low_res'].device
+            elif 'spectrogram' in model_inputs.keys():
+                output_shape = (self.output_batch_size, 1, model_inputs['spectrogram'].shape[-1]*256)
+                dev = model_inputs['spectrogram'].device
+            else:
+                raise NotImplementedError
             noise = None
             if self.noise_style == 'zero':
-                noise = torch.zeros(output_shape, device=model_inputs['low_res'].device)
+                noise = torch.zeros(output_shape, device=dev)
             elif self.noise_style == 'fixed':
                 if not hasattr(self, 'fixed_noise') or self.fixed_noise.shape != output_shape:
-                    self.fixed_noise = torch.randn(output_shape, device=model_inputs['low_res'].device)
+                    self.fixed_noise = torch.randn(output_shape, device=dev)
                 noise = self.fixed_noise
             gen = self.sampling_fn(gen, output_shape, noise=noise, model_kwargs=model_inputs, progress=True)
             if self.undo_n1_to_1:
