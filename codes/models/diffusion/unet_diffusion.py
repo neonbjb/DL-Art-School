@@ -187,7 +187,6 @@ class ResBlock(TimestepBlock):
         up=False,
         down=False,
         kernel_size=3,
-        padding=1,
     ):
         super().__init__()
         self.channels = channels
@@ -196,6 +195,7 @@ class ResBlock(TimestepBlock):
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.use_scale_shift_norm = use_scale_shift_norm
+        padding = 1 if kernel_size == 3 else 2
 
         self.in_layers = nn.Sequential(
             normalization(channels),
