@@ -91,12 +91,19 @@ class Upsample(nn.Module):
                  upsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None):
+    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.dims = dims
+        if factor is None:
+            if dims == 1:
+                self.factor = 4
+            else:
+                self.factor = 2
+        else:
+            self.factor = factor
         if use_conv:
             ksize = 3
             pad = 1
@@ -111,10 +118,7 @@ class Upsample(nn.Module):
             x = F.interpolate(
                 x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest"
             )
-        elif self.dims == 1:
-            x = F.interpolate(x, scale_factor=4, mode="nearest")
-        else:
-            x = F.interpolate(x, scale_factor=2, mode="nearest")
+        x = F.interpolate(x, scale_factor=self.factor, mode="nearest")
         if self.use_conv:
             x = self.conv(x)
         return x
@@ -130,7 +134,7 @@ class Downsample(nn.Module):
                  downsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None):
+    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -146,6 +150,8 @@ class Downsample(nn.Module):
             stride = 2
         else:
             stride = (1,2,2)
+        if factor is not None:
+            stride = factor
         if use_conv:
             self.op = conv_nd(
                 dims, self.channels, self.out_channels, ksize, stride=stride, padding=pad

@@ -25,6 +25,8 @@ if __name__ == '__main__':
     separator = Separator('spleeter:2stems')
     files = find_audio_files(src_dir, include_nonwav=True)
     for e, file in enumerate(tqdm(files)):
+        if e < 406500:
+            continue
         file_basis = osp.relpath(file, src_dir)\
             .replace('/', '_')\
             .replace('\\', '_')\
@@ -54,6 +56,8 @@ if __name__ == '__main__':
         elif ratio <= 1:
             od = output_dir_bg
             os = bg
+        else:
+            continue
 
         # Strip out channels.
         if len(os.shape) > 1:

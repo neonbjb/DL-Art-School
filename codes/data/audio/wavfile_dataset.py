@@ -12,6 +12,21 @@ from models.tacotron2.taco_utils import load_wav_to_torch
 from utils.util import opt_get
 
 
+def load_audio_from_wav(audiopath, sampling_rate):
+        audio, lsr = load_wav_to_torch(audiopath)
+        if lsr != sampling_rate:
+            if lsr < sampling_rate:
+                print(f'{audiopath} has a sample rate of {sampling_rate} which is lower than the requested sample rate of {sampling_rate}. This is not a good idea.')
+            audio = torch.nn.functional.interpolate(audio.unsqueeze(0).unsqueeze(1), scale_factor=sampling_rate/lsr, mode='nearest', recompute_scale_factor=False).squeeze()
+
+        # Check some assumptions about audio range. This should be automatically fixed in load_wav_to_torch, but might not be in some edge cases, where we should squawk.
+        # '2' is arbitrarily chosen since it seems like audio will often "overdrive" the [-1,1] bounds.
+        if torch.any(audio > 2) or not torch.any(audio < 0):
+            print(f"Error with {audiopath}. Max={audio.max()} min={audio.min()}")
+        audio.clip_(-1, 1)
+        return audio.unsqueeze(0)
+
+
 class WavfileDataset(torch.utils.data.Dataset):
 
     def __init__(self, opt):
@@ -43,19 +58,7 @@ class WavfileDataset(torch.utils.data.Dataset):
 
     def get_audio_for_index(self, index):
         audiopath = self.audiopaths[index]
-        audio, sampling_rate = load_wav_to_torch(audiopath)
-        if sampling_rate != self.sampling_rate:
-            if sampling_rate < self.sampling_rate:
-                print(f'{audiopath} has a sample rate of {sampling_rate} which is lower than the requested sample rate of {self.sampling_rate}. This is not a good idea.')
-            audio = torch.nn.functional.interpolate(audio.unsqueeze(0).unsqueeze(1), scale_factor=self.sampling_rate/sampling_rate, mode='nearest', recompute_scale_factor=False).squeeze()
-
-        # Check some assumptions about audio range. This should be automatically fixed in load_wav_to_torch, but might not be in some edge cases, where we should squawk.
-        # '2' is arbitrarily chosen since it seems like audio will often "overdrive" the [-1,1] bounds.
-        if torch.any(audio > 2) or not torch.any(audio < 0):
-            print(f"Error with {audiopath}. Max={audio.max()} min={audio.min()}")
-        audio.clip_(-1, 1)
-
-        audio = audio.unsqueeze(0)
+        audio = load_audio_from_wav(audiopath, self.sampling_rate)
         return audio, audiopath
 
     def __getitem__(self, index):

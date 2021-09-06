@@ -502,6 +502,22 @@ class NormalizeInjector(Injector):
         return {self.output: out}
 
 
+# Performs frequency-bin normalization for spectrograms.
+class FrequencyBinNormalizeInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.shift, self.scale = torch.load(opt['stats_file'])
+        self.shift = self.shift.view(1,-1,1)
+        self.scale = self.scale.view(1,-1,1)
+
+    def forward(self, state):
+        inp = state[self.input]
+        self.shift = self.shift.to(inp.device)
+        self.scale = self.scale.to(inp.device)
+        out = (inp - self.shift) / self.scale
+        return {self.output: out}
+
+
 # Performs normalization across fixed constants.
 class DenormalizeInjector(Injector):
     def __init__(self, opt, env):

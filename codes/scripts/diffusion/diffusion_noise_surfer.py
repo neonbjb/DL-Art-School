@@ -72,8 +72,6 @@ if __name__ == "__main__":
     if audio_mode:
         im = load_audio_from_wav(opt['image'], opt['sample_rate'])
         im = im[:, :(im.shape[1]//4096)*4096]
-        # Hack to reduce memory usage (but cuts off sample):
-        im = im[:, :40960]
     else:
         im = ToTensor()(Image.open(opt['image'])) * 2 - 1
         _, h, w = im.shape
