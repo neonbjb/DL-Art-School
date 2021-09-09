@@ -19,8 +19,8 @@ def main():
     maximum_duration = 20
     files = find_audio_files(args.path, include_nonwav=True)
     for e, wav_file in enumerate(tqdm(files)):
-        if e < 4197:
-            continue
+        #if e < 4197:
+        #    continue
         print(f"Processing {wav_file}..")
         outdir = os.path.join(args.out, f'{e}_{os.path.basename(wav_file[:-4])}').replace('.', '').strip()
         os.makedirs(outdir, exist_ok=True)
@@ -30,7 +30,7 @@ def main():
         except CouldntDecodeError as e:
             print(e)
             continue
-        chunks = split_on_silence(speech, min_silence_len=300, silence_thresh=-40,
+        chunks = split_on_silence(speech, min_silence_len=400, silence_thresh=-40,
                                   seek_step=100, keep_silence=50)
 
         for i in range(0, len(chunks)):
