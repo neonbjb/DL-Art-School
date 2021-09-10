@@ -14,6 +14,7 @@ def main():
     src_dir = 'F:\\split\\podcast-dump0'
     output_dir = 'F:\\tmp\\out'
     output_dir_bg = 'F:\\tmp\\bg'
+    output_dir_reject = 'F:\\tmp\\rejected'
     output_sample_rate=22050
     batch_size=24
 
@@ -28,34 +29,34 @@ def main():
 
         sep = separator.separate(waves)
         for j in range(sep['vocals'].shape[0]):
-            vocals = sep['vocals'][j]
-            bg = sep['accompaniment'][j]
-            vmax = np.abs(vocals).mean()
-            bmax = np.abs(bg).mean()
+            wave = waves[j].cpu().numpy()[:durations[j]]
+            vocals = sep['vocals'][j][:durations[j]]
+            bg = sep['accompaniment'][j][:durations[j]]
+            vmax = np.abs(vocals[output_sample_rate:-output_sample_rate]).mean()
+            bmax = np.abs(bg[output_sample_rate:-output_sample_rate]).mean()
 
             # Only output to the "good" sample dir if the ratio of background noise to vocal noise is high enough.
             ratio = vmax / (bmax+.0000001)
-            if ratio >= 25:  # These values were derived empirically
+            if ratio >= 4:  # These values were derived empirically
                 od = output_dir
-                out_sound = waves[j].cpu().numpy()
-            elif ratio <= 1:
+                out_sound = wave
+            elif ratio <= 2:
                 od = output_dir_bg
                 out_sound = bg
             else:
-                continue
+                print(f"Reject {paths[j]}: {ratio}")
+                od = output_dir_reject
+                out_sound = wave
 
             # Strip out channels.
             if len(out_sound.shape) > 1:
                 out_sound = out_sound[:, 0]  # Just use the first channel.
-            # Resize to true duration
-            out_sound = out_sound[:durations[j]]
 
             # Compile an output path.
             path = paths[j]
-            reld = os.path.relpath(os.path.dirname(path), src_dir)
+            reld = str(os.path.relpath(os.path.dirname(path), src_dir)).strip()
             os.makedirs(os.path.join(od, reld), exist_ok=True)
-            relp = os.path.relpath(path, src_dir)
-            output_path = os.path.join(od, relp)
+            output_path = os.path.join(od, reld, os.path.basename(path))
 
             wavfile.write(output_path, output_sample_rate, out_sound)
 
