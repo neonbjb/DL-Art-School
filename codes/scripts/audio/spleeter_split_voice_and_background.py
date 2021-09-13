@@ -13,9 +13,9 @@ import numpy as np
 # 1. Audio has little to no background noise, saved to "output_dir"
 # 2. Audio has a lot of background noise, bg noise split off and saved to "output_dir_bg"
 if __name__ == '__main__':
-    src_dir = 'F:\\split\\books1'
-    output_dir = 'F:\\split\\cleaned\\books1'
-    output_dir_bg = 'F:\\split\\background-noise\\books1'
+    src_dir = 'F:\\split\\joe_rogan'
+    output_dir = 'F:\\split\\cleaned\\joe_rogan'
+    output_dir_bg = 'F:\\split\\background-noise\\joe_rogan'
     output_sample_rate=22050
 
     os.makedirs(output_dir_bg, exist_ok=True)
@@ -63,4 +63,4 @@ if __name__ == '__main__':
         if len(os.shape) > 1:
             os = os[:, 0]  # Just use the first channel.
 
-        wavfile.write(osp.join(od, f'{e}_{file_basis}.wav'), output_sample_rate, os)
+        wavfile.write(osp.join(od, file_basis, f'{e}.wav'), output_sample_rate, os)

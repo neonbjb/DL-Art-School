@@ -15,11 +15,11 @@ def main():
     parser.add_argument('--path')
     parser.add_argument('--out')
     args = parser.parse_args()
-    minimum_duration = 5
+    minimum_duration = 2
     maximum_duration = 20
     files = find_audio_files(args.path, include_nonwav=True)
     for e, wav_file in enumerate(tqdm(files)):
-        #if e < 4197:
+        #if e < 1326:
         #    continue
         print(f"Processing {wav_file}..")
         outdir = os.path.join(args.out, f'{e}_{os.path.basename(wav_file[:-4])}').replace('.', '').strip()

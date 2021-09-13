@@ -11,12 +11,11 @@ from scripts.audio.preparation.spleeter_dataset import SpleeterDataset
 
 
 def main():
-    src_dir = 'F:\\split\\podcast-dump0'
-    output_dir = 'F:\\tmp\\out'
-    output_dir_bg = 'F:\\tmp\\bg'
-    output_dir_reject = 'F:\\tmp\\rejected'
+    src_dir = 'F:\\split\\joe_rogan'
+    output_dir = 'F:\\split\\cleaned\\joe_rogan'
+    output_dir_bg = 'F:\\split\\background-noise\\joe_rogan'
     output_sample_rate=22050
-    batch_size=24
+    batch_size=16
 
     dl = DataLoader(SpleeterDataset(src_dir, output_sample_rate), batch_size=batch_size, shuffle=False, num_workers=1, pin_memory=True)
     separator = Separator('pretrained_models/2stems', input_sr=output_sample_rate)
@@ -45,8 +44,7 @@ def main():
                 out_sound = bg
             else:
                 print(f"Reject {paths[j]}: {ratio}")
-                od = output_dir_reject
-                out_sound = wave
+                continue
 
             # Strip out channels.
             if len(out_sound.shape) > 1:
