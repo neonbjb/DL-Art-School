@@ -75,6 +75,8 @@ def create_dataset(dataset_opt, return_collate=False):
         collate = C(dataset_opt)
     elif mode == 'wavfile_clips':
         from data.audio.wavfile_dataset import WavfileDataset as D
+    elif mode == 'unsupervised_audio':
+        from data.audio.unsupervised_audio_dataset import UnsupervisedAudioDataset as D
     elif mode == 'stop_prediction':
         from models.tacotron2.hparams import create_hparams
         default_params = create_hparams()
