@@ -7,8 +7,10 @@ from data.util import find_audio_files
 
 
 class SpleeterDataset(Dataset):
-    def __init__(self, src_dir, sample_rate=22050, max_duration=20):
+    def __init__(self, src_dir, sample_rate=22050, max_duration=20, skip=0):
         self.files = find_audio_files(src_dir, include_nonwav=True)
+        if skip > 0:
+            self.files = self.files[skip:]
         self.audio_loader = AudioAdapter.default()
         self.sample_rate = sample_rate
         self.max_duration = max_duration

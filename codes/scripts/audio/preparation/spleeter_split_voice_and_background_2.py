@@ -17,11 +17,9 @@ def main():
     output_sample_rate=22050
     batch_size=16
 
-    dl = DataLoader(SpleeterDataset(src_dir, output_sample_rate), batch_size=batch_size, shuffle=False, num_workers=1, pin_memory=True)
+    dl = DataLoader(SpleeterDataset(src_dir, output_sample_rate, skip=batch_size*33000), batch_size=batch_size, shuffle=False, num_workers=1, pin_memory=True)
     separator = Separator('pretrained_models/2stems', input_sr=output_sample_rate)
-    for e, batch in enumerate(tqdm(dl)):
-        #if e < 406500:
-        #    continue
+    for batch in tqdm(dl):
         waves = batch['wave']
         paths = batch['path']
         durations = batch['duration']
