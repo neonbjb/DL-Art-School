@@ -5,6 +5,7 @@ from models.diffusion.unet_diffusion import AttentionPool2d, AttentionBlock, Res
 import torch
 import torch.nn as nn
 
+from models.gpt_voice.mini_encoder import AudioMiniEncoder, EmbeddingCombiner
 from models.vqvae.vqvae import Quantize
 from trainer.networks import register_model
 import models.gpt_voice.my_dvae as mdvae
@@ -120,6 +121,9 @@ class DiffusionDVAE(nn.Module):
             nn.SiLU(),
             linear(time_embed_dim, time_embed_dim),
         )
+        self.contextual_embedder = AudioMiniEncoder(self.spectrogram_channels, time_embed_dim)
+        self.query_gen = AudioMiniEncoder(decoder_channels[0], time_embed_dim)
+        self.embedding_combiner = EmbeddingCombiner(time_embed_dim)
 
         self.input_blocks = nn.ModuleList(
             [
@@ -258,7 +262,7 @@ class DiffusionDVAE(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps, spectrogram):
+    def forward(self, x, timesteps, spectrogram, conditioning_inputs=None):
         assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
 
         # Compute DVAE portion first.
@@ -275,9 +279,17 @@ class DiffusionDVAE(nn.Module):
         spec_hs = [nn.functional.interpolate(sh, size=(x.shape[-1]//self.scale_steps**self.spectrogram_conditioning_levels[i],), mode='nearest') for i, sh in enumerate(spec_hs)]
         convergence_fns = list(self.convergence_convs)
 
-        # The rest is the diffusion vocoder, built as a standard U-net. spec_h is gradually fed into the encoder.
+        # Timestep embeddings and conditioning signals are combined using a small transformer.
         hs = []
-        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+        emb1 = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+        if conditioning_inputs is not None:
+            emb2 = torch.stack([self.contextual_embedder(ci.squeeze(1)) for ci in list(torch.chunk(conditioning_inputs, conditioning_inputs.shape[1], dim=1))], dim=1)
+            emb = torch.cat([emb1.unsqueeze(1), emb2], dim=1)
+        else:
+            emb = emb1.unsqueeze(1)
+        emb = self.embedding_combiner(emb, self.query_gen(spec_hs[0]))
+
+        # The rest is the diffusion vocoder, built as a standard U-net. spec_h is gradually fed into the encoder.
         next_spec = spec_hs.pop(0)
         next_convergence_fn = convergence_fns.pop(0)
         h = x.type(self.dtype)
@@ -311,6 +323,7 @@ def register_unet_diffusion_dvae(opt_net, opt):
 if __name__ == '__main__':
     clip = torch.randn(1, 1, 81920)
     spec = torch.randn(1, 80, 416)
+    cond = torch.randn(1, 5, 80, 200)
     ts = torch.LongTensor([555])
     model = DiffusionDVAE(32, 2)
-    print(model(clip, ts, spec).shape)
+    print(model(clip, ts, spec, cond)[0].shape)
