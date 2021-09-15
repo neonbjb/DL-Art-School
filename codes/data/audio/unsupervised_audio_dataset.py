@@ -16,7 +16,7 @@ from utils.util import opt_get
 
 
 def load_audio(audiopath, sampling_rate):
-    if audiopath[:-4] == '.wav':
+    if audiopath[-4:] == '.wav':
         audio, lsr = load_wav_to_torch(audiopath)
     else:
         audio, lsr = open_audio(audiopath)
@@ -83,6 +83,9 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         related_files = find_files_of_type('img', os.path.dirname(audiopath), qualifier=is_audio_file)[0]
         assert audiopath in related_files
         assert len(related_files) < 50000  # Sanity check to ensure we aren't loading "related files" that aren't actually related.
+        if len(related_files) == 0:
+            j = 0
+            print(f"No related files for {audiopath}")
         related_files.remove(audiopath)
         related_clips = []
         random.shuffle(related_clips)
