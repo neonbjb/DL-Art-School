@@ -136,12 +136,12 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio',
-        'path': ['Z:\\split\\cleaned\\books0'],
+        'path': ['Z:\\split\\cleaned\\books0', 'Z:\\split\\cleaned\\books2'],
         'cache_path': 'E:\\audio\\remote-cache.pth',
         'sampling_rate': 22050,
         'pad_to_seconds': 5,
         'phase': 'train',
-        'n_workers': 0,
+        'n_workers': 4,
         'batch_size': 16,
         'extra_samples': 4,
     }
