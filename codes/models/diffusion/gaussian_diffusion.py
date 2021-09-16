@@ -757,6 +757,7 @@ class GaussianDiffusion:
         terms = {}
 
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
+            # TODO: support multiple model outputs for this mode.
             terms["loss"] = self._vb_terms_bpd(
                 model=model,
                 x_start=x_start,
@@ -768,7 +769,10 @@ class GaussianDiffusion:
             if self.loss_type == LossType.RESCALED_KL:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
-            model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
+            model_outputs = model(x_t, self._scale_timesteps(t), **model_kwargs)
+            model_output = model_outputs[0]
+            if len(model_outputs) > 1:
+                terms['extra_outputs']: model_outputs[1:]
 
             if self.model_var_type in [
                 ModelVarType.LEARNED,

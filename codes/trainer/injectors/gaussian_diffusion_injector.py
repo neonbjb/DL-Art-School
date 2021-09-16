@@ -21,6 +21,7 @@ class GaussianDiffusionInjector(Injector):
         self.diffusion = SpacedDiffusion(**opt['diffusion_args'])
         self.schedule_sampler = create_named_schedule_sampler(opt['sampler_type'], self.diffusion)
         self.model_input_keys = opt_get(opt, ['model_input_keys'], [])
+        self.extra_model_output_keys = opt_get(opt, ['extra_model_output_keys'], [])
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
@@ -30,9 +31,16 @@ class GaussianDiffusionInjector(Injector):
         diffusion_outputs = self.diffusion.training_losses(gen, hq, t, model_kwargs=model_inputs)
         if isinstance(self.schedule_sampler, LossAwareSampler):
             self.schedule_sampler.update_with_local_losses(t, diffusion_outputs['losses'])
-        return {self.output: diffusion_outputs['mse'],
+
+        if len(self.extra_model_output_keys) > 0:
+            assert(len(self.extra_model_output_keys) == len(diffusion_outputs['extra_outputs']))
+            out = {k: v for k, v in zip(self.extra_model_output_keys, diffusion_outputs['extra_outputs'])}
+        else:
+            out = {}
+        out.update({self.output: diffusion_outputs['mse'],
                 self.output_variational_bounds_key: diffusion_outputs['vb'],
-                self.output_x_start_key: diffusion_outputs['x_start_predicted']}
+                self.output_x_start_key: diffusion_outputs['x_start_predicted']})
+        return out
 
 
 class AutoregressiveGaussianDiffusionInjector(Injector):
@@ -67,7 +75,6 @@ class AutoregressiveGaussianDiffusionInjector(Injector):
         return outputs
 
 
-
 # Performs inference using a network trained to predict a reverse diffusion process, which nets a image.
 class GaussianDiffusionInferenceInjector(Injector):
     def __init__(self, opt, env):
@@ -88,6 +95,9 @@ class GaussianDiffusionInferenceInjector(Injector):
         self.model_input_keys = opt_get(opt, ['model_input_keys'], [])
         self.use_ema_model = opt_get(opt, ['use_ema'], False)
         self.noise_style = opt_get(opt, ['noise_type'], 'random')  # 'zero', 'fixed' or 'random'
+
+        self.model_fn = opt_get(opt, ['model_function'], None)
+        self.model_fn = None if self.model_fn is None else getattr(self.generator, self.model_fn)
 
     def forward(self, state):
         if self.use_ema_model:
@@ -113,7 +123,7 @@ class GaussianDiffusionInferenceInjector(Injector):
                 if not hasattr(self, 'fixed_noise') or self.fixed_noise.shape != output_shape:
                     self.fixed_noise = torch.randn(output_shape, device=dev)
                 noise = self.fixed_noise
-            gen = self.sampling_fn(gen, output_shape, noise=noise, model_kwargs=model_inputs, progress=True)
+            gen = self.sampling_fn(self.model_fn, output_shape, noise=noise, model_kwargs=model_inputs, progress=True, device=dev)
             if self.undo_n1_to_1:
                 gen = (gen + 1) / 2
             return {self.output: gen}

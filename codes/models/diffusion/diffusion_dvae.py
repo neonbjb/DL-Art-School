@@ -262,19 +262,8 @@ class DiffusionDVAE(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps, spectrogram, conditioning_inputs=None):
-        assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
-
-        # Compute DVAE portion first.
-        spec_logits = self.encoder(spectrogram).permute((0,2,1))
-        sampled, commitment_loss, codes = self.quantizer(spec_logits)
-        if self.training:
-            # Compute from softmax outputs to preserve gradients.
-            sampled = sampled.permute((0,2,1))
-        else:
-            # Compute from codes only.
-            sampled = self.quantizer.embed_code(codes).permute((0,2,1))
-        spec_hs = self.decoder(sampled)[::-1]
+    def _decode_continouous(self, x, timesteps, embeddings, conditioning_inputs):
+        spec_hs = self.decoder(embeddings)[::-1]
         # Shape the spectrogram correctly. There is no guarantee it fits (though I probably should add an assertion here to make sure the resizing isn't too wacky.)
         spec_hs = [nn.functional.interpolate(sh, size=(x.shape[-1]//self.scale_steps**self.spectrogram_conditioning_levels[i],), mode='nearest') for i, sh in enumerate(spec_hs)]
         convergence_fns = list(self.convergence_convs)
@@ -311,7 +300,26 @@ class DiffusionDVAE(nn.Module):
             h = torch.cat([h, hs.pop()], dim=1)
             h = module(h, emb)
         h = h.type(x.dtype)
-        return self.out(h), commitment_loss
+        return self.out(h)
+
+    def decode(self, x, timesteps, codes, conditioning_inputs=None):
+        assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
+        embeddings = self.quantizer.embed_code(codes).permute((0,2,1))
+        return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs), commitment_loss
+
+    def forward(self, x, timesteps, spectrogram, conditioning_inputs=None):
+        assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
+
+        # Compute DVAE portion first.
+        spec_logits = self.encoder(spectrogram).permute((0,2,1))
+        sampled, commitment_loss, codes = self.quantizer(spec_logits)
+        if self.training:
+            # Compute from softmax outputs to preserve gradients.
+            embeddings = sampled.permute((0,2,1))
+        else:
+            # Compute from codes only.
+            embeddings = self.quantizer.embed_code(codes).permute((0,2,1))
+        return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs), commitment_loss
 
 
 @register_model
