@@ -21,7 +21,7 @@ class AudioMiniEncoder(nn.Module):
         res = []
         for l in range(2):
             for r in range(resnet_blocks):
-                res.append(ResBlock(ch, dropout, dims=1))
+                res.append(ResBlock(ch, dropout, dims=1, do_checkpoint=False))
             res.append(Downsample(ch, use_conv=True, dims=1, out_channels=ch*2, factor=2))
             ch *= 2
         self.res = nn.Sequential(*res)
@@ -32,7 +32,7 @@ class AudioMiniEncoder(nn.Module):
         )
         attn = []
         for a in range(attn_blocks):
-            attn.append(AttentionBlock(embedding_dim, num_attn_heads))
+            attn.append(AttentionBlock(embedding_dim, num_attn_heads, do_checkpoint=False))
         self.attn = nn.Sequential(*attn)
 
     def forward(self, x):

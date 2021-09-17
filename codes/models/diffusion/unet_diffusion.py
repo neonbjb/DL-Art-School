@@ -294,9 +294,11 @@ class AttentionBlock(nn.Module):
         num_heads=1,
         num_head_channels=-1,
         use_new_attention_order=False,
+        do_checkpoint=True,
     ):
         super().__init__()
         self.channels = channels
+        self.do_checkpoint = do_checkpoint
         if num_head_channels == -1:
             self.num_heads = num_heads
         else:
@@ -316,7 +318,10 @@ class AttentionBlock(nn.Module):
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
 
     def forward(self, x, mask=None):
-        return checkpoint(self._forward, x, mask)
+        if self.do_checkpoint:
+            return checkpoint(self._forward, x, mask)
+        else:
+            return self._forward(x, mask)
 
     def _forward(self, x, mask):
         b, c, *spatial = x.shape

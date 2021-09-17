@@ -41,6 +41,7 @@ class ResBlock(nn.Module):
         up=False,
         down=False,
         kernel_size=3,
+        do_checkpoint=True,
     ):
         super().__init__()
         self.channels = channels
@@ -48,6 +49,7 @@ class ResBlock(nn.Module):
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.use_scale_shift_norm = use_scale_shift_norm
+        self.do_checkpoint = do_checkpoint
         padding = 1 if kernel_size == 3 else 2
 
         self.in_layers = nn.Sequential(
@@ -86,9 +88,12 @@ class ResBlock(nn.Module):
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
     def forward(self, x):
-        return checkpoint(
-            self._forward, x
-        )
+        if self.do_checkpoint:
+            return checkpoint(
+                self._forward, x
+            )
+        else:
+            return self._forward(x)
 
     def _forward(self, x):
         if self.updown:
