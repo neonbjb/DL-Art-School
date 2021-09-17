@@ -32,7 +32,7 @@ class DiscreteEncoder(nn.Module):
         )
 
     def forward(self, spectrogram):
-        return checkpoint(self.blocks, spectrogram)
+        return self.blocks(spectrogram)
 
 
 class DiscreteDecoder(nn.Module):

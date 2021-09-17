@@ -117,7 +117,7 @@ class ExtensibleTrainer(BaseModel):
                     dnet = DistributedDataParallel(anet, delay_allreduce=True)
                 else:
                     from torch.nn.parallel.distributed import DistributedDataParallel
-                    dnet = DistributedDataParallel(anet, device_ids=[torch.cuda.current_device()])
+                    dnet = DistributedDataParallel(anet, device_ids=[torch.cuda.current_device()], find_unused_parameters=True)
             else:
                 dnet = DataParallel(anet, device_ids=opt['gpu_ids'])
             if self.is_train:
