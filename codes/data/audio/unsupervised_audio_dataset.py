@@ -108,9 +108,13 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         return torch.stack(related_clips, dim=0), actual_extra_samples
 
     def __getitem__(self, index):
-        # Split audio_norm into two tensors of equal size.
-        audio_norm, filename = self.get_audio_for_index(index)
-        alt_files, actual_samples = self.get_related_audio_for_index(index)
+        try:
+            # Split audio_norm into two tensors of equal size.
+            audio_norm, filename = self.get_audio_for_index(index)
+            alt_files, actual_samples = self.get_related_audio_for_index(index)
+        except:
+            print(f"Error loading audio for file {filename} or {alt_files}")
+            return self[index+1]
 
         # This is required when training to make sure all clips align.
         if self.pad_to is not None:
