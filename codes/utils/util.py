@@ -409,3 +409,11 @@ def denormalize(x, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     for t, m, s in zip(ten, mean, std):
         t.mul_(s).add_(m)
     return torch.clamp(ten, 0, 1).permute(3, 0, 1, 2)
+
+
+def get_mask_from_lengths(lengths, max_len=None):
+    if max_len is None:
+        max_len = torch.max(lengths).item()
+    ids = torch.arange(0, max_len, out=torch.LongTensor(max_len)).to(lengths.device)
+    mask = (ids < lengths.unsqueeze(1)).bool()
+    return mask

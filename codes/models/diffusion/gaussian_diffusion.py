@@ -772,7 +772,7 @@ class GaussianDiffusion:
             model_outputs = model(x_t, self._scale_timesteps(t), **model_kwargs)
             model_output = model_outputs[0]
             if len(model_outputs) > 1:
-                terms['extra_outputs']: model_outputs[1:]
+                terms['extra_outputs'] = model_outputs[1:]
 
             if self.model_var_type in [
                 ModelVarType.LEARNED,

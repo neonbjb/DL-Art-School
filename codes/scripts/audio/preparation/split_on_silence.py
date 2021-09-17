@@ -19,8 +19,8 @@ def main():
     maximum_duration = 20
     files = find_audio_files(args.path, include_nonwav=True)
     for e, wav_file in enumerate(tqdm(files)):
-        #if e < 1459:
-        #    continue
+        if e < 2759:
+            continue
         print(f"Processing {wav_file}..")
         outdir = os.path.join(args.out, f'{e}_{os.path.basename(wav_file[:-4])}').replace('.', '').strip()
         os.makedirs(outdir, exist_ok=True)

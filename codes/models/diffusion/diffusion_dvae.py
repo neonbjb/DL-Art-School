@@ -9,7 +9,7 @@ from models.gpt_voice.mini_encoder import AudioMiniEncoder, EmbeddingCombiner
 from models.vqvae.vqvae import Quantize
 from trainer.networks import register_model
 import models.gpt_voice.my_dvae as mdvae
-from utils.util import checkpoint
+from utils.util import checkpoint, get_mask_from_lengths
 
 
 class DiscreteEncoder(nn.Module):
@@ -66,7 +66,6 @@ class DiffusionDVAE(nn.Module):
             spectrogram_channels=80,
             spectrogram_conditioning_levels=[3,4,5],  # Levels at which spectrogram conditioning is applied to the waveform.
             dropout=0,
-            # 106496 -> 26624 -> 6656 -> 16664 -> 416 -> 104 -> 26  for ~5secs@22050Hz
             channel_mult=(1, 2, 4, 8, 16, 32, 64),
             attention_resolutions=(16,32,64),
             conv_resample=True,
@@ -81,6 +80,7 @@ class DiffusionDVAE(nn.Module):
             quantize_dim=1024,
             num_discrete_codes=8192,
             scale_steps=4,
+            conditioning_inputs_provided=True,
     ):
         super().__init__()
 
@@ -121,9 +121,11 @@ class DiffusionDVAE(nn.Module):
             nn.SiLU(),
             linear(time_embed_dim, time_embed_dim),
         )
-        self.contextual_embedder = AudioMiniEncoder(self.spectrogram_channels, time_embed_dim)
-        self.query_gen = AudioMiniEncoder(decoder_channels[0], time_embed_dim)
-        self.embedding_combiner = EmbeddingCombiner(time_embed_dim)
+
+        if conditioning_inputs_provided:
+            self.contextual_embedder = AudioMiniEncoder(self.spectrogram_channels, time_embed_dim)
+            self.query_gen = AudioMiniEncoder(decoder_channels[0], time_embed_dim)
+            self.embedding_combiner = EmbeddingCombiner(time_embed_dim)
 
         self.input_blocks = nn.ModuleList(
             [
@@ -262,7 +264,7 @@ class DiffusionDVAE(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def _decode_continouous(self, x, timesteps, embeddings, conditioning_inputs):
+    def _decode_continouous(self, x, timesteps, embeddings, conditioning_inputs, num_conditioning_signals):
         spec_hs = self.decoder(embeddings)[::-1]
         # Shape the spectrogram correctly. There is no guarantee it fits (though I probably should add an assertion here to make sure the resizing isn't too wacky.)
         spec_hs = [nn.functional.interpolate(sh, size=(x.shape[-1]//self.scale_steps**self.spectrogram_conditioning_levels[i],), mode='nearest') for i, sh in enumerate(spec_hs)]
@@ -272,11 +274,12 @@ class DiffusionDVAE(nn.Module):
         hs = []
         emb1 = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         if conditioning_inputs is not None:
+            mask = get_mask_from_lengths(num_conditioning_signals+1, conditioning_inputs.shape[1]+1)  # +1 to account for the timestep embeddings we'll add.
             emb2 = torch.stack([self.contextual_embedder(ci.squeeze(1)) for ci in list(torch.chunk(conditioning_inputs, conditioning_inputs.shape[1], dim=1))], dim=1)
             emb = torch.cat([emb1.unsqueeze(1), emb2], dim=1)
+            emb = self.embedding_combiner(emb, mask, self.query_gen(spec_hs[0]))
         else:
-            emb = emb1.unsqueeze(1)
-        emb = self.embedding_combiner(emb, self.query_gen(spec_hs[0]))
+            emb = emb1
 
         # The rest is the diffusion vocoder, built as a standard U-net. spec_h is gradually fed into the encoder.
         next_spec = spec_hs.pop(0)
@@ -302,12 +305,12 @@ class DiffusionDVAE(nn.Module):
         h = h.type(x.dtype)
         return self.out(h)
 
-    def decode(self, x, timesteps, codes, conditioning_inputs=None):
+    def decode(self, x, timesteps, codes, conditioning_inputs=None, num_conditioning_signals=None):
         assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
         embeddings = self.quantizer.embed_code(codes).permute((0,2,1))
-        return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs), commitment_loss
+        return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs, num_conditioning_signals)
 
-    def forward(self, x, timesteps, spectrogram, conditioning_inputs=None):
+    def forward(self, x, timesteps, spectrogram, conditioning_inputs=None, num_conditioning_signals=None):
         assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
 
         # Compute DVAE portion first.
@@ -319,7 +322,7 @@ class DiffusionDVAE(nn.Module):
         else:
             # Compute from codes only.
             embeddings = self.quantizer.embed_code(codes).permute((0,2,1))
-        return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs), commitment_loss
+        return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs, num_conditioning_signals), commitment_loss
 
 
 @register_model
@@ -329,9 +332,10 @@ def register_unet_diffusion_dvae(opt_net, opt):
 
 # Test for ~4 second audio clip at 22050Hz
 if __name__ == '__main__':
-    clip = torch.randn(1, 1, 81920)
-    spec = torch.randn(1, 80, 416)
-    cond = torch.randn(1, 5, 80, 200)
-    ts = torch.LongTensor([555])
+    clip = torch.randn(4, 1, 81920)
+    spec = torch.randn(4, 80, 416)
+    cond = torch.randn(4, 5, 80, 200)
+    num_cond = torch.tensor([2,4,5,3], dtype=torch.long)
+    ts = torch.LongTensor([432, 234, 100, 555])
     model = DiffusionDVAE(32, 2)
-    print(model(clip, ts, spec, cond)[0].shape)
+    print(model(clip, ts, spec, cond, num_cond)[0].shape)

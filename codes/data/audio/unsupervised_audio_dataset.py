@@ -78,7 +78,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 
     def get_related_audio_for_index(self, index):
         if self.extra_samples <= 0:
-            return None
+            return None, 0
         audiopath = self.audiopaths[index]
         related_files = find_files_of_type('img', os.path.dirname(audiopath), qualifier=is_audio_file)[0]
         assert audiopath in related_files
@@ -123,10 +123,11 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 
         output = {
             'clip': audio_norm,
-            'alt_clips': alt_files,
-            'num_alt_clips': actual_samples,  # We need to pad so that the dataloader can combine these.
             'path': filename,
         }
+        if self.extra_samples > 0:
+            output['alt_clips'] = alt_files
+            output['num_alt_clips'] = actual_samples
         return output
 
     def __len__(self):

@@ -4,7 +4,7 @@ import torch.nn
 from kornia.augmentation import RandomResizedCrop
 from torch.cuda.amp import autocast
 
-from trainer.inject import Injector
+from trainer.inject import Injector, create_injector
 from trainer.losses import extract_params_from_state
 from utils.util import opt_get
 from utils.weight_scheduler import get_scheduler_for_opt

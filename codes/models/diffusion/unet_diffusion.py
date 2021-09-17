@@ -315,14 +315,14 @@ class AttentionBlock(nn.Module):
 
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
 
-    def forward(self, x):
-        return checkpoint(self._forward, x)
+    def forward(self, x, mask=None):
+        return checkpoint(self._forward, x, mask)
 
-    def _forward(self, x):
+    def _forward(self, x, mask):
         b, c, *spatial = x.shape
         x = x.reshape(b, c, -1)
         qkv = self.qkv(self.norm(x))
-        h = self.attention(qkv)
+        h = self.attention(qkv, mask)
         h = self.proj_out(h)
         return (x + h).reshape(b, c, *spatial)
 
@@ -356,7 +356,7 @@ class QKVAttentionLegacy(nn.Module):
         super().__init__()
         self.n_heads = n_heads
 
-    def forward(self, qkv):
+    def forward(self, qkv, mask=None):
         """
         Apply QKV attention.
 
@@ -372,7 +372,12 @@ class QKVAttentionLegacy(nn.Module):
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
         weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
+        if mask is not None:
+            # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
+            mask = mask.repeat(self.n_heads, 1).unsqueeze(1)
+            weight = weight * mask
         a = th.einsum("bts,bcs->bct", weight, v)
+
         return a.reshape(bs, -1, length)
 
     @staticmethod
@@ -389,7 +394,7 @@ class QKVAttention(nn.Module):
         super().__init__()
         self.n_heads = n_heads
 
-    def forward(self, qkv):
+    def forward(self, qkv, mask=None):
         """
         Apply QKV attention.
 
@@ -406,6 +411,10 @@ class QKVAttention(nn.Module):
             (q * scale).view(bs * self.n_heads, ch, length),
             (k * scale).view(bs * self.n_heads, ch, length),
         )  # More stable with f16 than dividing afterwards
+        if mask is not None:
+            # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
+            mask = mask.repeat(self.n_heads, 1).unsqueeze(1)
+            weight = weight * mask
         weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
         a = th.einsum("bts,bcs->bct", weight, v.reshape(bs * self.n_heads, ch, length))
         return a.reshape(bs, -1, length)

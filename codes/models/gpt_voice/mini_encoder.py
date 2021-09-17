@@ -78,14 +78,14 @@ class QueryProvidedAttentionBlock(nn.Module):
 
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
 
-    def forward(self, qx, kvx):
-        return checkpoint(self._forward, qx, kvx)
+    def forward(self, qx, kvx, mask=None):
+        return checkpoint(self._forward, qx, kvx, mask)
 
-    def _forward(self, qx, kvx):
+    def _forward(self, qx, kvx, mask=None):
         q = self.q(self.qnorm(qx)).unsqueeze(1).repeat(1, kvx.shape[1], 1).permute(0,2,1)
         kv = self.kv(self.norm(kvx.permute(0,2,1)))
         qkv = torch.cat([q, kv], dim=1)
-        h = self.attention(qkv)
+        h = self.attention(qkv, mask)
         h = self.proj_out(h)
         return kvx + h.permute(0,2,1)
 
@@ -100,14 +100,14 @@ class EmbeddingCombiner(nn.Module):
 
     # x_s: (b,n,d); b=batch_sz, n=number of embeddings, d=embedding_dim
     # cond: (b,d) or None
-    def forward(self, x_s, cond=None):
+    def forward(self, x_s, attn_mask=None, cond=None):
         assert cond is not None and self.cond_provided or cond is None and not self.cond_provided
         y = x_s
         for blk in self.attn:
             if self.cond_provided:
-                y = blk(cond, y)
+                y = blk(cond, y, mask=attn_mask)
             else:
-                y = blk(y)
+                y = blk(y, mask=attn_mask)
         return y[:, 0]
 
 
