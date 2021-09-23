@@ -5,11 +5,12 @@ from models.diffusion.unet_diffusion import AttentionPool2d, AttentionBlock, Res
 import torch
 import torch.nn as nn
 
+from models.gpt_voice.lucidrains_dvae import eval_decorator
 from models.gpt_voice.mini_encoder import AudioMiniEncoder, EmbeddingCombiner
 from models.vqvae.vqvae import Quantize
 from trainer.networks import register_model
-import models.gpt_voice.my_dvae as mdvae
 from utils.util import get_mask_from_lengths
+import models.gpt_voice.mini_encoder as menc
 
 
 class DiscreteEncoder(nn.Module):
@@ -22,13 +23,13 @@ class DiscreteEncoder(nn.Module):
         super().__init__()
         self.blocks = nn.Sequential(
             conv_nd(1, in_channels, model_channels, 3, padding=1),
-            mdvae.ResBlock(model_channels, dropout, dims=1),
+            menc.ResBlock(model_channels, dropout, dims=1),
             Downsample(model_channels, use_conv=True, dims=1, out_channels=model_channels*2, factor=scale),
-            mdvae.ResBlock(model_channels*2, dropout, dims=1),
+            menc.ResBlock(model_channels*2, dropout, dims=1),
             Downsample(model_channels*2, use_conv=True, dims=1, out_channels=model_channels*4, factor=scale),
-            mdvae.ResBlock(model_channels*4, dropout, dims=1),
+            menc.ResBlock(model_channels*4, dropout, dims=1),
             AttentionBlock(model_channels*4, num_heads=4),
-            mdvae.ResBlock(model_channels*4, dropout, out_channels=out_channels, dims=1),
+            menc.ResBlock(model_channels*4, dropout, out_channels=out_channels, dims=1),
         )
 
     def forward(self, spectrogram):
@@ -249,6 +250,21 @@ class DiffusionDVAE(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
 
+    def get_debug_values(self, step, __):
+        if self.record_codes:
+            # Report annealing schedule
+            return {'histogram_codes': self.codes}
+        else:
+            return {}
+
+    @torch.no_grad()
+    @eval_decorator
+    def get_codebook_indices(self, images):
+        img = self.norm(images)
+        logits = self.encoder(img).permute((0,2,3,1) if len(img.shape) == 4 else (0,2,1))
+        sampled, commitment_loss, codes = self.codebook(logits)
+        return codes
+
     def _decode_continouous(self, x, timesteps, embeddings, conditioning_inputs, num_conditioning_signals):
         if self.conditioning_enabled:
             assert conditioning_inputs is not None
@@ -299,17 +315,28 @@ class DiffusionDVAE(nn.Module):
         return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs, num_conditioning_signals)
 
     def forward(self, x, timesteps, spectrogram, conditioning_inputs=None, num_conditioning_signals=None):
-        assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
-
         # Compute DVAE portion first.
         spec_logits = self.encoder(spectrogram).permute((0,2,1))
         sampled, commitment_loss, codes = self.quantizer(spec_logits)
+
         if self.training:
             # Compute from softmax outputs to preserve gradients.
             embeddings = sampled.permute((0,2,1))
         else:
             # Compute from codes only.
             embeddings = self.quantizer.embed_code(codes).permute((0,2,1))
+
+        # This is so we can debug the distribution of codes being learned.
+        if self.internal_step % 50 == 0:
+            codes = codes.flatten()
+            l = codes.shape[0]
+            i = self.code_ind if (self.codes.shape[0] - self.code_ind) > l else self.codes.shape[0] - l
+            self.codes[i:i+l] = codes.cpu()
+            self.code_ind = self.code_ind + l
+            if self.code_ind >= self.codes.shape[0]:
+                self.code_ind = 0
+        self.internal_step += 1
+
         return self._decode_continouous(x, timesteps, embeddings, conditioning_inputs, num_conditioning_signals), commitment_loss
 
 
@@ -318,12 +345,44 @@ def register_unet_diffusion_dvae(opt_net, opt):
     return DiffusionDVAE(**opt_net['kwargs'])
 
 
+
+'''
+
+
+class DiffusionDVAE(nn.Module):
+    def __init__(
+            self,
+            model_channels,
+            num_res_blocks,
+            in_channels=1,
+            out_channels=2,  # mean and variance
+            spectrogram_channels=80,
+            spectrogram_conditioning_levels=[3,4,5],  # Levels at which spectrogram conditioning is applied to the waveform.
+            dropout=0,
+            channel_mult=(1, 2, 4, 8, 16, 32, 64),
+            attention_resolutions=(16,32,64),
+            conv_resample=True,
+            dims=1,
+            use_fp16=False,
+            num_heads=1,
+            num_head_channels=-1,
+            num_heads_upsample=-1,
+            use_scale_shift_norm=False,
+            use_new_attention_order=False,
+            kernel_size=5,
+            quantize_dim=1024,
+            num_discrete_codes=8192,
+            scale_steps=4,
+            conditioning_inputs_provided=True,
+    ):
+    '''
+
 # Test for ~4 second audio clip at 22050Hz
 if __name__ == '__main__':
-    clip = torch.randn(4, 1, 81920)
     spec = torch.randn(4, 80, 416)
     cond = torch.randn(4, 5, 80, 200)
     num_cond = torch.tensor([2,4,5,3], dtype=torch.long)
     ts = torch.LongTensor([432, 234, 100, 555])
-    model = DiffusionDVAE(32, 2)
-    print(model(clip, ts, spec, cond, num_cond)[0].shape)
+    model = DiffusionDVAE(model_channels=128, num_res_blocks=1, in_channels=80, out_channels=160, spectrogram_conditioning_levels=[1,2],
+    channel_mult=(1,2,4), attention_resolutions=[4], num_heads=4, kernel_size=3, scale_steps=2, conditioning_inputs_provided=False)
+    print(model(torch.randn_like(spec), ts, spec, cond, num_cond)[0].shape)

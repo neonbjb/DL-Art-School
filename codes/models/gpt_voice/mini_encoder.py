@@ -4,11 +4,89 @@ import torch.nn as nn
 
 from models.diffusion.nn import normalization, conv_nd, zero_module
 from models.diffusion.unet_diffusion import Downsample, AttentionBlock, QKVAttention, QKVAttentionLegacy
-from models.gpt_voice.my_dvae import ResBlock
 
 
 # Combined resnet & full-attention encoder for converting an audio clip into an embedding.
 from utils.util import checkpoint
+
+
+class ResBlock(nn.Module):
+    def __init__(
+        self,
+        channels,
+        dropout,
+        out_channels=None,
+        use_conv=False,
+        use_scale_shift_norm=False,
+        dims=2,
+        up=False,
+        down=False,
+        kernel_size=3,
+        do_checkpoint=True,
+    ):
+        super().__init__()
+        self.channels = channels
+        self.dropout = dropout
+        self.out_channels = out_channels or channels
+        self.use_conv = use_conv
+        self.use_scale_shift_norm = use_scale_shift_norm
+        self.do_checkpoint = do_checkpoint
+        padding = 1 if kernel_size == 3 else 2
+
+        self.in_layers = nn.Sequential(
+            normalization(channels),
+            nn.SiLU(),
+            conv_nd(dims, channels, self.out_channels, kernel_size, padding=padding),
+        )
+
+        self.updown = up or down
+
+        if up:
+            self.h_upd = Upsample(channels, False, dims)
+            self.x_upd = Upsample(channels, False, dims)
+        elif down:
+            self.h_upd = Downsample(channels, False, dims)
+            self.x_upd = Downsample(channels, False, dims)
+        else:
+            self.h_upd = self.x_upd = nn.Identity()
+
+        self.out_layers = nn.Sequential(
+            normalization(self.out_channels),
+            nn.SiLU(),
+            nn.Dropout(p=dropout),
+            zero_module(
+                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
+            ),
+        )
+
+        if self.out_channels == channels:
+            self.skip_connection = nn.Identity()
+        elif use_conv:
+            self.skip_connection = conv_nd(
+                dims, channels, self.out_channels, kernel_size, padding=padding
+            )
+        else:
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+
+    def forward(self, x):
+        if self.do_checkpoint:
+            return checkpoint(
+                self._forward, x
+            )
+        else:
+            return self._forward(x)
+
+    def _forward(self, x):
+        if self.updown:
+            in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
+            h = in_rest(x)
+            h = self.h_upd(h)
+            x = self.x_upd(x)
+            h = in_conv(h)
+        else:
+            h = self.in_layers(x)
+        h = self.out_layers(h)
+        return self.skip_connection(x) + h
 
 
 class AudioMiniEncoder(nn.Module):

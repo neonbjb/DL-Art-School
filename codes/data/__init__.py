@@ -73,18 +73,8 @@ def create_dataset(dataset_opt, return_collate=False):
         from data.audio.gpt_tts_dataset import GptTtsDataset as D
         from data.audio.gpt_tts_dataset import GptTtsCollater as C
         collate = C(dataset_opt)
-    elif mode == 'wavfile_clips':
-        from data.audio.wavfile_dataset import WavfileDataset as D
     elif mode == 'unsupervised_audio':
         from data.audio.unsupervised_audio_dataset import UnsupervisedAudioDataset as D
-    elif mode == 'stop_prediction':
-        from models.tacotron2.hparams import create_hparams
-        default_params = create_hparams()
-        default_params.update(dataset_opt)
-        dataset_opt = munchify(default_params)
-        from data.audio.stop_prediction_dataset import StopPredictionDataset as D
-    elif mode == 'stop_prediction2':
-        from data.audio.stop_prediction_dataset_2 import StopPredictionDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)

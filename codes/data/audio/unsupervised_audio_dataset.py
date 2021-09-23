@@ -113,7 +113,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
             audio_norm, filename = self.get_audio_for_index(index)
             alt_files, actual_samples = self.get_related_audio_for_index(index)
         except:
-            print(f"Error loading audio for file {filename} or {alt_files}")
+            print(f"Error loading audio for file {self.audiopaths[index]}")
             return self[index+1]
 
         # This is required when training to make sure all clips align.
