@@ -565,5 +565,5 @@ class RandomAudioCropInjector(Injector):
 
 
 if __name__ == '__main__':
-    inj = DecomposeDimensionInjector({'dim':2, 'in': 'x', 'out': 'y'}, None)
-    print(inj({'x':torch.randn(10,3,64,64)})['y'].shape)
+    inj = MelSpectrogramInjector({'in': 'x', 'out': 'y'}, None)
+    print(inj({'x':torch.rand(10,1,40800)})['y'].shape)
