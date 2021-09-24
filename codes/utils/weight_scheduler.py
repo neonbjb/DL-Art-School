@@ -55,11 +55,11 @@ def get_scheduler_for_opt(opt):
 # Do some testing.
 if __name__ == "__main__":
     #sched = SinusoidalWeightScheduler(1, .1, 50, 10)
-    sched = LinearDecayWeightScheduler(1, 150, .1, 20)
+    sched = LinearDecayWeightScheduler(10, 5000, .9, 2000)
 
     x = []
     y = []
-    for s in range(200):
+    for s in range(8000):
         x.append(s)
         y.append(sched.get_weight_for_step(s))
     plt.plot(x, y)

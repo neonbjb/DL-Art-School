@@ -95,7 +95,7 @@ class Trainer:
         seed += self.rank  # Different multiprocessing instances should behave differently.
         util.set_random_seed(seed)
 
-        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.benchmark = opt_get(opt, ['cuda_benchmarking_enabled'], True)
         # torch.backends.cudnn.deterministic = True
         if opt_get(opt, ['anomaly_detection'], False):
             torch.autograd.set_detect_anomaly(True)

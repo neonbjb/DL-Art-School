@@ -1,5 +1,7 @@
 from models.diffusion.fp16_util import convert_module_to_f32, convert_module_to_f16
+from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
+from models.diffusion.respace import SpacedDiffusion, space_timesteps
 from models.diffusion.unet_diffusion import AttentionPool2d, AttentionBlock, ResBlock, TimestepEmbedSequential, \
     Downsample, Upsample
 import torch
@@ -253,7 +255,8 @@ class DiffusionDVAE(nn.Module):
         )
 
     def get_debug_values(self, step, __):
-        return {'histogram_codes': self.codes}
+        # Note: this is very poor design, but quantizer.get_temperature not only retrieves the temperature, it also updates the step and thus it is extremely important that this function get called regularly.
+        return {'histogram_codes': self.codes, 'quantizer_temperature': self.quantizer.get_temperature(step)}
 
     @torch.no_grad()
     @eval_decorator

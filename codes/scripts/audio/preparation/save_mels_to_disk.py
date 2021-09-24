@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import numpy
 import torch
@@ -19,10 +20,12 @@ def main():
     mel_inj = MelSpectrogramInjector({'in':'in', 'out':'out'}, {})
     audio_loader = AudioAdapter.default()
     for e, wav_file in enumerate(tqdm(files)):
-        if e < 272583:
+        if e < 0:
             continue
         print(f"Processing {wav_file}..")
         outfile = f'{wav_file}.npz'
+        if os.path.exists(outfile):
+            continue
 
         try:
             wave, sample_rate = audio_loader.load(wav_file, sample_rate=22050)
