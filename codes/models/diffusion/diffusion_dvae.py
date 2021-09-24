@@ -106,7 +106,7 @@ class DiffusionDVAE(nn.Module):
         self.scale_steps = scale_steps
 
         self.encoder = DiscreteEncoder(spectrogram_channels, model_channels*4, quantize_dim, dropout, scale_steps)
-        self.quantizer = Quantize(quantize_dim, num_discrete_codes)
+        self.quantizer = Quantize(quantize_dim, num_discrete_codes, balancing_heuristic=True)
         # For recording codebook usage.
         self.codes = torch.zeros((131072,), dtype=torch.long)
         self.code_ind = 0
