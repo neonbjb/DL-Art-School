@@ -86,7 +86,7 @@ class RouteTop1(torch.autograd.Function):
 
 
 """
-SwitchNorm is meant to be applied against the Softmax output of an switching function across a large set of
+SwitchNorm is meant to be applied against the Softmax output of a switching function across a large set of
 switch computations. It is meant to promote an equal distribution of switch weights by decreasing the magnitude
 of switch weights that are over-used and increasing the magnitude of under-used weights.
 
@@ -154,7 +154,7 @@ class SwitchNorm(nn.Module):
             norm = torch.ones(self.group_size, device=self.accumulator.device)
 
         norm = norm.view(1,-1)
-        while len(x.shape) < len(norm.shape):
+        while len(x.shape) > len(norm.shape):
             norm = norm.unsqueeze(-1)
         x = x / norm
 
