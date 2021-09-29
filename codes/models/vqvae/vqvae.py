@@ -48,7 +48,7 @@ class Quantize(nn.Module):
         self.register_buffer("embed_avg", embed.clone())
 
     def forward(self, input):
-        if self.codes_full:
+        if self.balancing_heuristic and self.codes_full:
             h = torch.histc(self.codes, bins=self.n_embed, min=0, max=self.n_embed) / len(self.codes)
             mask = torch.logical_or(h > .9, h < .01).unsqueeze(1)
             ep = self.embed.permute(1,0)
@@ -73,13 +73,14 @@ class Quantize(nn.Module):
         embed_ind = embed_ind.view(*input.shape[:-1])
         quantize = self.embed_code(embed_ind)
 
-        if self.codes is None:
-            self.codes = embed_ind.flatten()
-        else:
-            self.codes = torch.cat([self.codes, embed_ind.flatten()])
-            if len(self.codes) > self.max_codes:
-                self.codes = self.codes[-self.max_codes:]
-                self.codes_full = True
+        if self.balancing_heuristic:
+            if self.codes is None:
+                self.codes = embed_ind.flatten()
+            else:
+                self.codes = torch.cat([self.codes, embed_ind.flatten()])
+                if len(self.codes) > self.max_codes:
+                    self.codes = self.codes[-self.max_codes:]
+                    self.codes_full = True
 
         if self.training:
             embed_onehot_sum = embed_onehot.sum(0)
