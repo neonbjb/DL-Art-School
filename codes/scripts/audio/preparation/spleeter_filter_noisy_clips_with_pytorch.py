@@ -10,6 +10,8 @@ from models.spleeter.separator import Separator
 from scripts.audio.preparation.spleeter_dataset import SpleeterDataset
 
 
+# Note: The Pytorch implementation of Spleeter is not working correctly. Fixing this would significantly
+# speed up the script since we can separate out dataloading and do batch inference.
 def main():
     src_dir = 'F:\\split\\joe_rogan'
     output_sample_rate=22050
