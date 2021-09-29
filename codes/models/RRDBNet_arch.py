@@ -9,7 +9,6 @@ import torchvision
 from torchvision.models.resnet import Bottleneck
 
 from models.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
-from models.pixel_level_contrastive_learning.resnet_unet_3 import UResNet50_3
 from trainer.networks import register_model
 from utils.util import checkpoint, sequential_checkpoint, opt_get
 from models.switched_conv.switched_conv import SwitchedConv
@@ -305,94 +304,6 @@ class RRDBNet(nn.Module):
             if hasattr(bm, 'bypass_map'):
                 torchvision.utils.save_image(bm.bypass_map.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
 
-
-class RRDBNetSwitchedConv(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 mid_channels=64,
-                 num_blocks=23,
-                 growth_channels=32,
-                 body_block=RRDB,
-                 blocks_per_checkpoint=1,
-                 scale=4,
-                 initial_stride=1,
-                 use_ref=False,  # When set, a reference image is expected as input and synthesized if not found. Useful for video SR.
-                 resnet_encoder_dict=None
-                 ):
-        super().__init__()
-        self.num_blocks = num_blocks
-        self.blocks_per_checkpoint = blocks_per_checkpoint
-        self.scale = scale
-        self.in_channels = in_channels
-        self.use_ref = use_ref
-        first_conv_stride = initial_stride if not self.use_ref else scale
-        first_conv_ksize = 3 if first_conv_stride == 1 else 7
-        first_conv_padding = 1 if first_conv_stride == 1 else 3
-        self.conv_first = nn.Conv2d(in_channels, mid_channels, first_conv_ksize, first_conv_stride, first_conv_padding)
-        self.reduce_ch = mid_channels
-        reduce_to = None
-        self.body = make_layer(
-            body_block,
-            num_blocks,
-            mid_channels=mid_channels,
-            growth_channels=growth_channels,
-            reduce_to=reduce_to)
-        self.conv_body = SwitchedConv(self.reduce_ch, self.reduce_ch, 3, 8, 1, 1, include_coupler=True, coupler_dim_in=64)
-        # upsample
-        self.conv_up1 = SwitchedConv(self.reduce_ch, self.reduce_ch, 3, 8, 1, 1, include_coupler=True, coupler_dim_in=64)
-        self.conv_up2 = SwitchedConv(self.reduce_ch, self.reduce_ch, 3, 8, 1, 1, include_coupler=True, coupler_dim_in=64)
-        if scale >= 8:
-            self.conv_up3 = SwitchedConv(self.reduce_ch, self.reduce_ch, 3, 8, 1, 1, include_coupler=True, coupler_dim_in=64)
-        else:
-            self.conv_up3 = None
-        self.conv_hr = SwitchedConv(self.reduce_ch, self.reduce_ch, 3, 8, 1, 1, include_coupler=True, coupler_dim_in=64)
-        self.conv_last = SwitchedConv(self.reduce_ch, out_channels, 3, 8, 1, 1, include_coupler=True, coupler_dim_in=64)
-        
-        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-
-        self.resnet_encoder = UResNet50_3(Bottleneck, [3, 4, 6, 3], out_dim=64)
-        if resnet_encoder_dict:
-            self.resnet_encoder.load_state_dict(torch.load(resnet_encoder_dict))
-
-        for m in [
-            self.conv_first, self.conv_body, self.conv_up1,
-            self.conv_up2, self.conv_up3, self.conv_hr, self.conv_last
-        ]:
-            if m is not None:
-                default_init_weights(m, 0.1)
-
-    def forward(self, x, ref=None):
-        switch_enc = checkpoint(self.resnet_encoder, F.interpolate(x, scale_factor=2, mode="bilinear"))
-
-        x_lg = x
-        feat = self.conv_first(x_lg)
-        feat = sequential_checkpoint(self.body, self.num_blocks // self.blocks_per_checkpoint, feat)
-        feat = feat[:, :self.reduce_ch]
-        body_feat = checkpoint(self.conv_body, feat, switch_enc)
-        feat = feat + body_feat
-
-        # upsample
-        out = self.lrelu(
-            checkpoint(self.conv_up1, F.interpolate(feat, scale_factor=2, mode='nearest'), switch_enc))
-        if self.scale >= 4:
-            out = self.lrelu(
-                checkpoint(self.conv_up2, F.interpolate(out, scale_factor=2, mode='nearest'), switch_enc))
-            if self.scale >= 8:
-                out = self.lrelu(
-                    self.conv_up3(F.interpolate(out, scale_factor=2, mode='nearest'), switch_enc))
-        else:
-            out = self.lrelu(checkpoint(self.conv_up2, out, switch_enc))
-        out = checkpoint(self.conv_hr, out, switch_enc)
-        out = checkpoint(self.conv_last, self.lrelu(out), switch_enc)
-        return out
-
-    def visual_dbg(self, step, path):
-        for i, bm in enumerate(self.body):
-            if hasattr(bm, 'bypass_map'):
-                torchvision.utils.save_image(bm.bypass_map.cpu().float(), os.path.join(path, "%i_bypass_%i.png" % (step, i+1)))
-
-
 @register_model
 def register_RRDBNetBypass(opt_net, opt):
     additive_mode = opt_net['additive_mode'] if 'additive_mode' in opt_net.keys() else 'not'
@@ -418,14 +329,3 @@ def register_RRDBNet(opt_net, opt):
                                 output_mode=output_mode, body_block=RRDB, scale=opt_net['scale'], growth_channels=gc,
                                 initial_stride=initial_stride)
 
-
-@register_model
-def register_rrdb_switched_conv(opt_net, opt):
-    gc = opt_net['gc'] if 'gc' in opt_net.keys() else 32
-    initial_stride = opt_net['initial_stride'] if 'initial_stride' in opt_net.keys() else 1
-    bypass_noise = opt_get(opt_net, ['bypass_noise'], False)
-    block = functools.partial(RRDBWithBypass, randomly_add_noise_to_bypass=bypass_noise)
-    return RRDBNetSwitchedConv(in_channels=opt_net['in_nc'], out_channels=opt_net['out_nc'],
-                                mid_channels=opt_net['nf'], num_blocks=opt_net['nb'],
-                                body_block=block, scale=opt_net['scale'], growth_channels=gc,
-                                initial_stride=initial_stride, resnet_encoder_dict=opt_net['switch_encoder'])
