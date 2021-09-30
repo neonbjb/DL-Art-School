@@ -142,7 +142,7 @@ class DiscreteVAE(nn.Module):
         self.normalization = normalization
         self.record_codes = record_codes
         if record_codes:
-            self.codes = torch.zeros((32768,), dtype=torch.long)
+            self.codes = torch.zeros((1228800,), dtype=torch.long)
             self.code_ind = 0
         self.internal_step = 0
 

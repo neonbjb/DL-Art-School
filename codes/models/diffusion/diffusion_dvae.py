@@ -112,7 +112,7 @@ class DiffusionDVAE(nn.Module):
         #self.quantizer = Quantize(quantize_dim, num_discrete_codes, balancing_heuristic=True)
         self.quantizer = GumbelQuantizer(quantize_dim, quantize_dim, num_discrete_codes)
         # For recording codebook usage.
-        self.codes = torch.zeros((131072,), dtype=torch.long)
+        self.codes = torch.zeros((1228800,), dtype=torch.long)
         self.code_ind = 0
         self.internal_step = 0
         decoder_channels = [model_channels * channel_mult[s-1] for s in spectrogram_conditioning_levels]
