@@ -124,7 +124,7 @@ class AttentionDVAE(nn.Module):
                                             AttentionBlock(enc_out, num_heads=4)))
             if encoder_norm:
                 enc_layers.append(nn.GroupNorm(8, enc_out))
-            dec_layers.append(nn.Sequential(AttentionBlock(dec_in, num_heads=4),
+            dec_layers.append(nn.Sequential(AttentionBlock(dec_in, num_heads=1),
                                             conv_transpose(dec_in, dec_out, kernel_size, stride = stride, padding = pad),
                                             act()))
 
