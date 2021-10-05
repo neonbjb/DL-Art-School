@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import einsum
 
+from models.gpt_voice.dvae_arch_playground.discretization_loss import DiscretizationLoss
 from models.vqvae.vqvae import Quantize
 from trainer.networks import register_model
 from utils.util import opt_get
@@ -84,6 +85,7 @@ class DiscreteVAE(nn.Module):
         self.straight_through = straight_through
         self.codebook = Quantize(codebook_dim, num_tokens)
         self.positional_dims = positional_dims
+        self.discrete_loss = DiscretizationLoss(2, 1 / (num_tokens*2))
 
         assert positional_dims > 0 and positional_dims < 3  # This VAE only supports 1d and 2d inputs for now.
         if positional_dims == 2:
@@ -205,7 +207,7 @@ class DiscreteVAE(nn.Module):
     ):
         img = self.norm(img)
         logits = self.encoder(img).permute((0,2,3,1) if len(img.shape) == 4 else (0,2,1))
-        sampled, commitment_loss, codes = self.codebook(logits)
+        sampled, commitment_loss, codes, soft_codes = self.codebook(logits, return_soft_codes=True)
         sampled = sampled.permute((0,3,1,2) if len(img.shape) == 4 else (0,2,1))
 
         if self.training:
@@ -219,6 +221,10 @@ class DiscreteVAE(nn.Module):
         # reconstruction loss
         recon_loss = self.loss_fn(img, out, reduction='none')
 
+        # discretization loss
+        disc_loss = self.discrete_loss(soft_codes)
+
+
         # This is so we can debug the distribution of codes being learned.
         if self.record_codes and self.internal_step % 50 == 0:
             codes = codes.flatten()
@@ -230,7 +236,7 @@ class DiscreteVAE(nn.Module):
                 self.code_ind = 0
         self.internal_step += 1
 
-        return recon_loss, commitment_loss, out
+        return recon_loss, commitment_loss, disc_loss, out
 
 
 @register_model

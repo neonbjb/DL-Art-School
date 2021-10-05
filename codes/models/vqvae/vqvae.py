@@ -47,7 +47,7 @@ class Quantize(nn.Module):
         self.register_buffer("cluster_size", torch.zeros(n_embed))
         self.register_buffer("embed_avg", embed.clone())
 
-    def forward(self, input):
+    def forward(self, input, return_soft_codes=False):
         if self.balancing_heuristic and self.codes_full:
             h = torch.histc(self.codes, bins=self.n_embed, min=0, max=self.n_embed) / len(self.codes)
             mask = torch.logical_or(h > .9, h < .01).unsqueeze(1)
@@ -68,7 +68,8 @@ class Quantize(nn.Module):
             - 2 * flatten @ self.embed
             + self.embed.pow(2).sum(0, keepdim=True)
         )
-        _, embed_ind = (-dist).max(1)
+        soft_codes = -dist
+        _, embed_ind = soft_codes.max(1)
         embed_onehot = F.one_hot(embed_ind, self.n_embed).type(flatten.dtype)
         embed_ind = embed_ind.view(*input.shape[:-1])
         quantize = self.embed_code(embed_ind)
@@ -104,7 +105,10 @@ class Quantize(nn.Module):
         diff = (quantize.detach() - input).pow(2).mean()
         quantize = input + (quantize - input).detach()
 
-        return quantize, diff, embed_ind
+        if return_soft_codes:
+            return quantize, diff, embed_ind, soft_codes.view(input.shape)
+        else:
+            return quantize, diff, embed_ind
 
     def embed_code(self, embed_id):
         return F.embedding(embed_id, self.embed.transpose(0, 1))
