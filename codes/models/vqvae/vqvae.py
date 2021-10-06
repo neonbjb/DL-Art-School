@@ -106,7 +106,7 @@ class Quantize(nn.Module):
         quantize = input + (quantize - input).detach()
 
         if return_soft_codes:
-            return quantize, diff, embed_ind, soft_codes.view(input.shape)
+            return quantize, diff, embed_ind, soft_codes.view(input.shape[:-1] + (-1,))
         else:
             return quantize, diff, embed_ind
 

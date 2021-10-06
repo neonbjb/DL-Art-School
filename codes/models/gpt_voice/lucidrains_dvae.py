@@ -75,6 +75,7 @@ class DiscreteVAE(nn.Module):
         straight_through = False,
         normalization = None, # ((0.5,) * 3, (0.5,) * 3),
         record_codes = False,
+        discretization_loss_averaging_steps = 100,
     ):
         super().__init__()
         assert num_layers >= 1, 'number of layers must be greater than or equal to 1'
@@ -85,7 +86,7 @@ class DiscreteVAE(nn.Module):
         self.straight_through = straight_through
         self.codebook = Quantize(codebook_dim, num_tokens)
         self.positional_dims = positional_dims
-        self.discrete_loss = DiscretizationLoss(2, 1 / (num_tokens*2))
+        self.discrete_loss = DiscretizationLoss(num_tokens, 2, 1 / (num_tokens*2), discretization_loss_averaging_steps)
 
         assert positional_dims > 0 and positional_dims < 3  # This VAE only supports 1d and 2d inputs for now.
         if positional_dims == 2:
@@ -223,7 +224,6 @@ class DiscreteVAE(nn.Module):
 
         # discretization loss
         disc_loss = self.discrete_loss(soft_codes)
-
 
         # This is so we can debug the distribution of codes being learned.
         if self.record_codes and self.internal_step % 50 == 0:
