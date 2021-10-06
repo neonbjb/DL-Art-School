@@ -78,20 +78,34 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--path')
     parser.add_argument('--out')
+    parser.add_argument('--resume', default=None)
+    parser.add_argument('--partition_size', default=None)
+    parser.add_argument('--partition', default=None)
     args = parser.parse_args()
 
     src_dir = args.path
     out_file = args.out
     output_sample_rate=22050
-    batch_size=16
+    waiting_for_file = args.resume is not None
+    resume_file = args.resume
 
     audio_loader = AudioAdapter.default()
     files = find_audio_files(src_dir, include_nonwav=True)
+
+    # Partition files if needed.
+    if args.partition_size is not None:
+        psz = int(args.partition_size)
+        prt = int(args.partition)
+        files = files[prt*psz:(prt+1)*psz]
+    
     #separator = Separator('pretrained_models/2stems', input_sr=output_sample_rate)
     separator = Separator('spleeter:2stems')
-    unacceptable_files = open(out_file, 'w')
-    for path in tqdm(files):
-        print(f"Processing {src_dir}")
+    unacceptable_files = open(out_file, 'a')
+    for e, path in enumerate(tqdm(files)):
+        if waiting_for_file and resume_file not in path:
+            continue
+        waiting_for_file = False
+        print(f"{e}: Processing {path}")
         spleeter_ld, sr = audio_loader.load(path, sample_rate=output_sample_rate)
         sep = separator.separate(spleeter_ld)
         vocals = sep['vocals']
