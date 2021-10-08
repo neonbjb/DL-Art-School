@@ -1,3 +1,5 @@
+from math import ceil
+
 from scipy.io import wavfile
 import os
 
@@ -5,6 +7,7 @@ import argparse
 import numpy as np
 from scipy.io import wavfile
 from spleeter.separator import Separator
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from spleeter.audio.adapter import AudioAdapter
 from tqdm import tqdm
@@ -74,6 +77,63 @@ def find_files_of_type(data_type, dataroot, weights=[], qualifier=is_image_file)
     return paths, sizes
 
 
+class SpleeterDataset(Dataset):
+    def __init__(self, src_dir, batch_sz, max_duration, sample_rate=22050, partition=None, partition_size=None, resume=None):
+        self.batch_sz = batch_sz
+        self.max_duration = max_duration
+        self.files = find_audio_files(src_dir, include_nonwav=True)
+        self.sample_rate = sample_rate
+
+        # Partition files if needed.
+        if partition_size is not None:
+            psz = int(partition_size)
+            prt = int(partition)
+            self.files = self.files[prt * psz:(prt + 1) * psz]
+
+        # Find the resume point and carry on from there.
+        if resume is not None:
+            for i, f in enumerate(self.files):
+                if resume in f:
+                    break
+            assert i < len(self.files)
+            self.files = self.files[i:]
+        self.loader = AudioAdapter.default()
+
+    def __len__(self):
+        return ceil(len(self.files) / self.batch_sz)
+
+    def __getitem__(self, item):
+        item = item * self.batch_sz
+        wavs = None
+        files = []
+        ends = []
+        for k in range(self.batch_sz):
+            ind = k+item
+            if ind >= len(self.files):
+                break
+
+            #try:
+            wav, sr = self.loader.load(self.files[ind], sample_rate=self.sample_rate)
+            assert sr == 22050
+            # Get rid of all channels except one.
+            if wav.shape[1] > 1:
+                wav = wav[:, 0]
+
+            if wavs is None:
+                wavs = wav
+            else:
+                wavs = np.concatenate([wavs, wav])
+            ends.append(wavs.shape[0])
+            files.append(self.files[ind])
+            #except:
+            #    print(f'Error loading {self.files[ind]}')
+        return {
+            'audio': wavs,
+            'files': files,
+            'ends': ends
+        }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--path')
@@ -86,37 +146,29 @@ def main():
     src_dir = args.path
     out_file = args.out
     output_sample_rate=22050
-    waiting_for_file = args.resume is not None
     resume_file = args.resume
 
-    audio_loader = AudioAdapter.default()
-    files = find_audio_files(src_dir, include_nonwav=True)
+    loader = DataLoader(SpleeterDataset(src_dir, batch_sz=16, sample_rate=output_sample_rate,
+                                        max_duration=10, partition=args.partition, partition_size=args.partition_size,
+                                        resume=resume_file), batch_size=1, num_workers=1)
 
-    # Partition files if needed.
-    if args.partition_size is not None:
-        psz = int(args.partition_size)
-        prt = int(args.partition)
-        files = files[prt*psz:(prt+1)*psz]
-    
-    #separator = Separator('pretrained_models/2stems', input_sr=output_sample_rate)
     separator = Separator('spleeter:2stems')
     unacceptable_files = open(out_file, 'a')
-    for e, path in enumerate(tqdm(files)):
-        if waiting_for_file and resume_file not in path:
-            continue
-        waiting_for_file = False
-        print(f"{e}: Processing {path}")
-        spleeter_ld, sr = audio_loader.load(path, sample_rate=output_sample_rate)
-        sep = separator.separate(spleeter_ld)
+    for batch in tqdm(loader):
+        audio, files, ends = batch['audio'], batch['files'], batch['ends']
+        sep = separator.separate(audio.squeeze(0).numpy())
         vocals = sep['vocals']
         bg = sep['accompaniment']
-        vmax = np.abs(vocals).mean()
-        bmax = np.abs(bg).mean()
-        
-        # Only output to the "good" sample dir if the ratio of background noise to vocal noise is high enough.
-        ratio = vmax / (bmax+.0000001)
-        if ratio < 25:  # These values were derived empirically
-            unacceptable_files.write(f'{path}\n')
+        start = 0
+        for path, end in zip(files, ends):
+            vmax = np.abs(vocals[start:end]).mean()
+            bmax = np.abs(bg[start:end]).mean()
+            start = end
+
+            # Only output to the "good" sample dir if the ratio of background noise to vocal noise is high enough.
+            ratio = vmax / (bmax+.0000001)
+            if ratio < 18:  # These values were derived empirically
+                unacceptable_files.write(f'{path[0]}\n')
         unacceptable_files.flush()
 
     unacceptable_files.close()
