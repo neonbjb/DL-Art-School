@@ -6,7 +6,6 @@ from spleeter.audio.adapter import AudioAdapter
 from torch.utils.data import Dataset
 
 from data.util import find_audio_files
-from scripts.audio.preparation.spleeter_utils.spleeter_separator_mod import Separator
 
 
 class SpleeterDataset(Dataset):
@@ -15,7 +14,6 @@ class SpleeterDataset(Dataset):
         self.max_duration = max_duration
         self.files = find_audio_files(src_dir, include_nonwav=True)
         self.sample_rate = sample_rate
-        self.separator = Separator('spleeter:2stems', multiprocess=False, load_tf=False)
 
         # Partition files if needed.
         if partition_size is not None:
@@ -45,25 +43,23 @@ class SpleeterDataset(Dataset):
             if ind >= len(self.files):
                 break
 
-            try:
-                wav, sr = self.loader.load(self.files[ind], sample_rate=self.sample_rate)
-                assert sr == 22050
-                # Get rid of all channels except one.
-                if wav.shape[1] > 1:
-                    wav = wav[:, 0]
+            #try:
+            wav, sr = self.loader.load(self.files[ind], sample_rate=self.sample_rate)
+            assert sr == 22050
+            # Get rid of all channels except one.
+            if wav.shape[1] > 1:
+                wav = wav[:, 0]
 
-                if wavs is None:
-                    wavs = wav
-                else:
-                    wavs = np.concatenate([wavs, wav])
-                ends.append(wavs.shape[0])
-                files.append(self.files[ind])
-            except:
-                print(f'Error loading {self.files[ind]}')
-        stft = self.separator.stft(wavs)
+            if wavs is None:
+                wavs = wav
+            else:
+                wavs = np.concatenate([wavs, wav])
+            ends.append(wavs.shape[0])
+            files.append(self.files[ind])
+            #except:
+            #    print(f'Error loading {self.files[ind]}')
         return {
             'audio': wavs,
             'files': files,
-            'ends': ends,
-            'stft': stft
+            'ends': ends
         }
