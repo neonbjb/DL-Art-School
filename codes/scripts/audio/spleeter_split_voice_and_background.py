@@ -9,7 +9,7 @@ from spleeter.audio.adapter import AudioAdapter
 import numpy as np
 
 
-# Uses spleeter to divide audio clips into one of two bins:
+# Uses spleeter_utils to divide audio clips into one of two bins:
 # 1. Audio has little to no background noise, saved to "output_dir"
 # 2. Audio has a lot of background noise, bg noise split off and saved to "output_dir_bg"
 if __name__ == '__main__':
