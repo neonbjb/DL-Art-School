@@ -1,3 +1,4 @@
+import multiprocessing
 from math import ceil
 
 from scipy.io import wavfile
@@ -6,11 +7,13 @@ import os
 import argparse
 import numpy as np
 from scipy.io import wavfile
-from spleeter.separator import Separator
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from spleeter.audio.adapter import AudioAdapter
 from tqdm import tqdm
+
+from data.util import IMG_EXTENSIONS
+from scripts.audio.preparation.spleeter_separator_mod import Separator
 
 
 def is_image_file(filename):
@@ -83,6 +86,7 @@ class SpleeterDataset(Dataset):
         self.max_duration = max_duration
         self.files = find_audio_files(src_dir, include_nonwav=True)
         self.sample_rate = sample_rate
+        self.separator = Separator('spleeter:2stems', multiprocess=False, load_tf=False)
 
         # Partition files if needed.
         if partition_size is not None:
@@ -112,53 +116,41 @@ class SpleeterDataset(Dataset):
             if ind >= len(self.files):
                 break
 
-            #try:
-            wav, sr = self.loader.load(self.files[ind], sample_rate=self.sample_rate)
-            assert sr == 22050
-            # Get rid of all channels except one.
-            if wav.shape[1] > 1:
-                wav = wav[:, 0]
+            try:
+                wav, sr = self.loader.load(self.files[ind], sample_rate=self.sample_rate)
+                assert sr == 22050
+                # Get rid of all channels except one.
+                if wav.shape[1] > 1:
+                    wav = wav[:, 0]
 
-            if wavs is None:
-                wavs = wav
-            else:
-                wavs = np.concatenate([wavs, wav])
-            ends.append(wavs.shape[0])
-            files.append(self.files[ind])
-            #except:
-            #    print(f'Error loading {self.files[ind]}')
+                if wavs is None:
+                    wavs = wav
+                else:
+                    wavs = np.concatenate([wavs, wav])
+                ends.append(wavs.shape[0])
+                files.append(self.files[ind])
+            except:
+                print(f'Error loading {self.files[ind]}')
+        stft = self.separator.stft(wavs)
         return {
             'audio': wavs,
             'files': files,
-            'ends': ends
+            'ends': ends,
+            'stft': stft
         }
 
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path')
-    parser.add_argument('--out')
-    parser.add_argument('--resume', default=None)
-    parser.add_argument('--partition_size', default=None)
-    parser.add_argument('--partition', default=None)
-    args = parser.parse_args()
-
-    src_dir = args.path
+def invert_spectrogram_and_save(args, queue):
+    separator = Separator('spleeter:2stems', multiprocess=False, load_tf=False)
     out_file = args.out
-    output_sample_rate=22050
-    resume_file = args.resume
-
-    loader = DataLoader(SpleeterDataset(src_dir, batch_sz=16, sample_rate=output_sample_rate,
-                                        max_duration=10, partition=args.partition, partition_size=args.partition_size,
-                                        resume=resume_file), batch_size=1, num_workers=1)
-
-    separator = Separator('spleeter:2stems')
     unacceptable_files = open(out_file, 'a')
-    for batch in tqdm(loader):
-        audio, files, ends = batch['audio'], batch['files'], batch['ends']
-        sep = separator.separate(audio.squeeze(0).numpy())
-        vocals = sep['vocals']
-        bg = sep['accompaniment']
+
+    while True:
+        combo = queue.get()
+        if combo is None:
+            break
+        vocals, bg, wavlen, files, ends = combo
+        vocals = separator.stft(vocals, inverse=True, length=wavlen)
+        bg = separator.stft(vocals, inverse=True, length=wavlen)
         start = 0
         for path, end in zip(files, ends):
             vmax = np.abs(vocals[start:end]).mean()
@@ -172,6 +164,38 @@ def main():
         unacceptable_files.flush()
 
     unacceptable_files.close()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path')
+    parser.add_argument('--out')
+    parser.add_argument('--resume', default=None)
+    parser.add_argument('--partition_size', default=None)
+    parser.add_argument('--partition', default=None)
+    args = parser.parse_args()
+
+    src_dir = args.path
+    output_sample_rate=22050
+    resume_file = args.resume
+
+    worker_queue = multiprocessing.Queue()
+    from scripts.audio.preparation.useless import invert_spectrogram_and_save
+    worker = multiprocessing.Process(target=invert_spectrogram_and_save, args=(args, worker_queue))
+    worker.start()
+
+    loader = DataLoader(SpleeterDataset(src_dir, batch_sz=16, sample_rate=output_sample_rate,
+                                        max_duration=10, partition=args.partition, partition_size=args.partition_size,
+                                        resume=resume_file), batch_size=1, num_workers=0)
+
+    separator = Separator('spleeter:2stems', multiprocess=False)
+    for k in range(100):
+        for batch in tqdm(loader):
+            audio, files, ends, stft = batch['audio'], batch['files'], batch['ends'], batch['stft']
+            sep = separator.separate_spectrogram(stft.squeeze(0).numpy())
+            worker_queue.put((sep['vocals'], sep['accompaniment'], audio.shape[1], files, ends))
+    worker_queue.put(None)
+    worker.join()
 
 
 if __name__ == '__main__':
