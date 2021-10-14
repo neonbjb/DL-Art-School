@@ -3,8 +3,7 @@ import torch.nn as nn
 
 
 from models.diffusion.nn import normalization, conv_nd, zero_module
-from models.diffusion.unet_diffusion import Downsample, AttentionBlock, QKVAttention, QKVAttentionLegacy
-
+from models.diffusion.unet_diffusion import Downsample, AttentionBlock, QKVAttention, QKVAttentionLegacy, Upsample
 
 # Combined resnet & full-attention encoder for converting an audio clip into an embedding.
 from utils.util import checkpoint
@@ -90,17 +89,17 @@ class ResBlock(nn.Module):
 
 
 class AudioMiniEncoder(nn.Module):
-    def __init__(self, spec_dim, embedding_dim, resnet_blocks=2, attn_blocks=4, num_attn_heads=4, dropout=0):
+    def __init__(self, spec_dim, embedding_dim, base_channels=128, depth=2, resnet_blocks=2, attn_blocks=4, num_attn_heads=4, dropout=0, downsample_factor=2, kernel_size=3):
         super().__init__()
         self.init = nn.Sequential(
-            conv_nd(1, spec_dim, 128, 3, padding=1)
+            conv_nd(1, spec_dim, base_channels, 3, padding=1)
         )
-        ch = 128
+        ch = base_channels
         res = []
-        for l in range(2):
+        for l in range(depth):
             for r in range(resnet_blocks):
-                res.append(ResBlock(ch, dropout, dims=1, do_checkpoint=False))
-            res.append(Downsample(ch, use_conv=True, dims=1, out_channels=ch*2, factor=2))
+                res.append(ResBlock(ch, dropout, dims=1, do_checkpoint=False, kernel_size=kernel_size))
+            res.append(Downsample(ch, use_conv=True, dims=1, out_channels=ch*2, factor=downsample_factor))
             ch *= 2
         self.res = nn.Sequential(*res)
         self.final = nn.Sequential(
