@@ -19,7 +19,10 @@ class DiscreteSpectrogramConditioningBlock(nn.Module):
         self.intg = nn.Sequential(nn.Conv1d(channels*2, channels*2, kernel_size=1),
                                   normalization(channels*2),
                                   nn.SiLU(),
-                                  nn.Conv1d(channels*2, channels, kernel_size=3, padding=1))
+                                  nn.Conv1d(channels*2, channels, kernel_size=3, padding=1),
+                                  normalization(channels),
+                                  nn.SiLU(),
+                                  zero_module(nn.Conv1d(channels, channels, kernel_size=1)))
 
     """
     Embeds the given codes and concatenates them onto x. Return shape is the same as x.shape.
