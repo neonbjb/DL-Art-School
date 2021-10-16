@@ -190,8 +190,10 @@ class DiscreteVAE(nn.Module):
             arrange = 'b (h w) d -> b d h w'
             kwargs = {'h': h, 'w': w}
         image_embeds = rearrange(image_embeds, arrange, **kwargs)
-        images = self.decoder(image_embeds)
-        return images
+        images = [image_embeds]
+        for layer in self.decoder:
+            images.append(layer(images[-1]))
+        return images[-1], images[-2]
 
     def infer(self, img):
         img = self.norm(img)
