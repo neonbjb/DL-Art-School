@@ -14,7 +14,7 @@ from torchvision.transforms import ToTensor
 import utils
 import utils.options as option
 import utils.util as util
-from data.audio.wavfile_dataset import load_audio_from_wav
+from models.tacotron2.taco_utils import load_wav_to_torch
 from trainer.ExtensibleTrainer import ExtensibleTrainer
 from data import create_dataset, create_dataloader
 from tqdm import tqdm
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     want_metrics = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_diffusion_vocoder.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_diffusion_vocoder_10-17.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
@@ -70,7 +70,9 @@ if __name__ == "__main__":
 
     # Load test image
     if audio_mode:
-        im = load_audio_from_wav(opt['image'], opt['sample_rate'])
+        im, sr = load_wav_to_torch(opt['image'])
+        assert sr == 22050
+        im = im.unsqueeze(0)
         im = im[:, :(im.shape[1]//4096)*4096]
     else:
         im = ToTensor()(Image.open(opt['image'])) * 2 - 1

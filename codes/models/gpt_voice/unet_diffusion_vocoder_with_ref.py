@@ -13,17 +13,10 @@ from utils.util import get_mask_from_lengths
 class DiscreteSpectrogramConditioningBlock(nn.Module):
     def __init__(self, dvae_channels, channels):
         super().__init__()
-        self.emb = nn.Conv1d(dvae_channels, channels, kernel_size=1)
-        self.intg = nn.Sequential(
-                                  normalization(channels*2),
-                                  nn.SiLU(),
-                                  nn.Conv1d(channels*2, channels*2, kernel_size=1),
-                                  normalization(channels*2),
-                                  nn.SiLU(),
-                                  nn.Conv1d(channels*2, channels, kernel_size=3, padding=1),
+        self.intg = nn.Sequential(nn.Conv1d(dvae_channels, channels, kernel_size=1),
                                   normalization(channels),
                                   nn.SiLU(),
-                                  zero_module(nn.Conv1d(channels, channels, kernel_size=1)))
+                                  nn.Conv1d(channels, channels, kernel_size=3))
 
     """
     Embeds the given codes and concatenates them onto x. Return shape is the same as x.shape.
@@ -34,11 +27,9 @@ class DiscreteSpectrogramConditioningBlock(nn.Module):
     def forward(self, x, dvae_in):
         b, c, S = x.shape
         _, q, N = dvae_in.shape
-        emb = self.emb(dvae_in)
+        emb = self.intg(dvae_in)
         emb = nn.functional.interpolate(emb, size=(S,), mode='nearest')
-        together = torch.cat([x, emb], dim=1)
-        together = self.intg(together)
-        return together + x
+        return torch.cat([x, emb], dim=1)
 
 
 class DiffusionVocoderWithRef(nn.Module):
@@ -81,10 +72,10 @@ class DiffusionVocoderWithRef(nn.Module):
             dropout=0,
             # res           1, 2, 4, 8,16,32,64,128,256,512, 1K, 2K
             channel_mult=  (1,1.5,2, 3, 4, 6, 8, 12, 16, 24, 32, 48),
-            num_res_blocks=(1, 1, 1, 1, 1, 1, 2, 2,   2,  2,  2,  2),
+            num_res_blocks=(1, 1, 1, 1, 1, 2, 2, 2,   2,  2,  2,  2),
             # spec_cond:    1, 0, 0, 1, 0, 0, 1, 0,   0,  1,  0,  0)
             # attn:         0, 0, 0, 0, 0, 0, 0, 0,   0,  1,  1,  1
-            spectrogram_conditioning_resolutions=(1,8,64,512),
+            spectrogram_conditioning_resolutions=(512,),
             attention_resolutions=(512,1024,2048),
             conv_resample=True,
             dims=1,
@@ -149,6 +140,7 @@ class DiffusionVocoderWithRef(nn.Module):
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
             if ds in spectrogram_conditioning_resolutions:
                 self.input_blocks.append(DiscreteSpectrogramConditioningBlock(discrete_codes, ch))
+                ch *= 2
 
             for _ in range(num_blocks):
                 layers = [
@@ -340,7 +332,7 @@ def register_unet_diffusion_vocoder_with_ref(opt_net, opt):
 if __name__ == '__main__':
     clip = torch.randn(2, 1, 40960)
     #spec = torch.randint(8192, (2, 40,))
-    spec = torch.randn(8,512,160)
+    spec = torch.randn(2,512,160)
     cond = torch.randn(2, 3, 80, 173)
     ts = torch.LongTensor([555, 556])
     model = DiffusionVocoderWithRef(32, conditioning_inputs_provided=False)

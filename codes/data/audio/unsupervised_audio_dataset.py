@@ -141,12 +141,12 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio',
-        'path': ['Z:\\split\\cleaned\\books0', 'Z:\\split\\cleaned\\books2'],
-        'cache_path': 'E:\\audio\\remote-cache.pth',
+        'path': ['\\\\192.168.5.3\\rtx3080_audio_y\\split\\books2', '\\\\192.168.5.3\\rtx3080_audio\\split\\books1', '\\\\192.168.5.3\\rtx3080_audio\\split\\cleaned-2'],
+        'cache_path': 'E:\\audio\\remote-cache2.pth',
         'sampling_rate': 22050,
-        'pad_to_seconds': 5,
+        'pad_to_samples': 40960,
         'phase': 'train',
-        'n_workers': 4,
+        'n_workers': 1,
         'batch_size': 16,
         'extra_samples': 4,
     }
@@ -156,8 +156,7 @@ if __name__ == '__main__':
     dl = create_dataloader(ds, params)
     i = 0
     for b in tqdm(dl):
-        for b_ in range(16):
-            pass
-            #torchaudio.save(f'{i}_clip1_{b_}.wav', b['clip1'][b_], ds.sampling_rate)
-            #torchaudio.save(f'{i}_clip2_{b_}.wav', b['clip2'][b_], ds.sampling_rate)
-            #i += 1
+        for b_ in range(b['clip'].shape[0]):
+            #pass
+            torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
+            i += 1

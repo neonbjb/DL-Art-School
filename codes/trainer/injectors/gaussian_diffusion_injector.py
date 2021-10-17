@@ -96,9 +96,6 @@ class GaussianDiffusionInferenceInjector(Injector):
         self.use_ema_model = opt_get(opt, ['use_ema'], False)
         self.noise_style = opt_get(opt, ['noise_type'], 'random')  # 'zero', 'fixed' or 'random'
 
-        self.model_fn = opt_get(opt, ['model_function'], None)
-        self.model_fn = None if self.model_fn is None else getattr(self.generator, self.model_fn)
-
     def forward(self, state):
         if self.use_ema_model:
             gen = self.env['emas'][self.opt['generator']]
@@ -114,6 +111,9 @@ class GaussianDiffusionInferenceInjector(Injector):
             elif 'spectrogram' in model_inputs.keys():
                 output_shape = (self.output_batch_size, 1, model_inputs['spectrogram'].shape[-1]*256)
                 dev = model_inputs['spectrogram'].device
+            elif 'discrete_spectrogram' in model_inputs.keys():
+                output_shape = (self.output_batch_size, 1, model_inputs['discrete_spectrogram'].shape[-1]*1024)
+                dev = model_inputs['discrete_spectrogram'].device
             else:
                 raise NotImplementedError
             noise = None
@@ -123,7 +123,7 @@ class GaussianDiffusionInferenceInjector(Injector):
                 if not hasattr(self, 'fixed_noise') or self.fixed_noise.shape != output_shape:
                     self.fixed_noise = torch.randn(output_shape, device=dev)
                 noise = self.fixed_noise
-            gen = self.sampling_fn(self.model_fn, output_shape, noise=noise, model_kwargs=model_inputs, progress=True, device=dev)
+            gen = self.sampling_fn(gen, output_shape, noise=noise, model_kwargs=model_inputs, progress=True, device=dev)
             if self.undo_n1_to_1:
                 gen = (gen + 1) / 2
             return {self.output: gen}
