@@ -179,6 +179,7 @@ class DiscreteVAE(nn.Module):
         self,
         img_seq
     ):
+        self.log_codes(img_seq)
         image_embeds = self.codebook.embed_code(img_seq)
         b, n, d = image_embeds.shape
 
@@ -228,6 +229,12 @@ class DiscreteVAE(nn.Module):
         disc_loss = self.discrete_loss(soft_codes)
 
         # This is so we can debug the distribution of codes being learned.
+        self.log_codes(codes)
+
+        return recon_loss, commitment_loss, disc_loss, out
+
+    def log_codes(self, codes):
+        # This is so we can debug the distribution of codes being learned.
         if self.record_codes and self.internal_step % 50 == 0:
             codes = codes.flatten()
             l = codes.shape[0]
@@ -237,8 +244,6 @@ class DiscreteVAE(nn.Module):
             if self.code_ind >= self.codes.shape[0]:
                 self.code_ind = 0
         self.internal_step += 1
-
-        return recon_loss, commitment_loss, disc_loss, out
 
 
 @register_model
