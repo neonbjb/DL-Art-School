@@ -8,6 +8,38 @@ import torch.nn.functional as F
 import torch.nn.utils.spectral_norm as SpectralNorm
 from math import sqrt
 
+
+def exists(val):
+    return val is not None
+
+
+def default(val, d):
+    return val if exists(val) else d
+
+
+def l2norm(t):
+    return F.normalize(t, p = 2, dim = -1)
+
+
+def ema_inplace(moving_avg, new, decay):
+    moving_avg.data.mul_(decay).add_(new, alpha = (1 - decay))
+
+
+def laplace_smoothing(x, n_categories, eps = 1e-5):
+    return (x + eps) / (x.sum() + n_categories * eps)
+
+
+def sample_vectors(samples, num):
+    num_samples, device = samples.shape[0], samples.device
+
+    if num_samples >= num:
+        indices = torch.randperm(num_samples, device = device)[:num]
+    else:
+        indices = torch.randint(0, num_samples, (num,), device = device)
+
+    return samples[indices]
+
+
 def kaiming_init(module,
                  a=0,
                  mode='fan_out',
@@ -24,8 +56,10 @@ def kaiming_init(module,
     if hasattr(module, 'bias') and module.bias is not None:
         nn.init.constant_(module.bias, bias)
 
+
 def pixel_norm(x, epsilon=1e-8):
     return x * torch.rsqrt(torch.mean(torch.pow(x, 2), dim=1, keepdims=True) + epsilon)
+
 
 def initialize_weights(net_l, scale=1):
     if not isinstance(net_l, list):
@@ -75,20 +109,12 @@ def default_init_weights(module, scale=1):
         elif isinstance(m, nn.Linear):
             kaiming_init(m, a=0, mode='fan_in', bias=0)
             m.weight.data *= scale
-"""
-Various utilities for neural networks.
-"""
-
-import math
-
-import torch as th
-import torch.nn as nn
 
 
 # PyTorch 1.7 has SiLU, but we support PyTorch 1.5.
 class SiLU(nn.Module):
     def forward(self, x):
-        return x * th.sigmoid(x)
+        return x * torch.sigmoid(x)
 
 
 class GroupNorm32(nn.GroupNorm):
