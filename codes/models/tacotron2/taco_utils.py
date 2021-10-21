@@ -1,8 +1,9 @@
 import os.path
 
 import numpy as np
-from scipy.io.wavfile import read
 import torch
+from scipy.io.wavfile import read
+
 
 def get_mask_from_lengths(lengths, max_len=None):
     if max_len is None:
@@ -14,8 +15,10 @@ def get_mask_from_lengths(lengths, max_len=None):
 
 def load_wav_to_torch(full_path):
     sampling_rate, data = read(full_path)
-    if data.dtype == np.int16:
-        norm_fix = 32768
+    if data.dtype == np.int32:
+        norm_fix = 2 ** 31
+    elif data.dtype == np.int16:
+        norm_fix = 2 ** 15
     elif data.dtype == np.float16 or data.dtype == np.float32:
         norm_fix = 1.
     else:

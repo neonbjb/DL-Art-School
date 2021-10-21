@@ -1,6 +1,7 @@
 import os
 import pathlib
 import random
+import sys
 
 import torch
 import torch.utils.data
@@ -10,7 +11,7 @@ from audio2numpy import open_audio
 from tqdm import tqdm
 
 from data.audio.wav_aug import WavAugmentor
-from data.util import find_files_of_type, is_wav_file, is_audio_file
+from data.util import find_files_of_type, is_wav_file, is_audio_file, load_paths_from_cache
 from models.tacotron2.taco_utils import load_wav_to_torch
 from utils.util import opt_get
 
@@ -49,16 +50,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
     def __init__(self, opt):
         path = opt['path']
         cache_path = opt['cache_path']  # Will fail when multiple paths specified, must be specified in this case.
-        if not isinstance(path, list):
-            path = [path]
-        if os.path.exists(cache_path):
-            self.audiopaths = torch.load(cache_path)
-        else:
-            print("Building cache..")
-            self.audiopaths = []
-            for p in path:
-                self.audiopaths.extend(find_files_of_type('img', p, qualifier=is_audio_file)[0])
-            torch.save(self.audiopaths, cache_path)
+        self.audiopaths = load_paths_from_cache(path, cache_path)
 
         # Parse options
         self.sampling_rate = opt_get(opt, ['sampling_rate'], 22050)
@@ -113,7 +105,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
             audio_norm, filename = self.get_audio_for_index(index)
             alt_files, actual_samples = self.get_related_audio_for_index(index)
         except:
-            print(f"Error loading audio for file {self.audiopaths[index]}")
+            print(f"Error loading audio for file {self.audiopaths[index]} {sys.exc_info()}")
             return self[index+1]
 
         # This is required when training to make sure all clips align.
