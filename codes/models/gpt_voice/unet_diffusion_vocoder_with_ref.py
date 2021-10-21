@@ -285,7 +285,7 @@ class DiffusionVocoderWithRef(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps, discrete_spectrogram, conditioning_inputs=None, num_conditioning_signals=None):
+    def forward(self, x, timesteps, spectrogram, conditioning_inputs=None, num_conditioning_signals=None):
         """
         Apply the model to an input batch.
 
@@ -311,7 +311,7 @@ class DiffusionVocoderWithRef(nn.Module):
         h = x.type(self.dtype)
         for k, module in enumerate(self.input_blocks):
             if isinstance(module, DiscreteSpectrogramConditioningBlock):
-                h = module(h, discrete_spectrogram)
+                h = module(h, spectrogram)
             else:
                 h = module(h, emb)
                 hs.append(h)
