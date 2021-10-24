@@ -75,6 +75,8 @@ def create_dataset(dataset_opt, return_collate=False):
         collate = C(dataset_opt)
     elif mode == 'unsupervised_audio':
         from data.audio.unsupervised_audio_dataset import UnsupervisedAudioDataset as D
+    elif mode == 'unsupervised_audio_with_noise':
+        from data.audio.audio_with_noise_dataset import AudioWithNoiseDataset as D
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
     dataset = D(dataset_opt)

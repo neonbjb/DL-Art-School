@@ -109,7 +109,7 @@ class AudioWithNoiseDataset(Dataset):
                 clip = clip + aug
                 clip.clip_(-1, 1)
         except:
-            print("Exception encountered processing {item}, re-trying because this is often just a failed aug.")
+            print(f"Exception encountered processing {item}, re-trying because this is often just a failed aug.")
             return self[item]
 
         out['clip'] = clip

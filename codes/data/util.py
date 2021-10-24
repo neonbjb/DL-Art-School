@@ -578,6 +578,20 @@ def imresize_np(img, scale, antialiasing=True):
     return out_2.numpy()
 
 
+def load_paths_from_cache(paths, cache_path):
+    if not isinstance(paths, list):
+        paths = [paths]
+    if os.path.exists(cache_path):
+        output = torch.load(cache_path)
+    else:
+        print(f"Building cache for contents of {paths}..")
+        output = []
+        for p in paths:
+            output.extend(find_files_of_type('img', p, qualifier=is_audio_file)[0])
+        torch.save(output, cache_path)
+    return output
+
+
 if __name__ == '__main__':
     # test imresize function
     # read images

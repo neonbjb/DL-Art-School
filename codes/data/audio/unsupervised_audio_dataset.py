@@ -2,6 +2,7 @@ import os
 import pathlib
 import random
 import sys
+from warnings import warn
 
 import torch
 import torch.utils.data
@@ -32,8 +33,8 @@ def load_audio(audiopath, sampling_rate):
             audio = audio[:, 0]
 
     if lsr != sampling_rate:
-        if lsr < sampling_rate:
-            print(f'{audiopath} has a sample rate of {sampling_rate} which is lower than the requested sample rate of {sampling_rate}. This is not a good idea.')
+        #if lsr < sampling_rate:
+        #    warn(f'{audiopath} has a sample rate of {sampling_rate} which is lower than the requested sample rate of {sampling_rate}. This is not a good idea.')
         audio = torch.nn.functional.interpolate(audio.unsqueeze(0).unsqueeze(1), scale_factor=sampling_rate/lsr, mode='nearest', recompute_scale_factor=False).squeeze()
 
     # Check some assumptions about audio range. This should be automatically fixed in load_wav_to_torch, but might not be in some edge cases, where we should squawk.

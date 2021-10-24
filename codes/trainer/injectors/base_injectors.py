@@ -539,8 +539,7 @@ class MelSpectrogramInjector(Injector):
         from munch import munchify
         from models.tacotron2 import hparams
         hp = munchify(hparams.create_hparams())  # Just use the default tacotron values for the MEL spectrogram. Noone uses anything else anyway.
-        self.stft = TacotronSTFT(hp.filter_length, hp.hop_length, hp.win_length,
-            hp.n_mel_channels, hp.sampling_rate, hp.mel_fmin, hp.mel_fmax)
+        self.stft = TacotronSTFT(hp.filter_length, hp.hop_length, hp.win_length, hp.n_mel_channels, hp.sampling_rate, hp.mel_fmin, hp.mel_fmax)
 
     def forward(self, state):
         inp = state[self.input]
