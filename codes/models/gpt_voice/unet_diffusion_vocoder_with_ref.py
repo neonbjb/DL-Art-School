@@ -123,7 +123,7 @@ class DiffusionVocoderWithRef(nn.Module):
             self.contextual_embedder = AudioMiniEncoder(conditioning_input_dim, time_embed_dim)
             self.query_gen = AudioMiniEncoder(in_channels, time_embed_dim, base_channels=32, depth=6, resnet_blocks=1,
                                               attn_blocks=2, num_attn_heads=2, dropout=dropout, downsample_factor=4, kernel_size=5)
-            self.embedding_combiner = EmbeddingCombiner(time_embed_dim)
+            self.embedding_combiner = EmbeddingCombiner(time_embed_dim, attn_blocks=1)
 
         self.input_blocks = nn.ModuleList(
             [
@@ -303,8 +303,8 @@ class DiffusionVocoderWithRef(nn.Module):
         emb1 = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         if self.conditioning_enabled:
             emb2 = torch.stack([self.contextual_embedder(ci.squeeze(1)) for ci in list(torch.chunk(conditioning_inputs, conditioning_inputs.shape[1], dim=1))], dim=1)
-            emb = torch.cat([emb1.unsqueeze(1), emb2], dim=1)
-            emb = self.embedding_combiner(emb, None, self.query_gen(x))
+            emb2 = self.embedding_combiner(emb2, None, self.query_gen(x))
+            emb = emb1 + emb2
         else:
             emb = emb1
 
@@ -335,5 +335,5 @@ if __name__ == '__main__':
     spec = torch.randn(2,512,160)
     cond = torch.randn(2, 3, 80, 173)
     ts = torch.LongTensor([555, 556])
-    model = DiffusionVocoderWithRef(32, conditioning_inputs_provided=False)
-    print(model(clip, ts, spec, cond, 4).shape)
+    model = DiffusionVocoderWithRef(32, conditioning_inputs_provided=True)
+    print(model(clip, ts, spec, cond, 3).shape)

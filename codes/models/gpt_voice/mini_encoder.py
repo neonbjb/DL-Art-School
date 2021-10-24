@@ -6,7 +6,8 @@ from models.diffusion.nn import normalization, conv_nd, zero_module
 from models.diffusion.unet_diffusion import Downsample, AttentionBlock, QKVAttention, QKVAttentionLegacy, Upsample
 
 # Combined resnet & full-attention encoder for converting an audio clip into an embedding.
-from utils.util import checkpoint
+from trainer.networks import register_model
+from utils.util import checkpoint, opt_get
 
 
 class ResBlock(nn.Module):
@@ -111,15 +112,25 @@ class AudioMiniEncoder(nn.Module):
         for a in range(attn_blocks):
             attn.append(AttentionBlock(embedding_dim, num_attn_heads, do_checkpoint=False))
         self.attn = nn.Sequential(*attn)
+        self.dim = embedding_dim
 
     def forward(self, x):
         h = self.init(x)
         h = self.res(h)
         h = self.final(h)
-        h = self.attn(h)
+        h = checkpoint(self.attn, h)
         return h[:, :, 0]
 
 
+class AudioMiniEncoderWithClassifierHead(nn.Module):
+    def __init__(self, classes, **kwargs):
+        super().__init__()
+        self.enc = AudioMiniEncoder(**kwargs)
+        self.head = nn.Linear(self.enc.dim, classes)
+
+    def forward(self, x):
+        h = self.enc(x)
+        return self.head(h)
 
 
 class QueryProvidedAttentionBlock(nn.Module):
@@ -188,7 +199,13 @@ class EmbeddingCombiner(nn.Module):
         return y[:, 0]
 
 
+@register_model
+def register_mini_audio_encoder_classifier(opt_net, opt):
+    return AudioMiniEncoderWithClassifierHead(**opt_get(opt_net, ['kwargs'], {}))
+
+
 if __name__ == '__main__':
+    '''
     x = torch.randn(2, 80, 223)
     cond = torch.randn(2, 512)
     encs = [AudioMiniEncoder(80, 512) for _ in range(5)]
@@ -197,3 +214,7 @@ if __name__ == '__main__':
     e = torch.stack([e(x) for e in encs], dim=2)
 
     print(combiner(e, cond).shape)
+    '''
+    x = torch.randn(2, 80, 223)
+    m = AudioMiniEncoderWithClassifierHead(4, 80, 512)
+    print(m(x).shape)
