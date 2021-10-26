@@ -23,6 +23,7 @@ import numpy as np
 
 # A rough copy of test.py that "surfs" along a set of random noise priors to show the affect of gaussian noise on the results.
 
+
 def forward_pass(model, data, output_dir, spacing, audio_mode):
     with torch.no_grad():
         model.feed_data(data, 0)
@@ -44,38 +45,15 @@ def forward_pass(model, data, output_dir, spacing, audio_mode):
             util.save_img(util.tensor2img(sr_img), save_img_path)
 
 
-if __name__ == "__main__":
-    # Set seeds
-    torch.manual_seed(5555)
-    random.seed(5555)
-    np.random.seed(5555)
-
-    #### options
-    audio_mode = True  # Whether to render audio or images.
-    torch.backends.cudnn.benchmark = True
-    want_metrics = False
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_diffusion_vocoder_10-20.yml')
-    opt = option.parse(parser.parse_args().opt, is_train=False)
-    opt = option.dict_to_nonedict(opt)
-    utils.util.loaded_options = opt
-
-    util.mkdirs(
-        (path for key, path in opt['path'].items()
-         if not key == 'experiments_root' and 'pretrain_model' not in key and 'resume' not in key))
-    util.setup_logger('base', opt['path']['log'], 'test_' + opt['name'], level=logging.INFO,
-                      screen=True, tofile=True)
-    logger = logging.getLogger('base')
-    logger.info(option.dict2str(opt))
-
+def load_image(path, audio_mode):
     # Load test image
     if audio_mode:
-        im, sr = load_wav_to_torch(opt['image'])
+        im, sr = load_wav_to_torch(path)
         assert sr == 22050
         im = im.unsqueeze(0)
         im = im[:, :(im.shape[1]//4096)*4096]
     else:
-        im = ToTensor()(Image.open(opt['image'])) * 2 - 1
+        im = ToTensor()(Image.open(path)) * 2 - 1
         _, h, w = im.shape
         if h % 2 == 1:
             im = im[:,1:,:]
@@ -89,9 +67,43 @@ if __name__ == "__main__":
         if dw > 0:
             im = im[:,:,dw:-dw]
         im = im[:3].unsqueeze(0)
+    return im
 
-        # Build the corruption indexes we are going to use.
-        correction_factors = opt['correction_factor']
+
+if __name__ == "__main__":
+    # Set seeds
+    torch.manual_seed(5555)
+    random.seed(5555)
+    np.random.seed(5555)
+
+    #### options
+    audio_mode = True  # Whether to render audio or images.
+    torch.backends.cudnn.benchmark = True
+    want_metrics = False
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_diffusion_vocoder_10-25.yml')
+    opt = option.parse(parser.parse_args().opt, is_train=False)
+    opt = option.dict_to_nonedict(opt)
+    utils.util.loaded_options = opt
+
+    util.mkdirs(
+        (path for key, path in opt['path'].items()
+         if not key == 'experiments_root' and 'pretrain_model' not in key and 'resume' not in key))
+    util.setup_logger('base', opt['path']['log'], 'test_' + opt['name'], level=logging.INFO,
+                      screen=True, tofile=True)
+    logger = logging.getLogger('base')
+    logger.info(option.dict2str(opt))
+
+    im = load_image(opt['image'], audio_mode)
+    correction_factors = util.opt_get(opt, ['correction_factor'], None)
+    if 'ref_images' in opt.keys():
+        refs = [load_image(r, audio_mode) for r in opt['ref_images']]
+        #min_len = min(r.shape[1] for r in refs)
+        min_len = opt['ref_images_len']
+        refs = [r[:, :min_len] for r in refs]
+        refs = torch.stack(refs, dim=1)
+    else:
+        refs = torch.empty((1,1))
 
     #opt['steps']['generator']['injectors']['visual_debug']['zero_noise'] = False
     model = ExtensibleTrainer(opt)
@@ -101,6 +113,8 @@ if __name__ == "__main__":
         if audio_mode:
             data = {
                 'clip': im.to('cuda'),
+                'alt_clips': refs.to('cuda'),
+                'num_alt_clips': torch.tensor([refs.shape[1]], dtype=torch.int32, device='cuda'),
                 'GT_path': opt['image']
             }
         else:

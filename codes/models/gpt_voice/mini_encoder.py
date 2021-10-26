@@ -90,7 +90,17 @@ class ResBlock(nn.Module):
 
 
 class AudioMiniEncoder(nn.Module):
-    def __init__(self, spec_dim, embedding_dim, base_channels=128, depth=2, resnet_blocks=2, attn_blocks=4, num_attn_heads=4, dropout=0, downsample_factor=2, kernel_size=3):
+    def __init__(self, spec_dim,
+                 embedding_dim,
+                 base_channels=128,
+                 depth=2,
+                 resnet_blocks=2,
+                 attn_blocks=4,
+                 num_attn_heads=4,
+                 dropout=0,
+                 downsample_factor=2,
+                 kernel_size=3,
+                 do_checkpointing=False):
         super().__init__()
         self.init = nn.Sequential(
             conv_nd(1, spec_dim, base_channels, 3, padding=1)
@@ -113,12 +123,16 @@ class AudioMiniEncoder(nn.Module):
             attn.append(AttentionBlock(embedding_dim, num_attn_heads, do_checkpoint=False))
         self.attn = nn.Sequential(*attn)
         self.dim = embedding_dim
+        self.do_checkpointing = do_checkpointing
 
     def forward(self, x):
         h = self.init(x)
         h = self.res(h)
         h = self.final(h)
-        h = checkpoint(self.attn, h)
+        if self.do_checkpointing:
+            h = checkpoint(self.attn, h)
+        else:
+            h = self.attn(h)
         return h[:, :, 0]
 
 
