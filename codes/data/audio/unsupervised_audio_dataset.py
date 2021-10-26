@@ -60,6 +60,11 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
             self.pad_to *= self.sampling_rate
         self.pad_to = opt_get(opt, ['pad_to_samples'], self.pad_to)
 
+        # "Resampled clip" is audio data pulled from the basis of "clip" but with randomly different bounds. There are no
+        # guarantees that "clip_resampled" is different from "clip": in fact, if "clip" is less than pad_to_seconds/samples,
+        self.should_resample_clip = opt_get(opt, ['resample_clip'], False)
+
+        # "Extra samples" are other audio clips pulled from wav files in the same directory as the 'clip' wav file.
         self.extra_samples = opt_get(opt, ['extra_samples'], 0)
         self.extra_sample_len = opt_get(opt, ['extra_sample_length'], 2)
         self.extra_sample_len *= self.sampling_rate
@@ -109,19 +114,27 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
             print(f"Error loading audio for file {self.audiopaths[index]} {sys.exc_info()}")
             return self[index+1]
 
-        # This is required when training to make sure all clips align.
-        if self.pad_to is not None:
-            if audio_norm.shape[-1] <= self.pad_to:
-                audio_norm = torch.nn.functional.pad(audio_norm, (0, self.pad_to - audio_norm.shape[-1]))
-            else:
-                gap = audio_norm.shape[-1] - self.pad_to
-                start = random.randint(0, gap-1)
-                audio_norm = audio_norm[:, start:start+self.pad_to]
+        # When generating resampled clips, skew is a bias that tries to spread them out from each other, reducing their
+        # influence on one another.
+        skew = [-1, 1] if self.should_resample_clip else [0]
+        # To increase variability, which skew is applied to the clip and resampled_clip is randomized.
+        random.shuffle(skew)
+        clips = []
+        for sk in skew:
+            if self.pad_to is not None:
+                if audio_norm.shape[-1] <= self.pad_to:
+                    clips.append(torch.nn.functional.pad(audio_norm, (0, self.pad_to - audio_norm.shape[-1])))
+                else:
+                    gap = audio_norm.shape[-1] - self.pad_to
+                    start = min(max(random.randint(0, gap-1) + sk * gap // 2, 0), gap-1)
+                    clips.append(audio_norm[:, start:start+self.pad_to])
 
         output = {
-            'clip': audio_norm,
+            'clip': clips[0],
             'path': filename,
         }
+        if self.should_resample_clip:
+            output['resampled_clip'] = clips[1]
         if self.extra_samples > 0:
             output['alt_clips'] = alt_files
             output['num_alt_clips'] = actual_samples
@@ -142,6 +155,7 @@ if __name__ == '__main__':
         'n_workers': 1,
         'batch_size': 16,
         'extra_samples': 4,
+        'resample_clip': True,
     }
     from data import create_dataset, create_dataloader, util
 
@@ -152,4 +166,5 @@ if __name__ == '__main__':
         for b_ in range(b['clip'].shape[0]):
             #pass
             torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
+            torchaudio.save(f'{i}_resampled_clip_{b_}.wav', b['resampled_clip'][b_], ds.sampling_rate)
             i += 1
