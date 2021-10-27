@@ -1,6 +1,10 @@
 from scipy.io import wavfile
 from spleeter.separator import Separator
 from tqdm import tqdm
+'''
+Uses a model configuration to load a classifier and iterate through a dataset, binning each class into it's own
+folder.
+'''
 
 from data.util import find_audio_files
 import os
