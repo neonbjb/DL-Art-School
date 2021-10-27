@@ -128,6 +128,8 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
                     gap = audio_norm.shape[-1] - self.pad_to
                     start = min(max(random.randint(0, gap-1) + sk * gap // 2, 0), gap-1)
                     clips.append(audio_norm[:, start:start+self.pad_to])
+            else:
+                clips.append(audio_norm)
 
         output = {
             'clip': clips[0],
