@@ -191,7 +191,7 @@ class Transformer(nn.Module):
         route_attn = ((True, False),) * depth
         attn_route_map = {'mask': route_attn}
 
-        self.layers = execute_type(layers, args_route = attn_route_map)
+        self.layers = execute_type(layers, args_route = attn_route_map, checkpoint=True)
 
     def forward(self, x):
         return self.layers(x)
