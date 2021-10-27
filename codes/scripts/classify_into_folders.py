@@ -1,5 +1,6 @@
 import os.path as osp
 import logging
+import shutil
 import time
 import argparse
 
@@ -20,7 +21,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     want_metrics = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/train_imgset_structural_classifier.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_noisy_audio_clips_classifier.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
@@ -36,33 +37,40 @@ if __name__ == "__main__":
     #### Create test dataset and dataloader
     test_loaders = []
     for phase, dataset_opt in sorted(opt['datasets'].items()):
-        dataset_opt['dataset']['includes_labels'] = False
-        del dataset_opt['dataset']['labeler']
-        test_set = create_dataset(dataset_opt)
-        if hasattr(test_set, 'wrapped_dataset'):
-            test_set = test_set.wrapped_dataset
-        test_loader = create_dataloader(test_set, dataset_opt, opt)
-        logger.info('Number of test images: {:d}'.format(len(test_set)))
-        test_loaders.append(test_loader)
+        if 'test' in phase:
+            test_set = create_dataset(dataset_opt)
+            if hasattr(test_set, 'wrapped_dataset'):
+                test_set = test_set.wrapped_dataset
+            test_loader = create_dataloader(test_set, dataset_opt, opt)
+            logger.info('Number of test images: {:d}'.format(len(test_set)))
+            test_loaders.append((dataset_opt['name'], test_loader))
 
     model = ExtensibleTrainer(opt)
-    gen = model.netsG['generator']
-    label_to_search_for = 4
+    # Remove all losses, since often labels will not be provided and this is not implied in test.
+    for s in model.steps:
+        s.losses = {}
 
-    for test_loader in test_loaders:
-        test_set_name = test_loader.dataset.opt['name']
+    output_key = opt['eval']['classifier_logits_key']
+    output_base_dir = opt['eval']['output_dir']
+    labels = opt['eval']['output_labels']
+    path_key = opt['eval']['path_key']
+
+    step = 0
+    for test_set_name, test_loader in test_loaders:
         test_start_time = time.time()
         dataset_dir = osp.join(opt['path']['results_root'], opt['name'])
         util.mkdir(dataset_dir)
 
-        tq = tqdm(test_loader)
-        step = 1
-        for data in tq:
-            hq = data['hq'].to('cuda')
-            res = gen(hq)
-            res = torch.nn.functional.interpolate(res, size=hq.shape[2:], mode="nearest")
-            res_lbl = res[:, label_to_search_for, :, :].unsqueeze(1)
-            res_lbl_mask = (1.0 * (res_lbl > .5))*.5 + .5
-            hq = hq * res_lbl_mask
-            torchvision.utils.save_image(hq, os.path.join(dataset_dir, "%i.png" % (step,)))
-            step += 1
+        for data in tqdm(test_loader):
+            with torch.no_grad():
+                model.feed_data(data, 0)
+                model.test()
+
+            lbls = torch.nn.functional.softmax(model.eval_state[output_key][0].cpu(), dim=-1)
+            for k, lbl in enumerate(lbls):
+                lbl = torch.argmax(lbl, dim=0)
+                src_path = data[path_key][k]
+                dest = os.path.join(output_base_dir, labels[lbl])
+                os.makedirs(dest, exist_ok=True)
+                shutil.copy(str(src_path), os.path.join(dest, f'{step}_{os.path.basename(str(src_path))}'))
+                step += 1
