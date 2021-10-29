@@ -116,7 +116,6 @@ def check_resume(opt, resume_iter):
                 print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            else:
-                opt['path'][pt_key] = osp.join(opt['path']['models'],
-                                          '{}_{}.pth'.format(resume_iter, k))
-                logger.info('Set model [%s] to %s' % (k, opt['path'][pt_key]))
+            opt['path'][pt_key] = osp.join(opt['path']['models'],
+                                      '{}_{}.pth'.format(resume_iter, k))
+            logger.info('Set model [%s] to %s' % (k, opt['path'][pt_key]))
