@@ -41,7 +41,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     want_metrics = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_deepspeech_libri.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../options/test_gpt_asr_mass.yml')
     opt = option.parse(parser.parse_args().opt, is_train=False)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
@@ -71,8 +71,8 @@ if __name__ == "__main__":
 
         tq = tqdm(test_loader)
         for data in tq:
-            #if data['clips'].shape[-1] > opt['networks']['asr_gen']['kwargs']['max_mel_frames']*255:
-            #    continue
+            if data['clip'].shape[-1] > opt['networks']['asr_gen']['kwargs']['max_mel_frames']*255:
+                continue
             pred = forward_pass(model, data, dataset_dir, opt, batch)
             pred = pred.replace('_', '')
             output.write(f'{pred}\t{os.path.basename(data["path"][0])}\n')
