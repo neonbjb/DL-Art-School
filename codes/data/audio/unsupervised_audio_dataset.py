@@ -20,6 +20,11 @@ from utils.util import opt_get
 def load_audio(audiopath, sampling_rate):
     if audiopath[-4:] == '.wav':
         audio, lsr = load_wav_to_torch(audiopath)
+    elif audiopath[-4:] == '.mp3':
+        # https://github.com/neonbjb/pyfastmp3decoder  - Definitely worth it.
+        from pyfastmp3decoder.mp3decoder import load_mp3
+        audio, lsr = load_mp3(audiopath, sampling_rate)
+        audio = torch.FloatTensor(audio)
     else:
         audio, lsr = open_audio(audiopath)
         audio = torch.FloatTensor(audio)
@@ -149,8 +154,8 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio',
-        'path': ['\\\\192.168.5.3\\rtx3080_audio_y\\split\\books2', '\\\\192.168.5.3\\rtx3080_audio\\split\\books1', '\\\\192.168.5.3\\rtx3080_audio\\split\\cleaned-2'],
-        'cache_path': 'E:\\audio\\remote-cache2.pth',
+        'path': ['\\\\192.168.5.3\\rtx3080_audio\\split\\cleaned\\books0'],
+        'cache_path': 'E:\\audio\\remote-cache3.pth',
         'sampling_rate': 22050,
         'pad_to_samples': 40960,
         'phase': 'train',
