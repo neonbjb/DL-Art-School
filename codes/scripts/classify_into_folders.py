@@ -71,7 +71,7 @@ if __name__ == "__main__":
             for k, lbl in enumerate(lbls):
                 lbl = labels[torch.argmax(lbl, dim=0)]
                 src_path = data[path_key][k]
-                output_file.write(f'{src_path}\t{lbl}')
+                output_file.write(f'{src_path}\t{lbl}\n')
                 if output_base_dir is not None:
                     dest = os.path.join(output_base_dir, lbl)
                     os.makedirs(dest, exist_ok=True)
