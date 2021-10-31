@@ -61,14 +61,14 @@ def create_dataset(dataset_opt, return_collate=False):
     elif mode == 'zipfile':
         from data.zip_file_dataset import ZipFileDataset as D
     elif mode == 'nv_tacotron':
-        from data.audio.nv_tacotron_dataset import TextMelLoader as D
+        from data.audio.nv_tacotron_dataset import TextWavLoader as D
         from data.audio.nv_tacotron_dataset import TextMelCollate as C
         from models.tacotron2.hparams import create_hparams
         default_params = create_hparams()
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
         if opt_get(dataset_opt, ['needs_collate'], True):
-            collate = C(dataset_opt.n_frames_per_step)
+            collate = C()
     elif mode == 'gpt_tts':
         from data.audio.gpt_tts_dataset import GptTtsDataset as D
         from data.audio.gpt_tts_dataset import GptTtsCollater as C
