@@ -98,6 +98,11 @@ class TextMelLoader(torch.utils.data.Dataset):
         else:
             if filename.endswith('.wav'):
                 audio, sampling_rate = load_wav_to_torch(filename)
+            elif filename.endswith('.mp3'):
+                # https://github.com/neonbjb/pyfastmp3decoder  - Definitely worth it.
+                from pyfastmp3decoder.mp3decoder import load_mp3
+                audio, sampling_rate = load_mp3(filename, self.input_sample_rate)
+                audio = torch.FloatTensor(audio)
             else:
                 audio, sampling_rate = audio2numpy.audio_from_file(filename)
                 audio = torch.tensor(audio)
@@ -225,28 +230,26 @@ def save_mel_buffer_to_file(mel, path):
 def dump_mels_to_disk():
     params = {
         'mode': 'nv_tacotron',
-        'path': ['Z:\\voxpopuli\\audio\\transcribed_data\\en\\asr_test.tsv'],
-        'fetcher_mode': ['voxpopuli'],
+        'path': ['Z:\\mozcv\\en\\train.tsv'],
+        'fetcher_mode': ['mozilla_cv'],
         'phase': 'train',
-        'n_workers': 0,
+        'n_workers': 8,
         'batch_size': 1,
         'needs_collate': True,
-        'max_mel_length': 4000,
-        'max_text_length': 600,
+        'max_mel_length': 10000,
+        'max_text_length': 1000,
         #'return_wavs': True,
         #'input_sample_rate': 22050,
         #'sampling_rate': 8000
     }
-    output_path = 'D:\\dlas\\results\\mozcv_mels'
-    os.makedirs(os.path.join(output_path, 'clips'), exist_ok=True)
     from data import create_dataset, create_dataloader
     ds, c = create_dataset(params, return_collate=True)
     dl = create_dataloader(ds, params, collate_fn=c)
-    for i, b in tqdm(enumerate(dl)):
+    for b in tqdm(dl):
         mels = b['padded_mel']
         fnames = b['filenames']
         for j, fname in enumerate(fnames):
-            save_mel_buffer_to_file(mels[j], f'{os.path.join(output_path, fname)}_mel.npy')
+            save_mel_buffer_to_file(mels[j], f'{fname}_mel.npy')
 
 
 if __name__ == '__main__':
