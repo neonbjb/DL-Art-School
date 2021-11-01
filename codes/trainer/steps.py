@@ -7,7 +7,7 @@ from trainer.losses import create_loss
 import torch
 from collections import OrderedDict
 from trainer.inject import create_injector
-from utils.util import recursively_detach, opt_get
+from utils.util import recursively_detach, opt_get, clip_grad_norm
 
 logger = logging.getLogger('base')
 
@@ -111,13 +111,16 @@ class ConfigurableStep(Module):
                     else:
                         if self.env['rank'] <= 0:
                             logger.warning('Params [{:s}] will not optimize.'.format(k))
-            params_notweights = [param_map[k] for k in sorted(list(param_names_notweights))]
-            params_weights = [param_map[k] for k in sorted(list(all_param_names ^ param_names_notweights))]
+            params_names_notweights = sorted(list(param_names_notweights))
+            params_notweights = [param_map[k] for k in params_names_notweights]
+            params_names_weights = sorted(list(all_param_names ^ param_names_notweights))
+            params_weights = [param_map[k] for k in params_names_weights]
 
             if 'optimizer' not in self.step_opt.keys() or self.step_opt['optimizer'] == 'adam':
                 opt = torch.optim.Adam(list(optim_params.values()), lr=opt_config['lr'],
                                        weight_decay=opt_config['weight_decay'],
                                        betas=(opt_config['beta1'], opt_config['beta2']))
+                opt._group_names = sorted(list(all_param_names))
             elif self.step_opt['optimizer'] == 'adamw':
                 groups = [
                     { 'params': params_weights, 'weight_decay': opt_get(opt_config, ['weight_decay'], 0) },
@@ -126,15 +129,18 @@ class ConfigurableStep(Module):
                 opt = torch.optim.AdamW(groups, lr=opt_config['lr'],
                                        weight_decay=opt_get(opt_config, ['weight_decay'], 1e-2),
                                        betas=(opt_get(opt_config, ['beta1'], .9), opt_get(opt_config, ['beta2'], .999)))
+                opt._group_names = [params_names_weights, params_names_notweights]
             elif self.step_opt['optimizer'] == 'lars':
                 from trainer.optimizers.larc import LARC
                 from trainer.optimizers.sgd import SGDNoBiasMomentum
                 optSGD = SGDNoBiasMomentum(list(optim_params.values()), lr=opt_config['lr'], momentum=opt_config['momentum'],
                                            weight_decay=opt_config['weight_decay'])
                 opt = LARC(optSGD, trust_coefficient=opt_config['lars_coefficient'])
+                opt._group_names = sorted(list(all_param_names))
             elif self.step_opt['optimizer'] == 'sgd':
                 from torch.optim import SGD
                 opt = SGD(list(optim_params.values()), lr=opt_config['lr'], momentum=opt_config['momentum'], weight_decay=opt_config['weight_decay'])
+                opt._group_names = sorted(list(all_param_names))
             opt._config = opt_config  # This is a bit seedy, but we will need these configs later.
             opt._config['network'] = net_name
             self.optimizers.append(opt)
@@ -288,8 +294,8 @@ class ConfigurableStep(Module):
                     self.nan_counter = 0
 
             if self.clip_grad_eps is not None:
-                for pg in opt.param_groups:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(pg['params'], self.clip_grad_eps)
+                for pgn, pg in zip(opt._group_names, opt.param_groups):
+                    grad_norm = clip_grad_norm(pg['params'], pgn, self.clip_grad_eps)
                     if torch.isnan(grad_norm):
                         nan_found = True
                         self.nan_counter += 1
