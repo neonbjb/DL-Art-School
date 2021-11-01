@@ -46,6 +46,7 @@ class ExtensibleTrainer(BaseModel):
             self.batch_factor = self.mega_batch_factor
             self.ema_rate = opt_get(train_opt, ['ema_rate'], .999)
         self.checkpointing_cache = opt['checkpointing_enabled']
+        self.auto_recover = opt_get(opt, ['automatically_recover_nan_by_reverting_n_saves'], None)
 
         self.netsG = {}
         self.netsD = {}
@@ -260,10 +261,23 @@ class ExtensibleTrainer(BaseModel):
                 s.do_step(step)
 
                 if s.nan_counter > 10:
-                    print("Detected NaN grads more than 10 steps in a row. Saving model weights and aborting.")
-                    self.save(step)
-                    self.save_training_state(0, step)
-                    raise ArithmeticError
+                    if self.auto_recover is None:
+                        print("Detected NaN grads more than 10 steps in a row. Saving model weights and aborting.")
+                        self.save(step)
+                        self.save_training_state(0, step)
+                        raise ArithmeticError
+                    else:
+                        print(f"!!!!!!!!Detected NaN grads more than 10 steps in a row. Restoring to a state {self.auto_recover} saves ago.")
+                        for k, ps in self.save_history.keys():
+                            if len(ps) < self.auto_recover:
+                                print("Belay that - not enough saves were recorded. Failing instead.")
+                                raise ArithmeticError
+                            if k == '__state__':
+                                self.resume_training(torch.load(ps[-self.auto_recover]))
+                            else:
+                                if k in self.networks.keys():  # This isn't always the case, for example for EMAs.
+                                    self.load_network(ps[-self.auto_recover], self.networks[k], strict=True)
+                                    self.load_network(self.save_history[f'{k}_ema'][-self.auto_recover], self.emas[k], strict=True)
 
                 # Call into custom step hooks as well as update EMA params.
                 for name, net in self.networks.items():

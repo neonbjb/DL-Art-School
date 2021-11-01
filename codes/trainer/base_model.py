@@ -20,6 +20,7 @@ class BaseModel():
         self.schedulers = []
         self.optimizers = []
         self.disc_optimizers = []
+        self.save_history = {}
 
     def feed_data(self, data):
         pass
@@ -89,6 +90,10 @@ class BaseModel():
         for key, param in state_dict.items():
             state_dict[key] = param.cpu()
         torch.save(state_dict, save_path)
+        if network_label not in self.save_history.keys():
+            self.save_history[network_label] = []
+        self.save_history[network_label].append(save_path)
+
         # Also save to the 'alt_path' which is useful for caching to Google Drive in colab, for example.
         if 'alt_path' in self.opt['path'].keys():
             torch.save(state_dict, os.path.join(self.opt['path']['alt_path'], save_filename))
@@ -134,6 +139,10 @@ class BaseModel():
         save_filename = '{}.state'.format(iter_step)
         save_path = os.path.join(self.opt['path']['training_state'], save_filename)
         torch.save(state, save_path)
+        if '__state__' not in self.save_history.keys():
+            self.save_history['__state__'] = []
+        self.save_history['__state__'].append(save_path)
+
         # Also save to the 'alt_path' which is useful for caching to Google Drive in colab, for example.
         if 'alt_path' in self.opt['path'].keys():
             torch.save(state, os.path.join(self.opt['path']['alt_path'], 'latest.state'))
