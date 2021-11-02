@@ -35,7 +35,7 @@ def load_voxpopuli(filename):
                 continue
             file, raw_text, norm_text, speaker_id, split, gender = line
             year = file[:4]
-            filepaths_and_text.append([os.path.join(base, year, f'{file}.ogg'), raw_text])
+            filepaths_and_text.append([os.path.join(base, year, f'{file}.ogg.wav'), raw_text])
     return filepaths_and_text
 
 
