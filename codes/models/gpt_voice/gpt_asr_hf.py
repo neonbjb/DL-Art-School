@@ -13,10 +13,10 @@ class ResBlock(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv1d(chan, chan, kernel_size=3, padding=1),
-            nn.BatchNorm1d(chan),
+            nn.GroupNorm(chan//8, chan),
             nn.ReLU(),
             nn.Conv1d(chan, chan, kernel_size=3, padding=1),
-            nn.BatchNorm1d(chan)
+            nn.GroupNorm(chan//8, chan)
         )
 
     def forward(self, x):
@@ -31,11 +31,13 @@ class MelEncoder(nn.Module):
                                      ResBlock(channels//4),
                                      ResBlock(channels//4),
                                      nn.Conv1d(channels//4, channels//2, kernel_size=3, stride=2, padding=1),
-                                     nn.BatchNorm1d(channels//2),
+                                     nn.GroupNorm(channels//16, channels//2),
                                      nn.ReLU(),
                                      ResBlock(channels//2),
                                      ResBlock(channels//2),
                                      nn.Conv1d(channels//2, channels, kernel_size=3, stride=2, padding=1),
+                                     nn.GroupNorm(channels//8, channels),
+                                     nn.ReLU(),
                                      ResBlock(channels),
                                      ResBlock(channels)
                                      )
@@ -48,7 +50,7 @@ class GptAsrHf(nn.Module):
     NUMBER_SYMBOLS = len(symbols)
     NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS+1
 
-    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=200, max_mel_frames=1000):
+    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=200, max_mel_frames=1000, checkpointing=True):
         super().__init__()
         self.max_mel_frames = max_mel_frames // 4  # Mel frames are reduced by a factor of 4 during encoding.
         self.max_symbols_per_phrase = max_symbols_per_phrase
@@ -64,7 +66,9 @@ class GptAsrHf(nn.Module):
                                         n_ctx=seq_length,
                                         n_embd=model_dim,
                                         n_layer=layers,
-                                        n_head=heads))
+                                        n_head=heads,
+                                        gradient_checkpointing=checkpointing,
+                                        use_cache=not checkpointing))
         self.final_norm = nn.LayerNorm(model_dim)
         self.text_head = nn.Linear(model_dim, self.NUMBER_TEXT_TOKENS)
 
