@@ -87,7 +87,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         try:
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
         except:
-            print(f"error loadding {self.audiopaths_and_text[index][0]")
+            print(f"error loadding {self.audiopaths_and_text[index][0]}")
             return self[index+1]
         if wav is None or \
             (self.max_wav_len is not None and wav.shape[-1] > self.max_wav_len) or \
