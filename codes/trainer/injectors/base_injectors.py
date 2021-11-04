@@ -40,6 +40,7 @@ class GeneratorInjector(Injector):
         super(GeneratorInjector, self).__init__(opt, env)
         self.grad = opt['grad'] if 'grad' in opt.keys() else True
         self.method = opt_get(opt, ['method'], None)  # If specified, this method is called instead of __call__()
+        self.args = opt_get(opt, ['args'], {})
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
@@ -54,10 +55,10 @@ class GeneratorInjector(Injector):
             else:
                 params = [state[self.input]]
             if self.grad:
-                results = method(*params)
+                results = method(*params, **self.args)
             else:
                 with torch.no_grad():
-                    results = method(*params)
+                    results = method(*params, **self.args)
         new_state = {}
         if isinstance(self.output, list):
             # Only dereference tuples or lists, not tensors. IF YOU REACH THIS ERROR, REMOVE THE BRACES AROUND YOUR OUTPUTS IN THE YAML CONFIG
