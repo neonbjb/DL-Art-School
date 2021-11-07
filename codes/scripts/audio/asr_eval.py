@@ -27,8 +27,11 @@ def forward_pass(model, data, output_dir, opt, b):
         real = data[opt['eval']['real_text']][0]
         print(f'{b} Real text: "{real}"')
 
-    pred_seq = model.eval_state[opt['eval']['gen_text']][0][0]  # Grab first sequence, which should represent the most likely sequence.
-    return sequence_to_text(pred_seq)
+    gt_key = opt['eval']['gen_text']
+    txts = []
+    for b in range(model.eval_state[gt_key][0].shape[0]):
+        txts.append(sequence_to_text(model.eval_state[opt['eval']['gen_text']][0][b]))
+    return txts
 
 
 if __name__ == "__main__":
@@ -73,10 +76,11 @@ if __name__ == "__main__":
         for data in tq:
             #if data['clip'].shape[-1] > opt['networks']['asr_gen']['kwargs']['max_mel_frames']*255:
             #    continue
-            pred = forward_pass(model, data, dataset_dir, opt, batch)
-            pred = pred.replace('_', '')
-            output.write(f'{pred}\t{os.path.basename(data["filenames"][0])}\n')
-            print(pred)
+            preds = forward_pass(model, data, dataset_dir, opt, batch)
+            for b, pred in enumerate(preds):
+                pred = pred.replace('_', '')
+                output.write(f'{pred}\t{os.path.basename(data["filenames"][b])}\n')
+                print(pred)
+                batch += 1
             output.flush()
-            batch += 1
 

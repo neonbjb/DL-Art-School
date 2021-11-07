@@ -57,7 +57,7 @@ class WordErrorRate:
 
 
 if __name__ == '__main__':
-    inference_tsv = '\\\\192.168.5.3\\rtx3080_drv\\dlas\\codes\\eval_libritts_for_gpt_asr_results_WER=2.6615.tsv'
+    inference_tsv = 'D:\\dlas\\codes\\31000ema_8_beam.tsv'
     libri_base = 'Z:\\libritts\\test-clean'
 
     wer = WordErrorRate()

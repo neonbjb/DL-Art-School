@@ -1,3 +1,5 @@
+from time import time
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -145,7 +147,7 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
             text_emb = self.transformer.get_input_embeddings()(text_inputs)
             text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=text_emb.device))
             if self.cached_mel_emb.shape[0] != text_emb.shape[0]:
-                mel_emb = self.cached_mel_emb.repeat(text_emb.shape[0], 1, 1)
+                mel_emb = self.cached_mel_emb.repeat_interleave(text_emb.shape[0]//self.cached_mel_emb.shape[0], 0)
             else:
                 mel_emb = self.cached_mel_emb
             emb = torch.cat([mel_emb, text_emb], dim=1)
@@ -264,16 +266,17 @@ class GptAsrHf(nn.Module):
 
         # "fake_inputs" are stand-ins for the MEL frames, which will be injected with the prep_inputs function above.
         if cond_text is None:
-            fake_inputs = torch.full((1,self.max_mel_frames+1,), fill_value=1, dtype=torch.long, device=mel_inputs.device)
+            fake_inputs = torch.full((mel_inputs.shape[0],self.max_mel_frames+1,), fill_value=1, dtype=torch.long, device=mel_inputs.device)
             fake_inputs[:,-1] = self.NUMBER_SYMBOLS
         else:
             cond_used = 10
-            fake_inputs = torch.full((1,self.max_mel_frames+1+cond_used,), fill_value=1, dtype=torch.long, device=mel_inputs.device)
+            fake_inputs = torch.full((mel_inputs.shape[0],self.max_mel_frames+1+cond_used,), fill_value=1, dtype=torch.long, device=mel_inputs.device)
             fake_inputs[:,-1-cond_used] = self.NUMBER_SYMBOLS
             fake_inputs[:, -cond_used:] = cond_text[:, :cond_used]
         gen = self.inference_model.generate(fake_inputs, do_sample=do_sample, bos_token_id=self.NUMBER_SYMBOLS, pad_token_id=0, eos_token_id=0,
-                          max_length=self.max_symbols_per_phrase+self.max_mel_frames, temperature=temperature, num_beams=num_beams, use_cache=False)
+                          max_length=self.max_symbols_per_phrase+self.max_mel_frames, temperature=temperature, num_beams=num_beams, use_cache=True)
         return gen[:, self.max_mel_frames:]
+
 
 @register_model
 def register_gpt_asr_hf(opt_net, opt):
@@ -296,8 +299,11 @@ def distill():
 
 
 if __name__ == '__main__':
-    gpt = GptAsrHf(max_symbols_per_phrase=100, max_mel_frames=200, layers=6, model_dim=256, heads=2)
-    l = gpt(torch.randn(2,80,800), torch.randint(high=len(symbols), size=(2,100)))
+    gpt = GptAsrHf(max_symbols_per_phrase=250, max_mel_frames=1400, layers=16, model_dim=512, heads=8)
+    #l = gpt(torch.randn(2,80,800), torch.randint(high=len(symbols), size=(2,100)))
+    start = time()
+    gpt.inference(torch.randn(1,80,350), num_beams=1)
+    print(f"Elapsed: {time()-start}")
 
     '''
     with torch.no_grad():
