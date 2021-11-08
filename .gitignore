@@ -21,6 +21,7 @@ data/*
 *.pt
 *.pth
 *.pdf
+*.tsv
 
 # template
 

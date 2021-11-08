@@ -231,7 +231,7 @@ class GptAsrHf(nn.Module):
         self.text_head = nn.Linear(model_dim, self.NUMBER_TEXT_TOKENS)
 
 
-    def get_logits(self, mel_inputs, text_targets):
+    def get_logits(self, mel_inputs, text_targets, get_attns):
         # Pad front and back. Pad at front is the "START" token.
         text_targets = F.pad(text_targets, (1,0), value=self.NUMBER_SYMBOLS)
         text_targets = F.pad(text_targets, (0, self.max_symbols_per_phrase - text_targets.shape[1]))
@@ -242,14 +242,19 @@ class GptAsrHf(nn.Module):
         mel_emb = mel_emb.permute(0,2,1).contiguous()
         mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device))
         emb = torch.cat([mel_emb, text_emb], dim=1)
-        enc = self.gpt(inputs_embeds=emb, return_dict=True).last_hidden_state
+        gpt_out = self.gpt(inputs_embeds=emb, return_dict=True, output_attentions=get_attns)
+        if get_attns:
+            return gpt_out.attentions
+        enc = gpt_out.last_hidden_state
         text_logits = self.final_norm(enc[:, self.max_mel_frames:])
         text_logits = self.text_head(text_logits)
         text_logits = text_logits.permute(0,2,1)
         return text_logits
 
-    def forward(self, mel_inputs, text_targets):
-        text_logits = self.get_logits(mel_inputs, text_targets)
+    def forward(self, mel_inputs, text_targets, return_attentions=False):
+        text_logits = self.get_logits(mel_inputs, text_targets, get_attns=return_attentions)
+        if return_attentions:
+            return text_logits  # These weren't really the logits.
         loss_text = F.cross_entropy(text_logits, text_targets.long())
         return loss_text.mean(), text_logits
 
