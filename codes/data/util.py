@@ -591,7 +591,9 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[]):
         if exclusion_list is not None and len(exclusion_list) > 0:
             print(f"Removing exclusion lists..")
             before = len(output)
-            output = filter(lambda p: p not in exclusion_list, output)
+            master_set = set(output)
+            exclusion_set = set(exclusion_list)
+            output = list(master_set - exclusion_set)
             print(f"Excluded {before-len(output)} files.")
         print("Done.")
         torch.save(output, cache_path)
