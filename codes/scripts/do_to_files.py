@@ -30,7 +30,6 @@ def do_to_files(process_file_fn):
     resume = args.resume
     num_workers = int(args.num_workers)
 
-    os.makedirs(out, exist_ok=True)
     path = pathlib.Path(src)
     files = path.rglob(glob)
     files = [str(f) for f in files]

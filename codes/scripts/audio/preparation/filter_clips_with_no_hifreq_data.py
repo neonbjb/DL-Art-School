@@ -17,7 +17,8 @@ def filter_no_hifreq_data(path, output_path):
         return
     stft = get_spec_mags(clip)
     if stft.mean() < .08:
-        print(f"Ignore {path}")
+        with open(output_path, 'a') as o:
+            o.write(f'{path}\n')
 
 if __name__ == '__main__':
     do_to_files(filter_no_hifreq_data)
