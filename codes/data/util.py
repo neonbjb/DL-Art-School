@@ -590,7 +590,9 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[]):
             output.extend(find_files_of_type('img', p, qualifier=is_audio_file)[0])
         if exclusion_list is not None and len(exclusion_list) > 0:
             print(f"Removing exclusion lists..")
+            before = len(output)
             output = filter(lambda p: p not in exclusion_list, output)
+            print(f"Excluded {before-len(output)} files.")
         print("Done.")
         torch.save(output, cache_path)
     return output
