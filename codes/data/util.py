@@ -578,7 +578,7 @@ def imresize_np(img, scale, antialiasing=True):
     return out_2.numpy()
 
 
-def load_paths_from_cache(paths, cache_path):
+def load_paths_from_cache(paths, cache_path, exclusion_list=[]):
     if not isinstance(paths, list):
         paths = [paths]
     if os.path.exists(cache_path):
@@ -588,6 +588,10 @@ def load_paths_from_cache(paths, cache_path):
         output = []
         for p in paths:
             output.extend(find_files_of_type('img', p, qualifier=is_audio_file)[0])
+        if exclusion_list is not None and len(exclusion_list) > 0:
+            print(f"Removing exclusion lists..")
+            output = filter(lambda p: p not in exclusion_list, output)
+        print("Done.")
         torch.save(output, cache_path)
     return output
 

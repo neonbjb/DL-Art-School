@@ -56,7 +56,12 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
     def __init__(self, opt):
         path = opt['path']
         cache_path = opt['cache_path']  # Will fail when multiple paths specified, must be specified in this case.
-        self.audiopaths = load_paths_from_cache(path, cache_path)
+        exclusions = []
+        if 'exclusions' in opt.keys():
+            for exc in opt['exclusions']:
+                with open(exc, 'r') as f:
+                    exclusions.extend(f.read().splitlines())
+        self.audiopaths = load_paths_from_cache(path, cache_path, exclusions)
 
         # Parse options
         self.sampling_rate = opt_get(opt, ['sampling_rate'], 22050)
