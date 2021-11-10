@@ -227,6 +227,8 @@ class ConfigurableStep(Module):
                     new_state.update(lstate)
                 else:
                     l = loss(self.get_network_for_name(self.step_opt['training']), local_state)
+                if not l.isfinite():
+                    print(f'!!Detected non-finite loss {loss_name}')
                 total_loss += l * self.weights[loss_name]
                 # Record metrics.
                 if isinstance(l, torch.Tensor):

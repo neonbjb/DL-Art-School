@@ -2,7 +2,6 @@ import torch
 import torchvision
 from torch import Tensor
 import torch.nn as nn
-from torchvision.models.utils import load_state_dict_from_url
 from typing import Type, Any, Callable, Union, List, Optional, OrderedDict, Iterator
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
