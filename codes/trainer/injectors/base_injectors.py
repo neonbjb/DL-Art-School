@@ -1,6 +1,7 @@
 import random
 
 import torch.nn
+import torchaudio.functional
 from kornia.augmentation import RandomResizedCrop
 from torch.cuda.amp import autocast
 
@@ -567,6 +568,17 @@ class RandomAudioCropInjector(Injector):
         margin = len - self.crop_sz
         start = random.randint(0, margin)
         return {self.output: inp[:, :, start:start+self.crop_sz]}
+
+
+class AudioResampleInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.input_sr = opt['input_sample_rate']
+        self.output_sr = opt['output_sample_rate']
+
+    def forward(self, state):
+        inp = state[self.input]
+        return {self.output: torchaudio.functional.resample(inp, self.input_sr, self.output_sr)}
 
 
 if __name__ == '__main__':
