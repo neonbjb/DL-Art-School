@@ -228,7 +228,7 @@ class DiscreteVAE(nn.Module):
                 out = d(out)
         else:
             # This is non-differentiable, but gives a better idea of how the network is actually performing.
-            out = self.decode(codes)
+            out, _ = self.decode(codes)
 
         # reconstruction loss
         recon_loss = self.loss_fn(img, out, reduction='none')
