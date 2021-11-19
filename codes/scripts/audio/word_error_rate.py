@@ -57,7 +57,7 @@ class WordErrorRate:
 
 
 if __name__ == '__main__':
-    inference_tsv = 'D:\\dlas\\codes\\46000ema_8beam.tsv'
+    inference_tsv = 'D:\\dlas\\codes\\results.tsv'
     libri_base = 'Z:\\libritts\\test-clean'
 
     wer = WordErrorRate()
