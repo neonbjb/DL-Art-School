@@ -109,7 +109,7 @@ class GaussianDiffusionInferenceInjector(Injector):
                                 model_inputs['low_res'].shape[-1] * self.output_scale_factor)
                 dev = model_inputs['low_res'].device
             elif 'spectrogram' in model_inputs.keys():
-                output_shape = (self.output_batch_size, 1, model_inputs['spectrogram'].shape[-1]*256)
+                output_shape = (self.output_batch_size, 1, model_inputs['spectrogram'].shape[-1] * self.output_scale_factor)
                 dev = model_inputs['spectrogram'].device
             elif 'discrete_spectrogram' in model_inputs.keys():
                 output_shape = (self.output_batch_size, 1, model_inputs['discrete_spectrogram'].shape[-1]*1024)
