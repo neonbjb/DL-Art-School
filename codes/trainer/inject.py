@@ -15,7 +15,8 @@ class Injector(torch.nn.Module):
         self.env = env
         if 'in' in opt.keys():
             self.input = opt['in']
-        self.output = opt['out']
+        if 'out' in opt.keys():
+            self.output = opt['out']
 
     # This should return a dict of new state variables.
     def forward(self, state):
