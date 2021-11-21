@@ -3,6 +3,8 @@
 
 import numpy as np
 import random
+
+import torch
 import torchvision.utils
 
 from trainer.inject import Injector
@@ -34,6 +36,7 @@ def spec_augment(mel_spectrogram, frequency_masking_para=27, time_masking_para=7
 
     return mel_spectrogram
 
+
 class MelMaskInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
@@ -54,7 +57,8 @@ def visualization_spectrogram(spec, title):
     spec = ((spec + 1) / 2).clip(0, 1)
     torchvision.utils.save_image(spec, f'{title}.png')
 
-if __name__ == '__main__':
+
+def test_mel_mask():
     from data.audio.unsupervised_audio_dataset import load_audio
     from trainer.injectors.base_injectors import MelSpectrogramInjector
     spec_maker = MelSpectrogramInjector({'in': 'audio', 'out': 'spec'}, {})
@@ -63,3 +67,57 @@ if __name__ == '__main__':
     visualization_spectrogram(s, 'original spec')
     saug = spec_augment(s, 50, 5, 1, 3)
     visualization_spectrogram(saug, 'modified spec')
+
+
+'''
+Crafty bespoke injector that is used when training ASR models to create longer sequences to ensure that the entire
+input length embedding is trained. Does this by concatenating every other batch element together to create longer
+sequences which (theoretically) use similar amounts of GPU memory.
+'''
+class CombineMelInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.audio_key = opt['audio_key']
+        self.text_key = opt['text_key']
+        self.audio_lengths = opt['audio_lengths_key']
+        self.text_lengths = opt['text_lengths_key']
+        from models.tacotron2.text import symbols
+        self.text_separator = len(symbols)+1  # Probably need to allow this to be set by user.
+
+    def forward(self, state):
+        audio = state[self.audio_key]
+        texts = state[self.text_key]
+        audio_lengths = state[self.audio_lengths]
+        text_lengths = state[self.text_lengths]
+        assert audio.shape[0] % 2 == 0  # Make sure there are an even number of batches.
+        combined_audios = []
+        combined_texts = []
+        for b in range(audio.shape[0]//2):
+            a1 = audio[b*2, :audio_lengths[b*2]]
+            a2 = audio[b*2+1, :audio_lengths[b*2+1]]
+            a = torch.cat([a1, a2], dim=0)
+            a = torch.nn.functional.pad(a, (0, audio.shape[-1]*2-a.shape[-1]))
+            combined_audios.append(a)
+
+            t1 = texts[b*2, :text_lengths[b*2]]
+            t1 = torch.nn.functional.pad(t1, (0, 1), value=self.text_separator)
+            t2 = texts[b*2+1, :text_lengths[b*2+1]]
+            t = torch.cat([t1, t2], dim=0)
+            t = torch.nn.functional.pad(t, (0, texts.shape[-1]*2-t.shape[-1]))
+            combined_texts.append(t)
+        return {self.audio_key: torch.stack(combined_audios, dim=0),
+                self.text_key: torch.stack(combined_texts, dim=0)}
+
+
+def test_mel_injector():
+    inj = CombineMelInjector({'audio_key': 'a', 'text_key': 't', 'audio_lengths_key': "alk", 'text_lengths_key': 'tlk'}, {})
+    a = torch.rand((4, 22000))
+    al = torch.tensor([11000,14000,22000,20000])
+    t = torch.randint(0, 120, (4, 250))
+    tl = torch.tensor([100,120,200,250])
+    rs = inj({'a': a, 't': t, 'alk': al, 'tlk': tl})
+
+
+
+if __name__ == '__main__':
+    test_mel_injector()

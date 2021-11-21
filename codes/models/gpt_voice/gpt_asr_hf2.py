@@ -202,7 +202,8 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
 
 class GptAsrHf2(nn.Module):
     NUMBER_SYMBOLS = len(symbols)
-    NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS+1
+    START_TOKEN = NUMBER_SYMBOLS
+    NUMBER_TEXT_TOKENS = NUMBER_SYMBOLS+2
 
     def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=800, max_mel_frames=3000, checkpointing=True):
         super().__init__()
@@ -230,7 +231,7 @@ class GptAsrHf2(nn.Module):
 
     def get_logits(self, mel_inputs, text_targets, get_attns=False):
         # Pad front remove last element to set up next token prediction. Pad at front is the "START" token.
-        text_targets = F.pad(text_targets, (1,0), value=self.NUMBER_SYMBOLS)[:, :-1]
+        text_targets = F.pad(text_targets, (1,0), value=self.START_TOKEN)[:, :-1]
         text_emb = self.gpt.get_input_embeddings()(text_targets)
         text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=text_targets.device))
         mel_emb = self.mel_encoder(mel_inputs)

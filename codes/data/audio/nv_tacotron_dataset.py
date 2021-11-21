@@ -108,9 +108,9 @@ class TextWavLoader(torch.utils.data.Dataset):
             return {
                 'real_text': text,
                 'padded_text': tseq,
-                'input_lengths': torch.tensor(orig_text_len, dtype=torch.long),
+                'text_lengths': torch.tensor(orig_text_len, dtype=torch.long),
                 'wav': wav,
-                'output_lengths': torch.tensor(orig_output, dtype=torch.long),
+                'wav_lengths': torch.tensor(orig_output, dtype=torch.long),
                 'filenames': path
             }
         return tseq, wav, path, text
@@ -159,9 +159,9 @@ class TextMelCollate():
 
         return {
             'padded_text': text_padded,
-            'input_lengths': input_lengths,
+            'text_lengths': input_lengths,
             'wav': wav_padded,
-            'output_lengths': output_lengths,
+            'wav_lengths': output_lengths,
             'filenames': filenames,
             'real_text': real_text,
         }
@@ -171,14 +171,14 @@ if __name__ == '__main__':
     batch_sz = 32
     params = {
         'mode': 'nv_tacotron',
-        'path': 'E:\\audio\\MozillaCommonVoice\\en\\test.tsv',
+        'path': ['Z:\\bigasr_dataset\\libritts\\test-clean_list.txt'],
         'phase': 'train',
-        'n_workers': 0,
+        'n_workers': 1,
         'batch_size': batch_sz,
-        'fetcher_mode': 'mozilla_cv',
+        'fetcher_mode': ['libritts'],
         'needs_collate': True,
-        #'max_wav_length': 256000,
-        #'max_text_length': 200,
+        'max_wav_length': 256000,
+        'max_text_length': 200,
         'sample_rate': 22050,
     }
     from data import create_dataset, create_dataloader
