@@ -4,6 +4,8 @@ import numpy
 import torch
 from scipy.io import wavfile
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import librosa
 
 from models.waveglow.waveglow import WaveGlow
 
@@ -23,13 +25,22 @@ class Vocoder:
             return self.model.infer(mel)
 
 
-if __name__ == '__main__':
-    path = 'data/audio'
-    files = list(pathlib.Path(path).glob('*.npy'))
+def plot_spectrogram(spec, title=None, ylabel="freq_bin", aspect="auto", xmax=None):
+    fig, axs = plt.subplots(1, 1)
+    axs.set_title(title or "Spectrogram (db)")
+    axs.set_ylabel(ylabel)
+    axs.set_xlabel("frame")
+    im = axs.imshow(librosa.power_to_db(spec), origin="lower", aspect=aspect)
+    if xmax:
+        axs.set_xlim((0, xmax))
+    fig.colorbar(im, ax=axs)
+    plt.show(block=False)
 
-    for inp in tqdm(files):
-        inp = str(inp)
-        mel = torch.tensor(numpy.load(inp)).to('cuda')
-        vocoder = Vocoder()
-        wav = vocoder.transform_mel_to_audio(mel)
-        wavfile.write(f'{inp}.wav', 22050, wav[0].cpu().numpy())
+
+if __name__ == '__main__':
+    vocoder = Vocoder()
+    m = torch.load('test_mels.pth')
+    for i, b in enumerate(m):
+        plot_spectrogram(b.cpu())
+        wav = vocoder.transform_mel_to_audio(b)
+        wavfile.write(f'{i}.wav', 22050, wav[0].cpu().numpy())

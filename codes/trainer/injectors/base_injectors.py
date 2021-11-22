@@ -577,6 +577,7 @@ class TorchMelSpectrogramInjector(Injector):
         if len(inp.shape) == 3:  # Automatically squeeze out the channels dimension if it is present (assuming mono-audio)
             inp = inp.squeeze(1)
         assert len(inp.shape) == 2
+        self.mel_stft = self.mel_stft.to(inp.device)
         mel = self.mel_stft(inp)
         return {self.output: mel}
 

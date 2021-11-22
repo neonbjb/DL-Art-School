@@ -81,6 +81,8 @@ class CombineMelInjector(Injector):
         self.text_key = opt['text_key']
         self.audio_lengths = opt['audio_lengths_key']
         self.text_lengths = opt['text_lengths_key']
+        self.output_audio_key = opt['output_audio_key']
+        self.output_text_key = opt['output_text_key']
         from models.tacotron2.text import symbols
         self.text_separator = len(symbols)+1  # Probably need to allow this to be set by user.
 
@@ -93,9 +95,9 @@ class CombineMelInjector(Injector):
         combined_audios = []
         combined_texts = []
         for b in range(audio.shape[0]//2):
-            a1 = audio[b*2, :audio_lengths[b*2]]
-            a2 = audio[b*2+1, :audio_lengths[b*2+1]]
-            a = torch.cat([a1, a2], dim=0)
+            a1 = audio[b*2, :, :audio_lengths[b*2]]
+            a2 = audio[b*2+1, :, :audio_lengths[b*2+1]]
+            a = torch.cat([a1, a2], dim=1)
             a = torch.nn.functional.pad(a, (0, audio.shape[-1]*2-a.shape[-1]))
             combined_audios.append(a)
 
@@ -105,8 +107,8 @@ class CombineMelInjector(Injector):
             t = torch.cat([t1, t2], dim=0)
             t = torch.nn.functional.pad(t, (0, texts.shape[-1]*2-t.shape[-1]))
             combined_texts.append(t)
-        return {self.audio_key: torch.stack(combined_audios, dim=0),
-                self.text_key: torch.stack(combined_texts, dim=0)}
+        return {self.output_audio_key: torch.stack(combined_audios, dim=0),
+                self.output_text_key: torch.stack(combined_texts, dim=0)}
 
 
 def test_mel_injector():
