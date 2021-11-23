@@ -5,8 +5,10 @@ import torchaudio.functional
 from kornia.augmentation import RandomResizedCrop
 from torch.cuda.amp import autocast
 
+from data.audio.unsupervised_audio_dataset import load_audio
 from trainer.inject import Injector, create_injector
 from trainer.losses import extract_params_from_state
+from utils.audio import plot_spectrogram
 from utils.util import opt_get
 from utils.weight_scheduler import get_scheduler_for_opt
 
@@ -568,7 +570,7 @@ class TorchMelSpectrogramInjector(Injector):
         self.mel_fmax = opt_get(opt, ['mel_fmax'], 8000)
         self.sampling_rate = opt_get(opt, ['sampling_rate'], 22050)
         self.mel_stft = torchaudio.transforms.MelSpectrogram(n_fft=self.filter_length, hop_length=self.hop_length,
-                                                             win_length=self.win_length, power=2, normalized=True,
+                                                             win_length=self.win_length, power=2, normalized=False,
                                                              sample_rate=self.sampling_rate, f_min=self.mel_fmin,
                                                              f_max=self.mel_fmax, n_mels=self.n_mel_channels)
 
@@ -580,6 +582,14 @@ class TorchMelSpectrogramInjector(Injector):
         self.mel_stft = self.mel_stft.to(inp.device)
         mel = self.mel_stft(inp)
         return {self.output: mel}
+
+
+def test_torch_mel_injector():
+    a = load_audio('D:\\data\\audio\\libritts\\train-clean-100\\19\\198\\19_198_000000_000000.wav', 22050)
+    inj = TorchMelSpectrogramInjector({'in': 'in', 'out': 'out'}, {})
+    f = inj({'in': a.unsqueeze(0)})['out']
+    plot_spectrogram(f[0])
+    print('Pause')
 
 
 class RandomAudioCropInjector(Injector):
@@ -606,6 +616,10 @@ class AudioResampleInjector(Injector):
         return {self.output: torchaudio.functional.resample(inp, self.input_sr, self.output_sr)}
 
 
-if __name__ == '__main__':
+def test_audio_resample_injector():
     inj = AudioResampleInjector({'in': 'x', 'out': 'y', 'input_sample_rate': 22050, 'output_sample_rate': '1'}, None)
     print(inj({'x':torch.rand(10,1,40800)})['y'].shape)
+
+
+if __name__ == '__main__':
+    test_torch_mel_injector()
