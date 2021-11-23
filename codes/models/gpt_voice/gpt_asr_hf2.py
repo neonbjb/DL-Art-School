@@ -249,7 +249,6 @@ class GptAsrHf2(nn.Module):
         return text_logits
 
     def forward(self, mel_inputs, text_targets, return_attentions=False):
-        plot_spectrogram(mel_inputs[0].cpu())
         text_targets = F.pad(text_targets, (0,1))  # Pad the targets with a <0> so that all have a "stop" token.
         text_logits = self.get_logits(mel_inputs, text_targets, get_attns=return_attentions)
         if return_attentions:
