@@ -231,7 +231,7 @@ class GptAsrHf2(nn.Module):
 
 
     def get_logits(self, mel_inputs, text_targets, get_attns=False):
-        # Pad front remove last element to set up next token prediction. Pad at front is the "START" token.
+        # Pad front and remove last element to set up next token prediction. Pad at front is the "START" token.
         text_inputs = F.pad(text_targets, (1,0), value=self.START_TOKEN)[:, :-1]
         text_emb = self.gpt.get_input_embeddings()(text_inputs)
         text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=text_inputs.device))

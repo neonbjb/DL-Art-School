@@ -569,8 +569,9 @@ class TorchMelSpectrogramInjector(Injector):
         self.mel_fmin = opt_get(opt, ['mel_fmin'], 0)
         self.mel_fmax = opt_get(opt, ['mel_fmax'], 8000)
         self.sampling_rate = opt_get(opt, ['sampling_rate'], 22050)
+        norm = opt_get(opt, ['normalize'], False)
         self.mel_stft = torchaudio.transforms.MelSpectrogram(n_fft=self.filter_length, hop_length=self.hop_length,
-                                                             win_length=self.win_length, power=2, normalized=False,
+                                                             win_length=self.win_length, power=2, normalized=norm,
                                                              sample_rate=self.sampling_rate, f_min=self.mel_fmin,
                                                              f_max=self.mel_fmax, n_mels=self.n_mel_channels)
 

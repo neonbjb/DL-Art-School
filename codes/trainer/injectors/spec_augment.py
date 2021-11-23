@@ -91,7 +91,8 @@ class CombineMelInjector(Injector):
         texts = state[self.text_key]
         audio_lengths = state[self.audio_lengths]
         text_lengths = state[self.text_lengths]
-        assert audio.shape[0] % 2 == 0  # Make sure there are an even number of batches.
+        if audio.shape[0] == 1:
+            return {self.output_audio_key: audio, self.output_text_key: texts}
         combined_audios = []
         combined_texts = []
         for b in range(audio.shape[0]//2):
