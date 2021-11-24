@@ -15,6 +15,7 @@ linear_attention_transformer
 orjson
 einops
 lambda-networks
+vector-quantize-pytorch
 
 # For image generation stuff
 opencv-python

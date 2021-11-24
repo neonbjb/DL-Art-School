@@ -29,7 +29,7 @@ from utils.util import checkpoint, opt_get
 
 
 class Quantize(nn.Module):
-    def __init__(self, dim, n_embed, decay=0.99, eps=1e-5, balancing_heuristic=False):
+    def __init__(self, dim, n_embed, decay=0.99, eps=1e-5, balancing_heuristic=False, new_return_order=False):
         super().__init__()
 
         self.dim = dim
@@ -41,6 +41,7 @@ class Quantize(nn.Module):
         self.codes = None
         self.max_codes = 64000
         self.codes_full = False
+        self.new_return_order = new_return_order
 
         embed = torch.randn(dim, n_embed)
         self.register_buffer("embed", embed)
@@ -107,6 +108,8 @@ class Quantize(nn.Module):
 
         if return_soft_codes:
             return quantize, diff, embed_ind, soft_codes.view(input.shape[:-1] + (-1,))
+        elif self.new_return_order:
+            return quantize, embed_ind, diff
         else:
             return quantize, diff, embed_ind
 
