@@ -114,9 +114,10 @@ if __name__ == "__main__":
         if audio_mode:
             data = {
                 'clip': im.to('cuda'),
-                'alt_clips': torch.zeros_like(refs[:,0].to('cuda')),
+                'alt_clips': refs.to('cuda'),
                 'num_alt_clips': torch.tensor([refs.shape[1]], dtype=torch.int32, device='cuda'),
-                'GT_path': opt['image']
+                'GT_path': opt['image'],
+                'resampled_clip': refs[:, 0].to('cuda')
             }
         else:
             data = {
