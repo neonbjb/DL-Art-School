@@ -1,21 +1,25 @@
 import os
+import os
 import random
 
-import audio2numpy
-import numpy as np
 import torch
-import torch.utils.data
 import torch.nn.functional as F
+import torch.utils.data
 import torchaudio
 from tqdm import tqdm
 
-import models.tacotron2.layers as layers
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import find_files_of_type, is_audio_file
-from models.tacotron2.taco_utils import load_wav_to_torch, load_filepaths_and_text
-
+from models.tacotron2.taco_utils import load_filepaths_and_text
 from models.tacotron2.text import text_to_sequence
 from utils.util import opt_get
+
+
+def load_tsv(filename):
+    with open(filename, encoding='utf-8') as f:
+        components = [line.strip().split('\t') for line in f]
+        filepaths_and_text = [[component[1], component[0]] for component in components]
+    return filepaths_and_text
 
 
 def load_mozilla_cv(filename):
@@ -58,6 +62,8 @@ class TextWavLoader(torch.utils.data.Dataset):
         for p, fm in zip(self.path, fetcher_mode):
             if fm == 'lj' or fm == 'libritts':
                 fetcher_fn = load_filepaths_and_text
+            elif fm == 'tsv':
+                fetcher_fn = load_tsv
             elif fm == 'mozilla_cv':
                 assert not self.load_conditioning  # Conditioning inputs are incompatible with mozilla_cv
                 fetcher_fn = load_mozilla_cv
@@ -109,12 +115,12 @@ class TextWavLoader(torch.utils.data.Dataset):
         return torch.stack(related_clips, dim=0)
 
     def __getitem__(self, index):
-        #try:
-        tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
-        cond = self.load_conditioning_candidates(self.audiopaths_and_text[index][0]) if self.load_conditioning else None
-        #except:
-        #    print(f"error loading {self.audiopaths_and_text[index][0]}")
-        #    return self[index+1]
+        try:
+            tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
+            cond = self.load_conditioning_candidates(self.audiopaths_and_text[index][0]) if self.load_conditioning else None
+        except:
+            print(f"error loading {self.audiopaths_and_text[index][0]}")
+            return self[index+1]
         if wav is None or \
             (self.max_wav_len is not None and wav.shape[-1] > self.max_wav_len) or \
             (self.max_text_len is not None and tseq.shape[0] > self.max_text_len):
@@ -208,10 +214,10 @@ if __name__ == '__main__':
     params = {
         'mode': 'nv_tacotron',
         'path': ['Z:\\bigasr_dataset\\libritts\\test-clean_list.txt'],
+        'fetcher_mode': ['libritts'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
-        'fetcher_mode': ['libritts'],
         'needs_collate': True,
         'max_wav_length': 256000,
         'max_text_length': 200,
