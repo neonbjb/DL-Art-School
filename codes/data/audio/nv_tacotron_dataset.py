@@ -18,7 +18,8 @@ from utils.util import opt_get
 def load_tsv(filename):
     with open(filename, encoding='utf-8') as f:
         components = [line.strip().split('\t') for line in f]
-        filepaths_and_text = [[component[1], component[0]] for component in components]
+        base = os.path.dirname(filename)
+        filepaths_and_text = [[os.path.join(base, f'clips/{component[1]}'), component[0]] for component in components]
     return filepaths_and_text
 
 
