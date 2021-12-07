@@ -91,6 +91,7 @@ class DiffusionVocoderWithRef(nn.Module):
             conditioning_inputs_provided=True,
             conditioning_input_dim=80,
             time_embed_dim_multiplier=4,
+            only_train_dvae_connection_layers=False,
     ):
         super().__init__()
 
@@ -131,6 +132,7 @@ class DiffusionVocoderWithRef(nn.Module):
                 )
             ]
         )
+        spectrogram_blocks = []
         self._feature_size = model_channels
         input_block_chans = [model_channels]
         ch = model_channels
@@ -138,7 +140,9 @@ class DiffusionVocoderWithRef(nn.Module):
 
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
             if ds in spectrogram_conditioning_resolutions:
-                self.input_blocks.append(DiscreteSpectrogramConditioningBlock(discrete_codes, ch))
+                spec_cond_block = DiscreteSpectrogramConditioningBlock(discrete_codes, ch)
+                self.input_blocks.append(spec_cond_block)
+                spectrogram_blocks.append(spec_cond_block)
                 ch *= 2
 
             for _ in range(num_blocks):
@@ -267,6 +271,15 @@ class DiffusionVocoderWithRef(nn.Module):
             nn.SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
+
+        if only_train_dvae_connection_layers:
+            for p in self.parameters():
+                p.DO_NOT_TRAIN = True
+                p.requires_grad = False
+            for sb in spectrogram_blocks:
+                for p in sb.parameters():
+                    del p.DO_NOT_TRAIN
+                    p.requires_grad = True
 
     def convert_to_fp16(self):
         """
