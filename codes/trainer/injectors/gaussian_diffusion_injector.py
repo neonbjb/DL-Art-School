@@ -31,7 +31,7 @@ class GaussianDiffusionInjector(Injector):
         hq = state[self.input]
 
         # In eval mode, seed torch with a deterministic seed for reproducibility.
-        if not gen.trainable:
+        if not gen.training():
             torch.manual_seed(0)
             random.seed(0)
 
@@ -51,7 +51,7 @@ class GaussianDiffusionInjector(Injector):
                 self.output_x_start_key: diffusion_outputs['x_start_predicted']})
 
         # Absolutely critical to undo the above seed.
-        if not gen.trainable:
+        if not gen.training():
             torch.manual_seed(int(time.time()))
             random.seed(int(time.time()))
 
