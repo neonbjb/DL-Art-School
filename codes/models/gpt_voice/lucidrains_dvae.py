@@ -249,7 +249,7 @@ class DiscreteVAE(nn.Module):
 
     def log_codes(self, codes):
         # This is so we can debug the distribution of codes being learned.
-        if self.record_codes and self.internal_step % 50 == 0:
+        if self.record_codes and self.internal_step % 10 == 0:
             codes = codes.flatten()
             l = codes.shape[0]
             i = self.code_ind if (self.codes.shape[0] - self.code_ind) > l else self.codes.shape[0] - l
