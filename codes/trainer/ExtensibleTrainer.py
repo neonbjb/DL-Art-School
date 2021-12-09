@@ -183,7 +183,7 @@ class ExtensibleTrainer(BaseModel):
             if isinstance(v, torch.Tensor):
                 self.dstate[k] = [t.to(self.device) for t in torch.chunk(v, chunks=batch_factor, dim=0)]
 
-    def optimize_parameters(self, step):
+    def optimize_parameters(self, step, optimize=True):
         # Some models need to make parametric adjustments per-step. Do that here.
         for net in self.networks.values():
             if hasattr(net.module, "update_for_step"):
@@ -255,7 +255,7 @@ class ExtensibleTrainer(BaseModel):
                     raise OverwrittenStateError(k, list(state.keys()))
                 state[k] = v
 
-            if train_step:
+            if train_step and optimize:
                 # And finally perform optimization.
                 [e.before_optimize(state) for e in self.experiments]
                 s.do_step(step)

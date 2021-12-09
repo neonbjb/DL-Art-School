@@ -85,6 +85,6 @@ if __name__ == "__main__":
     for i, data in enumerate(tqdm(dataloader)):
         current_batch = data
         model.feed_data(data, i)
-        model.optimize_parameters(i)
+        model.optimize_parameters(i, optimize=False)
 
 
