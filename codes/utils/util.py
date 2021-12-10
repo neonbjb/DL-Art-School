@@ -18,6 +18,9 @@ from torch.utils.checkpoint import checkpoint
 from torch._six import inf
 
 import yaml
+
+from trainer import networks
+
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
 except ImportError:
@@ -461,3 +464,23 @@ def clip_grad_norm(parameters: list, parameter_names: list, max_norm: float, nor
         for p in parameters:
             p.grad.detach().mul_(clip_coef.to(p.grad.device))
     return total_norm
+
+
+Loader, Dumper = OrderedYaml()
+def load_model_from_config(cfg_file, model_name=None, dev='cuda', also_load_savepoint=True, load_path=None):
+    with open(cfg_file, mode='r') as f:
+        opt = yaml.load(f, Loader=Loader)
+    if model_name is None:
+        model_cfg = opt['networks'].values()
+        model_name = next(opt['networks'].keys())
+    else:
+        model_cfg = opt['networks'][model_name]
+    if 'which_model_G' in model_cfg.keys() and 'which_model' not in model_cfg.keys():
+        model_cfg['which_model'] = model_cfg['which_model_G']
+    model = networks.create_model(opt, model_cfg).to(dev)
+    if also_load_savepoint and f'pretrain_model_{model_name}' in opt['path'].keys():
+        assert load_path is None
+        load_path = opt['path'][f'pretrain_model_{model_name}']
+    if load_path is not None:
+        model.load_state_dict(torch.load(load_path))
+    return model
