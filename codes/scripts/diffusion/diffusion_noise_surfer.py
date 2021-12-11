@@ -49,10 +49,7 @@ def forward_pass(model, data, output_dir, spacing, audio_mode):
 def load_image(path, audio_mode):
     # Load test image
     if audio_mode:
-        im = load_audio(path, 22050)
-        padding_needed = ((im.shape[1]//8192)+1)*8192-im.shape[1]
-        im = torch.nn.functional.pad(im, (0, padding_needed))
-        im = im[:, :(im.shape[1]//8192)*8192].unsqueeze(0)
+        im = load_audio(path, 22050).unsqueeze(0)
     else:
         im = ToTensor()(Image.open(path)) * 2 - 1
         _, h, w = im.shape

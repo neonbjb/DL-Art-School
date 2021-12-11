@@ -15,7 +15,7 @@ def wav_to_mel(wav):
     """
     Converts an audio clip into a MEL tensor that the vocoder, DVAE and GptTts models use whenever a MEL is called for.
     """
-    return TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'normalize': True},{})({'wav': wav})['mel']
+    return TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel'},{})({'wav': wav})['mel']
 
 
 def convert_mel_to_codes(dvae_model, mel):

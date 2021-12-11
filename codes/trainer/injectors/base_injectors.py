@@ -627,6 +627,9 @@ def test_torch_mel_injector():
     inj = TorchMelSpectrogramInjector({'in': 'in', 'out': 'out'}, {})
     f = inj({'in': a.unsqueeze(0)})['out']
     plot_spectrogram(f[0])
+    inj = MelSpectrogramInjector({'in': 'in', 'out': 'out'}, {})
+    t = inj({'in': a.unsqueeze(0)})['out']
+    plot_spectrogram(t[0])
     print('Pause')
 
 

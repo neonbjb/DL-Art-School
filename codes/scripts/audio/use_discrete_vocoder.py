@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
-    parser.add_argument('-diffusion_model_path', type=str, help='Name of the diffusion model in opt.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae\\models\\6200_generator_ema.pth')
+    parser.add_argument('-diffusion_model_path', type=str, help='Name of the diffusion model in opt.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae_full\\models\\200_generator_ema.pth')
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-input_file', type=str, help='Path to the input audio file.', default='Z:\\clips\\books1\\3_dchha04 Romancing The Tribes\\00036.wav')
     parser.add_argument('-cond', type=str, help='Path to the conditioning input audio file.', default=None)
