@@ -31,4 +31,4 @@ if __name__ == '__main__':
         if len(mels) > args.num_batches:
             break
     mel_norms = torch.stack(mels).mean(0)
-    torch.save('mel_norms.pth', mel_norms)
+    torch.save(mel_norms, 'mel_norms.pth')
