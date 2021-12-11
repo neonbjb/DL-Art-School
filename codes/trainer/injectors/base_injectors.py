@@ -617,6 +617,8 @@ class TorchMelSpectrogramInjector(Injector):
         assert len(inp.shape) == 2
         self.mel_stft = self.mel_stft.to(inp.device)
         mel = self.mel_stft(inp)
+        # Perform dynamic range compression
+        mel = torch.log(torch.clamp(mel, min=1e-5))
         return {self.output: mel}
 
 
