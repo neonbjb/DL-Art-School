@@ -607,7 +607,8 @@ class TorchMelSpectrogramInjector(Injector):
         self.mel_stft = torchaudio.transforms.MelSpectrogram(n_fft=self.filter_length, hop_length=self.hop_length,
                                                              win_length=self.win_length, power=2, normalized=norm,
                                                              sample_rate=self.sampling_rate, f_min=self.mel_fmin,
-                                                             f_max=self.mel_fmax, n_mels=self.n_mel_channels)
+                                                             f_max=self.mel_fmax, n_mels=self.n_mel_channels,
+                                                             norm="slaney")
 
     def forward(self, state):
         inp = state[self.input]
