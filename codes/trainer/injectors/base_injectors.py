@@ -609,6 +609,11 @@ class TorchMelSpectrogramInjector(Injector):
                                                              sample_rate=self.sampling_rate, f_min=self.mel_fmin,
                                                              f_max=self.mel_fmax, n_mels=self.n_mel_channels,
                                                              norm="slaney")
+        self.mel_norm_file = opt_get(opt, ['mel_norm_file'], None)
+        if self.mel_norm_file is not None:
+            self.mel_norms = torch.load(self.mel_norm_file)
+        else:
+            self.mel_norms = None
 
     def forward(self, state):
         inp = state[self.input]
@@ -619,6 +624,9 @@ class TorchMelSpectrogramInjector(Injector):
         mel = self.mel_stft(inp)
         # Perform dynamic range compression
         mel = torch.log(torch.clamp(mel, min=1e-5))
+        if self.mel_norms is not None:
+            self.mel_norms = self.mel_norms.to(mel.device)
+            mel = mel / self.mel_norms.unsqueeze(0).unsqueeze(-1)
         return {self.output: mel}
 
 

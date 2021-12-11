@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='D:\\dlas\\options\\train_dvae_audio_clips.yml')
     parser.add_argument('-key', type=str, help='Key where audio data is stored', default='clip')
-    parser.add_argument('-num_batches', type=str, help='Number of batches to collect to compute the norm', default=10)
+    parser.add_argument('-num_batches', type=int, help='Number of batches to collect to compute the norm', default=10)
     args = parser.parse_args()
 
     with open(args.opt, mode='r') as f:
