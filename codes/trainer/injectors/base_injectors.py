@@ -632,7 +632,7 @@ class TorchMelSpectrogramInjector(Injector):
 
 def test_torch_mel_injector():
     a = load_audio('D:\\data\\audio\\libritts\\train-clean-100\\19\\198\\19_198_000000_000000.wav', 22050)
-    inj = TorchMelSpectrogramInjector({'in': 'in', 'out': 'out'}, {})
+    inj = TorchMelSpectrogramInjector({'in': 'in', 'out': 'out', 'mel_norm_file': '../experiments/clips_mel_norms.pth'}, {})
     f = inj({'in': a.unsqueeze(0)})['out']
     plot_spectrogram(f[0])
     inj = MelSpectrogramInjector({'in': 'in', 'out': 'out'}, {})

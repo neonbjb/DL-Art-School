@@ -11,11 +11,11 @@ from trainer.injectors.base_injectors import TorchMelSpectrogramInjector
 from utils.audio import plot_spectrogram
 
 
-def wav_to_mel(wav):
+def wav_to_mel(wav, mel_norms_file='../experiments/clips_mel_norms.pth'):
     """
     Converts an audio clip into a MEL tensor that the vocoder, DVAE and GptTts models use whenever a MEL is called for.
     """
-    return TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel'},{})({'wav': wav})['mel']
+    return TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_norm_file': mel_norms_file},{})({'wav': wav})['mel']
 
 
 def convert_mel_to_codes(dvae_model, mel):
