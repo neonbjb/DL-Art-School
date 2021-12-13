@@ -22,7 +22,7 @@ class ConfigurableStep(Module):
         self.env = env
         self.opt = env['opt']
         self.gen_outputs = opt_step['generator_outputs']
-        self.loss_accumulator = LossAccumulator()
+        self.loss_accumulator = LossAccumulator(buffer_sz=opt_get(opt_step, ['loss_log_buffer'], 50))
         self.optimizers = None
         self.scaler = GradScaler(enabled=self.opt['fp16'])
         self.grads_generated = False
