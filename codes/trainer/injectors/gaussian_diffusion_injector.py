@@ -61,12 +61,12 @@ class GaussianDiffusionInjector(Injector):
 
 
 def closest_multiple(inp, multiple):
-    div = inp / multiple
+    div = inp // multiple
     mod = inp % multiple
     if mod == 0:
         return inp
     else:
-        return (div+1)*multiple
+        return int((div+1)*multiple)
 
 
 # Performs inference using a network trained to predict a reverse diffusion process, which nets a image.

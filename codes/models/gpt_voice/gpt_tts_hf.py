@@ -147,7 +147,7 @@ def register_gpt_tts_hf(opt_net, opt):
 
 
 if __name__ == '__main__':
-    gpt = GptTtsHf()
+    gpt = GptTtsHf(model_dim=1024, heads=16)
     l = gpt(torch.randint(high=len(symbols), size=(2,100)),
             torch.randn(2,2,80,800),
             torch.randint(high=8192, size=(2,200)),
