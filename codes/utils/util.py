@@ -467,9 +467,12 @@ def clip_grad_norm(parameters: list, parameter_names: list, max_norm: float, nor
 
 
 Loader, Dumper = OrderedYaml()
-def load_model_from_config(cfg_file, model_name=None, dev='cuda', also_load_savepoint=True, load_path=None):
-    with open(cfg_file, mode='r') as f:
-        opt = yaml.load(f, Loader=Loader)
+def load_model_from_config(cfg_file=None, model_name=None, dev='cuda', also_load_savepoint=True, load_path=None, preloaded_options=None):
+    if preloaded_options is not None:
+        opt = preloaded_options
+    else:
+        with open(cfg_file, mode='r') as f:
+            opt = yaml.load(f, Loader=Loader)
     if model_name is None:
         model_cfg = opt['networks'].values()
         model_name = next(opt['networks'].keys())
