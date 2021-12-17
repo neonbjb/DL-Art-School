@@ -219,11 +219,13 @@ if __name__ == '__main__':
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
-        'needs_collate': True,
-        'max_wav_length': 256000,
+        'needs_collate': False,
+        'max_wav_length': 255995,
         'max_text_length': 200,
         'sample_rate': 22050,
         'load_conditioning': True,
+        'num_conditioning_candidates': 3,
+        'conditioning_length': 44100,
     }
     from data import create_dataset, create_dataloader
 
