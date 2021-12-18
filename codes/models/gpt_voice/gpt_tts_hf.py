@@ -27,9 +27,7 @@ class GptTtsHf(nn.Module):
         super().__init__()
         self.max_mel_tokens = max_mel_tokens
         self.max_symbols_per_phrase = max_symbols_per_phrase
-
         self.model_dim = model_dim
-        self.max_mel_tokens = max_mel_tokens
         self.max_conditioning_inputs = max_conditioning_inputs
         self.mel_length_compression = mel_length_compression
         self.conditioning_encoder = AudioMiniEncoder(80, model_dim)
@@ -112,8 +110,9 @@ class GptTtsHf(nn.Module):
 
     def inference(self, text_inputs, cond_inputs, do_sample=False, temperature=1.0, num_beams=8):
         if not hasattr(self, 'inference_model'):
-            self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.text_pos_embedding, self.final_norm, self.text_head)
+            self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.mel_pos_embedding, self.final_norm, self.mel_head)
 
+        text_inputs = F.pad(text_inputs, (0, self.max_symbols_per_phrase - text_inputs.shape[1]), value=self.STOP_TEXT_TOKEN)
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.START_TEXT_TOKEN, self.STOP_TEXT_TOKEN)
         text_emb = self.text_embedding(text_inputs)
         text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=text_inputs.device))
@@ -124,7 +123,7 @@ class GptTtsHf(nn.Module):
         while len(conds) < self.max_conditioning_inputs:
             conds.append(conds[-1])
         conds = torch.stack(conds, dim=1)
-        conds = conds + self.conditioning_embedding(torch.arange(conds.shape[1], device=conds.device))
+        conds = conds + self.conditioning_embedding
 
         emb = torch.cat([text_emb, conds], dim=1)
         self.inference_model.store_mel_emb(emb)
@@ -133,8 +132,8 @@ class GptTtsHf(nn.Module):
         fake_inputs[:,-1] = self.START_MEL_TOKEN
 
         gen = self.inference_model.generate(fake_inputs, do_sample=do_sample, bos_token_id=self.START_MEL_TOKEN, pad_token_id=self.STOP_MEL_TOKEN, eos_token_id=self.STOP_MEL_TOKEN,
-                          max_length=emb.shape[1]+self.max_mel_tokens, temperature=temperature, num_beams=num_beams, use_cache=True)
-        return gen[:, self.max_mel_frames:]
+                          max_length=emb.shape[1]+self.max_mel_tokens, temperature=temperature, num_beams=num_beams, use_cache=True, repetition_penalty=.2)
+        return gen[:, fake_inputs.shape[1]:]
 
 
 @register_model

@@ -511,7 +511,7 @@ class UNetModel(nn.Module):
         if self.num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_embed_dim)
         self.use_raw_y_as_embedding = use_raw_y_as_embedding
-        assert (self.num_classes is not None) != use_raw_y_as_embedding  # These are mutually-exclusive.
+        assert not ((self.num_classes is not None) and use_raw_y_as_embedding)  # These are mutually-exclusive.
 
         self.input_blocks = nn.ModuleList(
             [

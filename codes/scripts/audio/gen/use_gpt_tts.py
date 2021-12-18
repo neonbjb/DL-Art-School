@@ -1,8 +1,8 @@
 import argparse
-import os
 import random
 
 import torch
+import torch.nn.functional as F
 import torchaudio
 import yaml
 
@@ -10,12 +10,10 @@ from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import is_audio_file, find_files_of_type
 from models.tacotron2.text import text_to_sequence
 from scripts.audio.gen.speech_synthesis_utils import do_spectrogram_diffusion, \
-    load_discrete_vocoder_diffuser, wav_to_mel, convert_mel_to_codes
-from trainer.injectors.base_injectors import MelSpectrogramInjector
-from utils.audio import plot_spectrogram
+    load_discrete_vocoder_diffuser, wav_to_mel
+from trainer.injectors.base_injectors import TorchMelSpectrogramInjector
 from utils.options import Loader
 from utils.util import load_model_from_config
-import torch.nn.functional as F
 
 
 def do_vocoding(dvae, vocoder, diffuser, codes, cond=None, plot_spec=False):
@@ -34,9 +32,9 @@ def load_conditioning_candidates(path, num_conds, sample_rate=22050, cond_length
         elif gap > 0:
             rand_start = random.randint(0, gap)
             rel_clip = rel_clip[:, rand_start:rand_start + cond_length]
-        mel_clip = MelSpectrogramInjector({'in': 'wav', 'out': 'mel'},{})({'wav': rel_clip.unsqueeze(0)})['mel'].squeeze(0)
+        mel_clip = wav_to_mel(rel_clip.unsqueeze(0)).squeeze(0)
         related_mels.append(mel_clip)
-    return torch.stack(related_mels, dim=0)
+    return torch.stack(related_mels, dim=0).unsqueeze(0).cuda(), rel_clip.unsqueeze(0).cuda()
 
 
 
@@ -48,7 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts\\models\\22000_gpt.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts\\models\\23500_gpt.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I'm a language model that has learned to speak.")
     parser.add_argument('-cond_path', type=str, help='Folder containing conditioning samples.', default='Z:\\clips\\books1\\3042_18_Holden__000000000')
     parser.add_argument('-num_cond', type=int, help='Number of conditioning samples to load.', default=3)
@@ -62,10 +60,10 @@ if __name__ == '__main__':
 
     print("Loading data..")
     text = torch.IntTensor(text_to_sequence(args.text, ['english_cleaners'])).unsqueeze(0).cuda()
-    conds = load_conditioning_candidates(args.cond_path, args.num_cond).unsqueeze(0).cuda()
+    conds, cond_wav = load_conditioning_candidates(args.cond_path, args.num_cond)
 
     print("Performing GPT inference..")
-    codes = gpt.inference(text, conds, num_beams=4)  #TODO: check the text length during training and match that during inference.
+    codes = gpt.inference(text, conds, num_beams=4)
 
     # Delete the GPT TTS model to free up GPU memory
     del gpt
@@ -77,5 +75,5 @@ if __name__ == '__main__':
     diffuser = load_discrete_vocoder_diffuser()
 
     print("Performing vocoding..")
-    wav = do_spectrogram_diffusion(diffusion, dvae, diffuser, codes, conds[:, 0], spectrogram_compression_factor=128, plt_spec=True)
-    torchaudio.save('gpt_tts_output.wav', wav.squeeze(0), 10025)
+    wav = do_spectrogram_diffusion(diffusion, dvae, diffuser, codes, cond_wav, spectrogram_compression_factor=128, plt_spec=False)
+    torchaudio.save('gpt_tts_output.wav', wav.squeeze(0).cpu(), 10025)
