@@ -108,8 +108,8 @@ class GptTtsHf(nn.Module):
         loss_mel = F.cross_entropy(mel_logits, mel_targets.long())
         return loss_text.mean(), loss_mel.mean(), mel_logits
 
-    def inference(self, text_inputs, cond_inputs, do_sample=False, temperature=1.0, num_beams=8):
-        text_inputs, cond_inputs = torch.load("debug_text_and_cond.pt")
+    def inference(self, text_inputs, cond_inputs, do_sample=False, temperature=1.0, num_beams=8, repetition_penalty=1):
+        #text_inputs, cond_inputs = torch.load("debug_text_and_cond.pt")
 
         if not hasattr(self, 'inference_model'):
             self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.mel_pos_embedding, self.final_norm, self.mel_head)
@@ -134,8 +134,8 @@ class GptTtsHf(nn.Module):
         fake_inputs[:,-1] = self.START_MEL_TOKEN
 
         gen = self.inference_model.generate(fake_inputs, do_sample=do_sample, bos_token_id=self.START_MEL_TOKEN, pad_token_id=self.STOP_MEL_TOKEN, eos_token_id=self.STOP_MEL_TOKEN,
-                          max_length=emb.shape[1]+self.max_mel_tokens, temperature=temperature, num_beams=num_beams, use_cache=True)
-        return gen[:, fake_inputs.shape[1]:]
+                          max_length=emb.shape[1]+self.max_mel_tokens, temperature=temperature, num_beams=num_beams, use_cache=True, repetition_penalty=repetition_penalty)
+        return gen[:, fake_inputs.shape[1]:-1]
 
 
 @register_model
