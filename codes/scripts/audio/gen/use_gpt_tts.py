@@ -46,7 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts\\models\\23500_gpt.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts\\models\\32000_gpt.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I'm a language model that has learned to speak.")
     parser.add_argument('-cond_path', type=str, help='Folder containing conditioning samples.', default='Z:\\clips\\books1\\3042_18_Holden__000000000')
     parser.add_argument('-num_cond', type=int, help='Number of conditioning samples to load.', default=3)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     conds, cond_wav = load_conditioning_candidates(args.cond_path, args.num_cond)
 
     print("Performing GPT inference..")
-    codes = gpt.inference(text, conds, num_beams=4)
+    codes = gpt.inference(text, conds, num_beams=32)
 
     # Delete the GPT TTS model to free up GPU memory
     del gpt
