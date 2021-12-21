@@ -145,15 +145,17 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
         if input_ids.shape[1] != 1:
             text_inputs = input_ids[:, mel_len:]
             text_emb = self.transformer.get_input_embeddings()(text_inputs)
-            text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=text_emb.device))
+            if self.text_pos_embedding is not None:
+                text_emb = text_emb + self.text_pos_embedding(torch.arange(text_emb.shape[1], device=text_emb.device))
             if self.cached_mel_emb.shape[0] != text_emb.shape[0]:
                 mel_emb = self.cached_mel_emb.repeat_interleave(text_emb.shape[0]//self.cached_mel_emb.shape[0], 0)
             else:
                 mel_emb = self.cached_mel_emb
             emb = torch.cat([mel_emb, text_emb], dim=1)
         else:
-            emb = self.transformer.get_input_embeddings()(input_ids) + \
-                          self.text_pos_embedding(torch.tensor(attention_mask.shape[1]-mel_len, device=attention_mask.device)).unsqueeze(0).unsqueeze(0)
+            emb = self.transformer.get_input_embeddings()(input_ids)
+            if self.text_pos_embedding is not None:
+                emb = emb + self.text_pos_embedding(torch.tensor(attention_mask.shape[1]-mel_len, device=attention_mask.device)).unsqueeze(0).unsqueeze(0)
 
         transformer_outputs = self.transformer(
             inputs_embeds=emb,

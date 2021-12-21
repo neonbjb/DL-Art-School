@@ -115,11 +115,17 @@ class GptTtsHf(nn.Module):
 
     def inference(self, text_inputs, cond_inputs, do_sample=False, temperature=1.0, num_beams=8, repetition_penalty=1):
         if not hasattr(self, 'inference_model'):
-            self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.mel_pos_embedding, self.final_norm, self.mel_head)
+            self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, None, self.final_norm, self.mel_head)
 
         text_inputs = F.pad(text_inputs, (0, self.max_symbols_per_phrase - text_inputs.shape[1]), value=self.STOP_TEXT_TOKEN)
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.START_TEXT_TOKEN, self.STOP_TEXT_TOKEN)
         text_emb = self.text_embedding(text_inputs)
+
+        # Format conditioning inputs properly.
+        if len(cond_inputs.shape) == 3:
+            cond_inputs = cond_inputs.unsqueeze(1)  # Format a single conditioning input as a set of {1}
+        if cond_inputs.shape[-1] > self.max_conditioning_length:
+            cond_inputs = cond_inputs[:,:,:,:self.max_conditioning_length]
 
         conds = []
         for k in range(cond_inputs.shape[1]):
