@@ -69,6 +69,15 @@ def create_dataset(dataset_opt, return_collate=False):
         dataset_opt = munchify(default_params)
         if opt_get(dataset_opt, ['needs_collate'], True):
             collate = C()
+    elif mode == 'paired_voice_audio':
+        from data.audio.paired_voice_audio_dataset import TextWavLoader as D
+        from data.audio.paired_voice_audio_dataset import TextMelCollate as C
+        from models.tacotron2.hparams import create_hparams
+        default_params = create_hparams()
+        default_params.update(dataset_opt)
+        dataset_opt = munchify(default_params)
+        if opt_get(dataset_opt, ['needs_collate'], True):
+            collate = C()
     elif mode == 'gpt_tts':
         from data.audio.gpt_tts_dataset import GptTtsDataset as D
         from data.audio.gpt_tts_dataset import GptTtsCollater as C

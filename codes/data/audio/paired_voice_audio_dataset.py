@@ -7,11 +7,11 @@ import torch.nn.functional as F
 import torch.utils.data
 import torchaudio
 from tqdm import tqdm
+from transformers import GPT2TokenizerFast
 
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import find_files_of_type, is_audio_file
 from models.tacotron2.taco_utils import load_filepaths_and_text
-from models.tacotron2.text import text_to_sequence
 from utils.util import opt_get
 
 
@@ -84,6 +84,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.needs_collate = opt_get(hparams, ['needs_collate'], True)
         if not self.needs_collate:
             assert self.max_wav_len is not None and self.max_text_len is not None
+        self.tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
 
     def get_wav_text_pair(self, audiopath_and_text):
         # separate filename and text
@@ -93,8 +94,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         return (text_seq, wav, text, audiopath_and_text[0])
 
     def get_text(self, text):
-        text_norm = torch.IntTensor(text_to_sequence(text, self.text_cleaners))
-        return text_norm
+        return torch.IntTensor(self.tokenizer(text)['input_ids'])
 
     def load_conditioning_candidates(self, path):
         candidates = find_files_of_type('img', os.path.dirname(path), qualifier=is_audio_file)[0]
@@ -213,7 +213,7 @@ class TextMelCollate():
 if __name__ == '__main__':
     batch_sz = 8
     params = {
-        'mode': 'nv_tacotron',
+        'mode': 'paired_voice_audio',
         'path': ['Z:\\bigasr_dataset\\libritts\\test-clean_list.txt'],
         'fetcher_mode': ['libritts'],
         'phase': 'train',
@@ -234,11 +234,5 @@ if __name__ == '__main__':
     i = 0
     m = None
     for i, b in tqdm(enumerate(dl)):
-        if i > 5:
-            break
-        w = b['wav']
         for ib in range(batch_sz):
-            print(f'{i} {ib} {b["real_text"][ib]}')
-            torchaudio.save(f'{i}_clip_{ib}.wav', b['wav'][ib], ds.sample_rate)
-            for c in range(3):
-                torchaudio.save(f'{i}_clip_{ib}_cond{c}.wav', b['conditioning'][ib, c], ds.sample_rate)
+            print(f"text_seq: {b['text_lengths'].max()}, speech_seq: {b['wav_lengths'].max()//1024}")

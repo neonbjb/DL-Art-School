@@ -20,7 +20,7 @@ class ConditioningEncoder(nn.Module):
     def __init__(self,
                  spec_dim,
                  embedding_dim,
-                 attn_blocks=4,
+                 attn_blocks=6,
                  num_attn_heads=4,
                  do_checkpointing=False):
         super().__init__()
@@ -39,14 +39,13 @@ class ConditioningEncoder(nn.Module):
 
 
 class GptTtsHf(nn.Module):
-    NUMBER_TEXT_TOKENS = len(symbols)+1
-    START_TEXT_TOKEN = len(symbols)
+    NUMBER_TEXT_TOKENS = 50257  # The number of BPE tokens produced by the HF GPT2Tokenizer
     STOP_TEXT_TOKEN = 0
     NUMBER_MEL_CODES = 8194
     START_MEL_TOKEN = 8192
     STOP_MEL_TOKEN = 8193
 
-    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=200, max_mel_tokens=250, max_conditioning_inputs=3,
+    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=100, max_mel_tokens=250, max_conditioning_inputs=3,
                  checkpointing=True, mel_length_compression=1024, max_conditioning_length=60):
         super().__init__()
         self.max_mel_tokens = max_mel_tokens
@@ -54,7 +53,7 @@ class GptTtsHf(nn.Module):
         self.model_dim = model_dim
         self.max_conditioning_inputs = max_conditioning_inputs
         self.mel_length_compression = mel_length_compression
-        self.conditioning_encoder = ConditioningEncoder(80, model_dim)
+        self.conditioning_encoder = ConditioningEncoder(80, model_dim, num_attn_heads=heads)
         self.text_embedding = nn.Embedding(self.NUMBER_TEXT_TOKENS, model_dim)
         seq_length = 2+self.max_symbols_per_phrase+self.max_conditioning_inputs+self.max_mel_tokens
         self.gpt_config = GPT2Config(vocab_size=self.NUMBER_MEL_CODES,
