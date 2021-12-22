@@ -11,18 +11,15 @@ munch
 tqdm
 scp
 tensorboard
-linear_attention_transformer
 orjson
 einops
 lambda-networks
-vector-quantize-pytorch
 
 # For image generation stuff
 opencv-python
 kornia
 pytorch_ssim
 gsa-pytorch
-vector_quantize_pytorch
 pytorch_fid==0.1.1
 
 # For audio generation stuff
@@ -32,3 +29,14 @@ Unidecode==1.0.22
 tgt == 1.4.4
 pyworld == 0.2.10
 audio2numpy
+
+# For text stuff
+transformers
+tokenizers
+
+# lucidrains stuff
+vector_quantize_pytorch
+linear_attention_transformer
+rotary-embedding-torch
+axial_positional_embedding
+g-mlp-pytorch

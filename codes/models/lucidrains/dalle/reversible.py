@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
+from operator import itemgetter
 from torch.autograd.function import Function
 from torch.utils.checkpoint import get_device_states, set_device_states
 
 # for routing arguments into the functions of the reversible layer
-from utils.util import checkpoint
-
-
 def route_args(router, args, depth):
     routed_args = [(dict(), dict()) for _ in range(depth)]
     matched_keys = [key for key in args.keys() if key in router]
@@ -126,25 +124,20 @@ class _ReversibleFunction(Function):
         return dy, None, None
 
 class SequentialSequence(nn.Module):
-    def __init__(self, layers, args_route = {}, layer_dropout = 0., checkpoint=False):
+    def __init__(self, layers, args_route = {}, layer_dropout = 0.):
         super().__init__()
         assert all(len(route) == len(layers) for route in args_route.values()), 'each argument route map must have the same depth as the number of sequential layers'
         self.layers = layers
         self.args_route = args_route
         self.layer_dropout = layer_dropout
-        self.checkpoint = checkpoint
 
     def forward(self, x, **kwargs):
         args = route_args(self.args_route, kwargs, len(self.layers))
         layers_and_args = list(zip(self.layers, args))
 
         for (f, g), (f_args, g_args) in layers_and_args:
-            if self.checkpoint:
-                x = x + f(x, **f_args)
-                x = x + g(x, **g_args)
-            else:
-                x = x + checkpoint(f, x, **f_args)
-                x = x + checkpoint(g, x, **g_args)
+            x = x + f(x, **f_args)
+            x = x + g(x, **g_args)
         return x
 
 class ReversibleSequence(nn.Module):
