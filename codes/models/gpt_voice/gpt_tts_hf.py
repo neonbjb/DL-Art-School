@@ -40,6 +40,7 @@ class ConditioningEncoder(nn.Module):
 
 class GptTtsHf(nn.Module):
     NUMBER_TEXT_TOKENS = 50257  # The number of BPE tokens produced by the HF GPT2Tokenizer
+    START_TEXT_TOKEN = 50256
     STOP_TEXT_TOKEN = 0
     NUMBER_MEL_CODES = 8194
     START_MEL_TOKEN = 8192
