@@ -39,16 +39,18 @@ class ConditioningEncoder(nn.Module):
 
 
 class GptTtsHf(nn.Module):
-    NUMBER_TEXT_TOKENS = 50257  # The number of BPE tokens produced by the HF GPT2Tokenizer
-    START_TEXT_TOKEN = 50256
+    NUMBER_TEXT_TOKENS = 10000  # The number of tokens produced by our bespoke BPE tokenizer.
+    START_TEXT_TOKEN = 9999
     STOP_TEXT_TOKEN = 0
     NUMBER_MEL_CODES = 8194
     START_MEL_TOKEN = 8192
     STOP_MEL_TOKEN = 8193
 
-    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=100, max_mel_tokens=250, max_conditioning_inputs=3,
+    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=80, max_mel_tokens=250, max_conditioning_inputs=3,
                  checkpointing=True, mel_length_compression=1024, max_conditioning_length=60):
         super().__init__()
+
+
         self.max_mel_tokens = max_mel_tokens
         self.max_symbols_per_phrase = max_symbols_per_phrase
         self.model_dim = model_dim

@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.data
 import torchaudio
+from tokenizers import Tokenizer
 from tqdm import tqdm
 from transformers import GPT2TokenizerFast
 
@@ -84,7 +85,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.needs_collate = opt_get(hparams, ['needs_collate'], True)
         if not self.needs_collate:
             assert self.max_wav_len is not None and self.max_text_len is not None
-        self.tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+        self.tokenizer = Tokenizer.from_file(opt_get(hparams, ['tokenizer_vocab'], '../experiments/gpt_tts_tokenizer.json'))
 
     def get_wav_text_pair(self, audiopath_and_text):
         # separate filename and text
@@ -94,7 +95,11 @@ class TextWavLoader(torch.utils.data.Dataset):
         return (text_seq, wav, text, audiopath_and_text[0])
 
     def get_text(self, text):
-        return torch.IntTensor(self.tokenizer(text)['input_ids'])
+        tokens = self.tokenizer.encode(text).ids
+        tokens = torch.IntTensor(tokens)
+        assert not torch.any(tokens == 0)
+        assert not torch.any(tokens == 9999)
+        return tokens
 
     def load_conditioning_candidates(self, path):
         candidates = find_files_of_type('img', os.path.dirname(path), qualifier=is_audio_file)[0]
