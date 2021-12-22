@@ -16,10 +16,6 @@ from utils.options import Loader
 from utils.util import load_model_from_config
 
 
-def do_vocoding(dvae, vocoder, diffuser, codes, cond=None, plot_spec=False):
-    return
-
-
 # Loads multiple conditioning files at random from a folder.
 def load_conditioning_candidates(path, num_conds, sample_rate=22050, cond_length=44100):
     candidates = find_files_of_type('img', path, qualifier=is_audio_file)[0]
@@ -50,7 +46,38 @@ def load_conditioning(path, sample_rate=22050, cond_length=44100):
     return mel_clip.unsqueeze(0).cuda(), rel_clip.unsqueeze(0).cuda()
 
 
+def fix_autoregressive_output(codes, stop_token):
+    """
+    This function performs some padding on coded audio that fixes a mismatch issue between what the diffusion model was
+    trained on and what the autoregressive code generator creates (which has no padding or end).
+    This is highly specific to the DVAE being used, so this particular coding will not necessarily work if used with
+    a different DVAE. This can be inferred by feeding a audio clip padded with lots of zeros on the end through the DVAE
+    and copying out the last few codes.
+
+    Failing to do this padding will produce speech with a harsh end that sounds like "BLAH" or similar.
+    """
+    # Strip off the autoregressive stop token and add padding.
+    stop_token_indices = (codes == stop_token).nonzero()
+    if len(stop_token_indices) == 0:
+        print("No stop tokens found, enjoy that output of yours!")
+    else:
+        codes = codes[:stop_token_indices[0]]
+
+    padding = torch.tensor([83,   83,   83,  83,   83,   83,  83,   83,   83,   45,   45,  248],
+                           dtype=torch.long, device=codes.device)
+    return torch.cat([codes, padding])
+
+
 if __name__ == '__main__':
+    preselected_cond_voices = {
+        'trump': 'D:\\data\\audio\\sample_voices\\trump.wav',
+        'ryan_reynolds': 'D:\\data\\audio\\sample_voices\\ryan_reynolds.wav',
+        'ed_sheeran': 'D:\\data\\audio\\sample_voices\\ed_sheeran.wav',
+        'simmons': 'Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav',
+        'news_girl': 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav',
+        'dan_carlin': 'Y:\\clips\\books1\5_dchha06 Shield of the West\\00476.wav',
+    }
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt_diffuse', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
@@ -58,9 +85,11 @@ if __name__ == '__main__':
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_no_pos\\models\\28500_gpt_ema.pth')
-    parser.add_argument('-text', type=str, help='Text to speak.', default="Please set this in the courier drone when we dock.")
-    parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_no_pos\\models\\50000_gpt.pth')
+    parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
+    parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='')
+    parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='simmons')
+    parser.add_argument('-num_samples', type=int, help='How many outputs to produce.', default=1)
     args = parser.parse_args()
 
     print("Loading GPT TTS..")
@@ -71,12 +100,15 @@ if __name__ == '__main__':
 
     print("Loading data..")
     text = torch.IntTensor(text_to_sequence(args.text, ['english_cleaners'])).unsqueeze(0).cuda()
-    conds, cond_wav = load_conditioning(args.cond_path)
+    cond_path = args.cond_path if args.cond_preset is None else preselected_cond_voices[args.cond_preset]
+    conds, cond_wav = load_conditioning(cond_path)
 
     print("Performing GPT inference..")
-    codes = gpt.inference(text, conds, num_beams=32, repetition_penalty=10.0)
+    codes = gpt.inference(text, conds, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=20, top_p=.95,
+                          num_return_sequences=args.num_samples, length_penalty=.1, early_stopping=True)
 
     # Delete the GPT TTS model to free up GPU memory
+    stop_token = gpt.STOP_MEL_TOKEN
     del gpt
 
     print("Loading DVAE..")
@@ -86,5 +118,9 @@ if __name__ == '__main__':
     diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=50)
 
     print("Performing vocoding..")
-    wav = do_spectrogram_diffusion(diffusion, dvae, diffuser, codes, cond_wav, spectrogram_compression_factor=128, plt_spec=False)
-    torchaudio.save('gpt_tts_output.wav', wav.squeeze(0).cpu(), 10025)
+    # Perform vocoding on each batch element separately: Vocoding is very memory intensive.
+    for b in range(codes.shape[0]):
+        code = fix_autoregressive_output(codes[b], stop_token).unsqueeze(0)
+        wav = do_spectrogram_diffusion(diffusion, dvae, diffuser, code, cond_wav,
+                                       spectrogram_compression_factor=128, plt_spec=False)
+        torchaudio.save(f'gpt_tts_output_{b}.wav', wav.squeeze(0).cpu(), 11025)

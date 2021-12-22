@@ -43,8 +43,7 @@ if __name__ == '__main__':
     cond = inp if args.cond is None else load_audio(args.cond, 22050)
     if cond.shape[-1] > 44100+10000:
         cond = cond[:,10000:54100]
-    cond = torchaudio.transforms.Resample(22050, 10025)(cond.cpu()).cuda()
 
     print("Performing inference..")
     roundtripped = roundtrip_vocoding(dvae, diffusion, diffuser, inp, cond).cpu()
-    torchaudio.save('roundtrip_vocoded_output.wav', roundtripped.squeeze(0), 10025)
+    torchaudio.save('roundtrip_vocoded_output.wav', roundtripped.squeeze(0), 11025)
