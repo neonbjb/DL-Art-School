@@ -95,9 +95,11 @@ class TextWavLoader(torch.utils.data.Dataset):
         return (text_seq, wav, text, audiopath_and_text[0])
 
     def get_text(self, text):
-        tokens = self.tokenizer.encode(text).ids
+        tokens = self.tokenizer.encode(text.lower()).ids
         tokens = torch.IntTensor(tokens)
+        # Assert if any UNK,start,stop tokens encountered.
         assert not torch.any(tokens == 0)
+        assert not torch.any(tokens == 1)
         assert not torch.any(tokens == 9999)
         return tokens
 

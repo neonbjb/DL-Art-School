@@ -1,3 +1,6 @@
+import re
+
+import datasets
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
@@ -27,10 +30,35 @@ def build_text_file_from_priors(priors, output):
 
 
 def train():
+    with open('all_texts.txt', 'r', encoding='utf-8') as at:
+        ttsd = at.readlines()
+    bcd = datasets.load_dataset('bookcorpus', cache_dir='Z:\\huggingface_datasets\\cache')['train']
+    wkd = datasets.load_dataset('wikipedia', '20200501.en', cache_dir='Z:\\huggingface_datasets\\cache')['train']
+
+    allowed_characters_re = re.compile(r'^[a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.]+$')
+    def preprocess_word(word):
+        word = word.lower()
+        if not bool(allowed_characters_re.match(word)):
+            return ''
+        return word
+
+    def batch_iterator(batch_size=1000):
+        print("Processing ASR texts.")
+        for i in range(0, len(ttsd), batch_size):
+            yield [preprocess_word(t) for t in ttsd[i:i+batch_size]]
+
+        print("Processing bookcorpus.")
+        for i in range(0, len(bcd), batch_size):
+            yield [preprocess_word(t) for t in bcd[i:i+batch_size]['text']]
+
+        print("Processing wikipedia.")
+        for i in range(0, len(wkd), batch_size):
+            yield [preprocess_word(t) for t in wkd[i:i+batch_size]['text']]
+
     trainer = BpeTrainer(special_tokens=['[STOP]', '[UNK]'], vocab_size=9999)
     tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
     tokenizer.pre_tokenizer = Whitespace()
-    tokenizer.train(['all_texts.txt'], trainer)
+    tokenizer.train_from_iterator(batch_iterator(), trainer, length=len(ttsd)+len(bcd)+len(wkd))
     tokenizer.save('gpt_tts_tokenizer.json')
 
 
