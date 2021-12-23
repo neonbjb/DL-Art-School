@@ -4,6 +4,7 @@ import datasets
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.processors import ByteLevel
 from tokenizers.trainers import BpeTrainer
 
 from data.audio.paired_voice_audio_dataset import load_mozilla_cv, load_voxpopuli, load_tsv
@@ -33,9 +34,8 @@ def train():
     with open('all_texts.txt', 'r', encoding='utf-8') as at:
         ttsd = at.readlines()
     bcd = datasets.load_dataset('bookcorpus', cache_dir='Z:\\huggingface_datasets\\cache')['train']
-    wkd = datasets.load_dataset('wikipedia', '20200501.en', cache_dir='Z:\\huggingface_datasets\\cache')['train']
 
-    allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\'\?—ʼ]+$')
+    allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\'\?—–ʼ]+$')
     def preprocess_word(word, report=False):
         word = word.strip().lower()
         if not bool(allowed_characters_re.match(word)):
@@ -53,14 +53,13 @@ def train():
         for i in range(0, len(bcd), batch_size):
             yield [preprocess_word(t) for t in bcd[i:i+batch_size]['text']]
 
-        print("Processing wikipedia.")
-        for i in range(0, len(wkd), batch_size):
-            yield [preprocess_word(t) for t in wkd[i:i+batch_size]['text']]
-
-    trainer = BpeTrainer(special_tokens=['[STOP]', '[UNK]'], vocab_size=9999)
+    trainer = BpeTrainer(special_tokens=['[STOP]', '[UNK]'], vocab_size=9999, continuing_subword_prefix='$$$')
     tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
     tokenizer.pre_tokenizer = Whitespace()
-    tokenizer.train_from_iterator(batch_iterator(), trainer, length=len(ttsd)+len(bcd)+len(wkd))
+    tokenizer.train_from_iterator(batch_iterator(), trainer, length=len(ttsd)+len(bcd))
+
+    print(tokenizer.decode(tokenizer.encode("i was traveling throughhadslfghds the woods in 1235375t137{{}}").ids))
+
     tokenizer.save('gpt_tts_tokenizer.json')
 
 
