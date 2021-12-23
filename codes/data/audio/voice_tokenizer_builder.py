@@ -35,7 +35,7 @@ def train():
     bcd = datasets.load_dataset('bookcorpus', cache_dir='Z:\\huggingface_datasets\\cache')['train']
     wkd = datasets.load_dataset('wikipedia', '20200501.en', cache_dir='Z:\\huggingface_datasets\\cache')['train']
 
-    allowed_characters_re = re.compile(r'^[a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.]+$')
+    allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\']+$')
     def preprocess_word(word):
         word = word.lower()
         if not bool(allowed_characters_re.match(word)):

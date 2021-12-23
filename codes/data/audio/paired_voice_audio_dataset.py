@@ -221,8 +221,8 @@ if __name__ == '__main__':
     batch_sz = 8
     params = {
         'mode': 'paired_voice_audio',
-        'path': ['Z:\\bigasr_dataset\\libritts\\test-clean_list.txt'],
-        'fetcher_mode': ['libritts'],
+        'path': ['Z:\\clips\\podcasts-0-transcribed.tsv'],
+        'fetcher_mode': ['tsv'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
@@ -230,9 +230,7 @@ if __name__ == '__main__':
         'max_wav_length': 255995,
         'max_text_length': 200,
         'sample_rate': 22050,
-        'load_conditioning': True,
-        'num_conditioning_candidates': 3,
-        'conditioning_length': 44100,
+        'load_conditioning': False,
     }
     from data import create_dataset, create_dataloader
 
