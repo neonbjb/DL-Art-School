@@ -35,17 +35,19 @@ def train():
     bcd = datasets.load_dataset('bookcorpus', cache_dir='Z:\\huggingface_datasets\\cache')['train']
     wkd = datasets.load_dataset('wikipedia', '20200501.en', cache_dir='Z:\\huggingface_datasets\\cache')['train']
 
-    allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\']+$')
-    def preprocess_word(word):
-        word = word.lower()
+    allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\'\?—ʼ]+$')
+    def preprocess_word(word, report=False):
+        word = word.strip().lower()
         if not bool(allowed_characters_re.match(word)):
+            if report and word:
+                print(f"REPORTING: '{word}'")
             return ''
         return word
 
     def batch_iterator(batch_size=1000):
         print("Processing ASR texts.")
         for i in range(0, len(ttsd), batch_size):
-            yield [preprocess_word(t) for t in ttsd[i:i+batch_size]]
+            yield [preprocess_word(t, True) for t in ttsd[i:i+batch_size]]
 
         print("Processing bookcorpus.")
         for i in range(0, len(bcd), batch_size):
