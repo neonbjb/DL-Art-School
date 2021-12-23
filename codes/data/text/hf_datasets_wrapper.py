@@ -10,7 +10,7 @@ class HfDataset(Dataset):
         self.hfd = []
         for corpus in corpi:
             dataset_name, config = corpus
-            if config == '':
+            if config == '' or config == 'None':
                 config = None
             self.hfd.append(datasets.load_dataset(dataset_name, config, cache_dir=cache_path)[dataset_spec_key])
         self.key_maps = key_maps
