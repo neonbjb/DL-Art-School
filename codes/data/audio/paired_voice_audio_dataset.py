@@ -60,6 +60,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.load_conditioning = opt_get(hparams, ['load_conditioning'], False)
         self.conditioning_candidates = opt_get(hparams, ['num_conditioning_candidates'], 3)
         self.conditioning_length = opt_get(hparams, ['conditioning_length'], 44100)
+        self.debug_failures = opt_get(hparams, ['debug_loading_failures'], False)
         self.audiopaths_and_text = []
         for p, fm in zip(self.path, fetcher_mode):
             if fm == 'lj' or fm == 'libritts':
@@ -127,7 +128,8 @@ class TextWavLoader(torch.utils.data.Dataset):
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
             cond = self.load_conditioning_candidates(self.audiopaths_and_text[index][0]) if self.load_conditioning else None
         except:
-            print(f"error loading {self.audiopaths_and_text[index][0]}")
+            if self.debug_failures:
+                print(f"error loading {self.audiopaths_and_text[index][0]}")
             return self[index+1]
         if wav is None or \
             (self.max_wav_len is not None and wav.shape[-1] > self.max_wav_len) or \
