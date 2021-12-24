@@ -40,7 +40,7 @@ class ConditioningEncoder(nn.Module):
 
 class UnifiedGptVoice(nn.Module):
     """
-    Derived from GptTtsHf, but offers multiple modes of operation:
+    Derived from GptTtsHf, but offers multiple modes of autoregressive operation:
     - Text only
     - Voice only
     - Text conditioned on voice
@@ -191,6 +191,28 @@ class UnifiedGptVoice(nn.Module):
         mel_logits = self.get_logits(speech_conditioning_input, mel_emb, self.mel_head)
         loss_mel = F.cross_entropy(mel_logits, mel_targets.long())
         return loss_mel.mean()
+
+    def inference_speech(self, speech_conditioning_input, text_inputs, **hf_generate_kwargs):
+        if not hasattr(self, 'inference_model'):
+            self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, None, self.final_norm, self.mel_head)
+
+        text_inputs = F.pad(text_inputs, (0, self.max_symbols_per_phrase - text_inputs.shape[1]), value=self.STOP_TEXT_TOKEN)
+        text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.START_TEXT_TOKEN, self.STOP_TEXT_TOKEN)
+        text_emb = self.text_embedding(text_inputs)
+
+        # Randomly permute the conditioning spectrogram, to destroy any structure present.
+        speech_conditioning_input = self.randomly_permute_conditioning_input(speech_conditioning_input)
+        cond = self.conditioning_encoder(speech_conditioning_input).unsqueeze(1)
+
+        emb = torch.cat([cond, text_emb], dim=1)
+        self.inference_model.store_mel_emb(emb)
+
+        fake_inputs = torch.full((emb.shape[0],emb.shape[1]+1,), fill_value=1, dtype=torch.long, device=text_inputs.device)
+        fake_inputs[:,-1] = self.START_MEL_TOKEN
+
+        gen = self.inference_model.generate(fake_inputs, bos_token_id=self.START_MEL_TOKEN, pad_token_id=self.STOP_MEL_TOKEN, eos_token_id=self.STOP_MEL_TOKEN,
+                                            max_length=emb.shape[1]+self.max_mel_tokens, **hf_generate_kwargs)
+        return gen[:, fake_inputs.shape[1]:]
 
 
 @register_model

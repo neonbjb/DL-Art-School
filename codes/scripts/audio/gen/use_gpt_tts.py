@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 import yaml
+from tokenizers import Tokenizer
 
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import is_audio_file, find_files_of_type
@@ -76,6 +77,7 @@ if __name__ == '__main__':
         'simmons': 'Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav',
         'news_girl': 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav',
         'dan_carlin': 'Y:\\clips\\books1\5_dchha06 Shield of the West\\00476.wav',
+        'libri_test': 'Z:\\bigasr_dataset\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav'
     }
 
     parser = argparse.ArgumentParser()
@@ -83,13 +85,14 @@ if __name__ == '__main__':
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
     parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae_full\\models\\6100_generator_ema.pth')
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
-    parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts.yml')
+    parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_unified_voice.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_no_pos\\models\\50000_gpt.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_unified_voice\\models\\15000_gpt.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
     parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='')
-    parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='simmons')
+    parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
     parser.add_argument('-num_samples', type=int, help='How many outputs to produce.', default=1)
+    parser.add_argument('-tokenizer_vocab_file', type=str, help='Tokenizer vocabulary file used to train.', default='../experiments/custom_lowercase_gptvoice_tokenizer_r2.json')
     args = parser.parse_args()
 
     print("Loading GPT TTS..")
@@ -99,13 +102,14 @@ if __name__ == '__main__':
     gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path)
 
     print("Loading data..")
-    text = torch.IntTensor(text_to_sequence(args.text, ['english_cleaners'])).unsqueeze(0).cuda()
+    tokenizer = Tokenizer.from_file(args.tokenizer_vocab_file)
+    text = torch.IntTensor(tokenizer.encode(args.text.strip().lower()).ids).unsqueeze(0).cuda()
     cond_path = args.cond_path if args.cond_preset is None else preselected_cond_voices[args.cond_preset]
     conds, cond_wav = load_conditioning(cond_path)
 
     print("Performing GPT inference..")
-    codes = gpt.inference(text, conds, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=20, top_p=.95,
-                          num_return_sequences=args.num_samples, length_penalty=.1, early_stopping=True)
+    codes = gpt.inference_speech(conds, text, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=20, top_p=.95,
+                          num_return_sequences=args.num_samples, length_penalty=1, early_stopping=True)
 
     # Delete the GPT TTS model to free up GPU memory
     stop_token = gpt.STOP_MEL_TOKEN
