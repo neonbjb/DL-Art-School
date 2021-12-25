@@ -1,16 +1,10 @@
-import random
-from time import time
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import GPT2Model, GPT2Config, GPT2LMHeadModel, GPT2PreTrainedModel
-from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-from transformers.utils.model_parallel_utils import get_device_map, assert_device_map
+from transformers import GPT2Model, GPT2Config
 
 from models.arch_util import AttentionBlock
 from models.gpt_voice.gpt_asr_hf import GPT2InferenceModel
-from models.gpt_voice.mini_encoder import AudioMiniEncoder
 from models.tacotron2.text import symbols
 from trainer.networks import register_model
 from utils.util import opt_get
@@ -47,14 +41,14 @@ class UnifiedGptVoice(nn.Module):
     - Voice conditioned on text
     """
 
-    NUMBER_TEXT_TOKENS = 10000  # The number of tokens produced by our bespoke BPE tokenizer.
-    START_TEXT_TOKEN = 9999
+    NUMBER_TEXT_TOKENS = 256  # The number of tokens produced by our bespoke BPE tokenizer.
+    START_TEXT_TOKEN = 255
     STOP_TEXT_TOKEN = 0
     NUMBER_MEL_CODES = 8194
     START_MEL_TOKEN = 8192
     STOP_MEL_TOKEN = 8193
 
-    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=80, max_mel_tokens=250, max_conditioning_inputs=3,
+    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=120, max_mel_tokens=250, max_conditioning_inputs=3,
                  checkpointing=True, mel_length_compression=1024, max_conditioning_length=60):
         super().__init__()
 
@@ -222,7 +216,7 @@ def register_unified_gpt_voice(opt_net, opt):
 
 if __name__ == '__main__':
     gpt = UnifiedGptVoice(model_dim=256, heads=4)
-    l = gpt(torch.randn(2, 80, 800),
+    l = gpt(torch.randn(2, 120, 800),
             torch.randint(high=len(symbols), size=(2,80)),
             torch.randint(high=8192, size=(2,250)),
             torch.tensor([150*256,195*256]))

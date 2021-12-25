@@ -33,7 +33,7 @@ def build_text_file_from_priors(priors, output):
 def train():
     with open('all_texts.txt', 'r', encoding='utf-8') as at:
         ttsd = at.readlines()
-    bcd = datasets.load_dataset('bookcorpus', cache_dir='Z:\\huggingface_datasets\\cache')['train']
+    #bcd = datasets.load_dataset('bookcorpus', cache_dir='Z:\\huggingface_datasets\\cache')['train']
 
     allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\'\?—–ʼ]+$')
     def preprocess_word(word, report=False):
@@ -49,14 +49,14 @@ def train():
         for i in range(0, len(ttsd), batch_size):
             yield [preprocess_word(t, True) for t in ttsd[i:i+batch_size]]
 
-        print("Processing bookcorpus.")
-        for i in range(0, len(bcd), batch_size):
-            yield [preprocess_word(t) for t in bcd[i:i+batch_size]['text']]
+        #print("Processing bookcorpus.")
+        #for i in range(0, len(bcd), batch_size):
+        #    yield [preprocess_word(t) for t in bcd[i:i+batch_size]['text']]
 
-    trainer = BpeTrainer(special_tokens=['[STOP]', '[UNK]'], vocab_size=9999, continuing_subword_prefix='$$$')
+    trainer = BpeTrainer(special_tokens=['[STOP]', '[UNK]'], vocab_size=511, continuing_subword_prefix='$$$')
     tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
     tokenizer.pre_tokenizer = Whitespace()
-    tokenizer.train_from_iterator(batch_iterator(), trainer, length=len(ttsd)+len(bcd))
+    tokenizer.train_from_iterator(batch_iterator(), trainer, length=len(ttsd))#+len(bcd))
 
     print(tokenizer.decode(tokenizer.encode("i was traveling throughhadslfghds the woods in 1235375t137{{}}").ids))
 

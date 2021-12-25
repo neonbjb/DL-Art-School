@@ -86,7 +86,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.needs_collate = opt_get(hparams, ['needs_collate'], True)
         if not self.needs_collate:
             assert self.max_wav_len is not None and self.max_text_len is not None
-        self.tokenizer = Tokenizer.from_file(opt_get(hparams, ['tokenizer_vocab'], '../experiments/custom_lowercase_gptvoice_tokenizer_r2.json'))
+        self.tokenizer = Tokenizer.from_file(opt_get(hparams, ['tokenizer_vocab'], '../experiments/bpe_lowercase_asr_256.json'))
 
     def get_wav_text_pair(self, audiopath_and_text):
         # separate filename and text
