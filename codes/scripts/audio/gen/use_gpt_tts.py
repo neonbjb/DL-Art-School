@@ -112,7 +112,7 @@ if __name__ == '__main__':
                           num_return_sequences=args.num_samples, length_penalty=1, early_stopping=True)
 
     # Delete the GPT TTS model to free up GPU memory
-    stop_token = gpt.STOP_MEL_TOKEN
+    stop_token = gpt.stop_mel_token
     del gpt
 
     print("Loading DVAE..")

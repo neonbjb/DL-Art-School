@@ -1,16 +1,10 @@
-import random
-from time import time
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import GPT2Model, GPT2Config, GPT2LMHeadModel, GPT2PreTrainedModel
-from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-from transformers.utils.model_parallel_utils import get_device_map, assert_device_map
+from transformers import GPT2Model, GPT2Config
 
 from models.arch_util import AttentionBlock
 from models.gpt_voice.gpt_asr_hf import GPT2InferenceModel
-from models.gpt_voice.mini_encoder import AudioMiniEncoder
 from models.tacotron2.text import symbols
 from trainer.networks import register_model
 from utils.util import opt_get
@@ -39,8 +33,8 @@ class ConditioningEncoder(nn.Module):
 
 
 class GptTtsHf(nn.Module):
-    NUMBER_TEXT_TOKENS = 10000  # The number of tokens produced by our bespoke BPE tokenizer.
-    START_TEXT_TOKEN = 9999
+    NUMBER_TEXT_TOKENS = 256  # The number of tokens produced by our bespoke BPE tokenizer.
+    START_TEXT_TOKEN = 255
     STOP_TEXT_TOKEN = 0
     NUMBER_MEL_CODES = 8194
     START_MEL_TOKEN = 8192
