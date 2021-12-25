@@ -13,6 +13,7 @@ from transformers import GPT2TokenizerFast
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import find_files_of_type, is_audio_file
 from models.tacotron2.taco_utils import load_filepaths_and_text
+from models.tacotron2.text import text_to_sequence, sequence_to_text
 from utils.util import opt_get
 
 
@@ -44,6 +45,14 @@ def load_voxpopuli(filename):
             year = file[:4]
             filepaths_and_text.append([os.path.join(base, year, f'{file}.ogg.wav'), raw_text])
     return filepaths_and_text
+
+
+class CharacterTokenizer:
+    def encode(self, txt):
+        return text_to_sequence(txt, ['english_cleaners'])
+
+    def decode(self, seq):
+        return sequence_to_text(seq)
 
 
 class TextWavLoader(torch.utils.data.Dataset):
@@ -86,7 +95,10 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.needs_collate = opt_get(hparams, ['needs_collate'], True)
         if not self.needs_collate:
             assert self.max_wav_len is not None and self.max_text_len is not None
-        self.tokenizer = Tokenizer.from_file(opt_get(hparams, ['tokenizer_vocab'], '../experiments/bpe_lowercase_asr_256.json'))
+        if opt_get(hparams, ['use_bpe_tokenizer'], True):
+            self.tokenizer = Tokenizer.from_file(opt_get(hparams, ['tokenizer_vocab'], '../experiments/bpe_lowercase_asr_256.json'))
+        else:
+            self.tokenizer = CharacterTokenizer()
 
     def get_wav_text_pair(self, audiopath_and_text):
         # separate filename and text
