@@ -7,6 +7,7 @@ import torchaudio
 import yaml
 from tokenizers import Tokenizer
 
+from data.audio.paired_voice_audio_dataset import CharacterTokenizer
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import is_audio_file, find_files_of_type
 from models.tacotron2.text import text_to_sequence
@@ -87,12 +88,11 @@ if __name__ == '__main__':
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_unified_voice.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_unified_voice\\models\\15000_gpt.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_unified_voice\\models\\13750_gpt_ema.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
     parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='')
     parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
     parser.add_argument('-num_samples', type=int, help='How many outputs to produce.', default=1)
-    parser.add_argument('-tokenizer_vocab_file', type=str, help='Tokenizer vocabulary file used to train.', default='../experiments/custom_lowercase_gptvoice_tokenizer_r2.json')
     args = parser.parse_args()
 
     print("Loading GPT TTS..")
@@ -102,8 +102,13 @@ if __name__ == '__main__':
     gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path)
 
     print("Loading data..")
-    tokenizer = Tokenizer.from_file(args.tokenizer_vocab_file)
+    tokenizer = CharacterTokenizer()
     text = torch.IntTensor(tokenizer.encode(args.text.strip().lower()).ids).unsqueeze(0).cuda()
+    paired_text_length = gpt_opt['datasets']['train']['max_paired_text_length']
+    padding_needed = paired_text_length - text.shape[1]
+    assert padding_needed > 0
+    text = F.pad(text, (0,padding_needed))
+
     cond_path = args.cond_path if args.cond_preset is None else preselected_cond_voices[args.cond_preset]
     conds, cond_wav = load_conditioning(cond_path)
 
