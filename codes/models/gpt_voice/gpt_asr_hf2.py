@@ -297,17 +297,11 @@ class GptAsrHf2(nn.Module):
         self.inference_model.store_mel_emb(mel_emb)
 
         # "fake_inputs" are stand-ins for the MEL frames, which will be injected with the prep_inputs function above.
-        if cond_text is None:
-            fake_inputs = torch.full((mel_emb.shape[0],mel_emb.shape[1]+1,), fill_value=1, dtype=torch.long, device=mel_inputs.device)
-            fake_inputs[:,-1] = self.start_token
-        else:
-            cond_used = 10
-            fake_inputs = torch.full((mel_emb.shape[0],mel_emb.shape[1]+1+cond_used,), fill_value=1, dtype=torch.long, device=mel_inputs.device)
-            fake_inputs[:,-1-cond_used] = self.start_token
-            fake_inputs[:, -cond_used:] = cond_text[:, :cond_used]
+        fake_inputs = torch.full((mel_emb.shape[0],mel_emb.shape[1]+1,), fill_value=1, dtype=torch.long, device=mel_inputs.device)
+        fake_inputs[:,-1] = self.start_token
         gen = self.inference_model.generate(fake_inputs, do_sample=do_sample, bos_token_id=self.start_token, pad_token_id=0, eos_token_id=0,
                                             max_length=self.max_symbols_per_phrase+mel_emb.shape[1], temperature=temperature, num_beams=num_beams, use_cache=True)
-        return gen[:, mel_emb.shape[1]:]
+        return gen[:, mel_emb.shape[1]+1:]
 
 
 @register_model
