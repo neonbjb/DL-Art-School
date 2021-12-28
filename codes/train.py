@@ -264,7 +264,7 @@ class Trainer:
             self.epoch = epoch
             if opt['dist']:
                 self.train_sampler.set_epoch(epoch)
-            tq_ldr = tqdm(self.train_loader)
+            tq_ldr = tqdm(self.train_loader) if self.rank == 0 else self.train_loader
 
             _t = time()
             for train_data in tq_ldr:
