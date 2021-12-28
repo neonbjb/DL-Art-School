@@ -50,7 +50,7 @@ class UnifiedGptVoice(nn.Module):
     def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=120, max_mel_tokens=250, max_total_tokens=370, max_conditioning_inputs=3,
                  checkpointing=True, mel_length_compression=1024, max_conditioning_length=60, number_text_tokens=256,
                  start_text_token=255, stop_text_token=0, number_mel_codes=8194, start_mel_token=8192,
-                 stop_mel_token=8193, use_dedicated_position_embeddings_for_paired=True):
+                 stop_mel_token=8193):
         super().__init__()
 
         self.number_text_tokens = number_text_tokens
@@ -69,13 +69,9 @@ class UnifiedGptVoice(nn.Module):
         self.conditioning_encoder = ConditioningEncoder(80, model_dim, num_attn_heads=heads)
         self.text_embedding = nn.Embedding(self.number_text_tokens, model_dim)
         self.text_pos_solo_embedding = nn.Embedding(self.max_symbols_per_phrase + 1, model_dim)
+        self.text_pos_paired_embedding = nn.Embedding(self.max_symbols_per_phrase + 1, model_dim)
         self.mel_pos_solo_embedding = nn.Embedding(self.max_mel_tokens + 1, model_dim)
-        if use_dedicated_position_embeddings_for_paired:
-            self.mel_pos_paired_embedding = nn.Embedding(self.max_mel_tokens + 1, model_dim)
-            self.text_pos_paired_embedding = nn.Embedding(self.max_symbols_per_phrase + 1, model_dim)
-        else:
-            self.mel_pos_paired_embedding = self.mel_pos_solo_embedding
-            self.text_pos_paired_embedding = self.text_pos_solo_embedding
+        self.mel_pos_paired_embedding = nn.Embedding(self.max_mel_tokens + 1, model_dim)
         seq_length = 2+self.max_total_tokens+self.max_conditioning_inputs
         self.gpt_config = GPT2Config(vocab_size=self.number_mel_codes,
                                      n_positions=seq_length,
@@ -251,7 +247,7 @@ def register_unified_gpt_voice(opt_net, opt):
 
 
 if __name__ == '__main__':
-    gpt = UnifiedGptVoice(model_dim=256, heads=4, use_dedicated_position_embeddings_for_paired=False)
+    gpt = UnifiedGptVoice(model_dim=256, heads=4)
     l = gpt(torch.randn(2, 80, 800),
             torch.randint(high=len(symbols), size=(2,80)),
             torch.randint(high=8192, size=(2,250)),
