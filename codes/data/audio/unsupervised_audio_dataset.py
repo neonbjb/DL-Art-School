@@ -69,6 +69,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         if self.pad_to is not None:
             self.pad_to *= self.sampling_rate
         self.pad_to = opt_get(opt, ['pad_to_samples'], self.pad_to)
+        self.min_length = opt_get(opt, ['min_length'], 0)
 
         # "Resampled clip" is audio data pulled from the basis of "clip" but with randomly different bounds. There are no
         # guarantees that "clip_resampled" is different from "clip": in fact, if "clip" is less than pad_to_seconds/samples,
@@ -79,9 +80,12 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         self.extra_sample_len = opt_get(opt, ['extra_sample_length'], 2)
         self.extra_sample_len *= self.sampling_rate
 
+        self.debug_loading_failures = opt_get(opt, ['debug_loading_failures'], True)
+
     def get_audio_for_index(self, index):
         audiopath = self.audiopaths[index]
         audio = load_audio(audiopath, self.sampling_rate)
+        assert audio.shape[1] > self.min_length
         return audio, audiopath
 
     def get_related_audio_for_index(self, index):
@@ -121,7 +125,8 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
             audio_norm, filename = self.get_audio_for_index(index)
             alt_files, actual_samples = self.get_related_audio_for_index(index)
         except:
-            print(f"Error loading audio for file {self.audiopaths[index]} {sys.exc_info()}")
+            if self.debug_loading_failures:
+                print(f"Error loading audio for file {self.audiopaths[index]} {sys.exc_info()}")
             return self[index+1]
 
         # When generating resampled clips, skew is a bias that tries to spread them out from each other, reducing their

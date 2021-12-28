@@ -257,14 +257,14 @@ class Trainer:
                     import wandb
                     wandb.log(eval_dict)
 
-
     def do_training(self):
         self.logger.info('Start training from epoch: {:d}, iter: {:d}'.format(self.start_epoch, self.current_step))
         for epoch in range(self.start_epoch, self.total_epochs + 1):
             self.epoch = epoch
             if opt['dist']:
                 self.train_sampler.set_epoch(epoch)
-            tq_ldr = tqdm(self.train_loader) if self.rank == 0 else self.train_loader
+
+            tq_ldr = tqdm(self.train_loader) if self.rank <= 0 else self.train_loader
 
             _t = time()
             for train_data in tq_ldr:
@@ -286,7 +286,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_gpt_asr_mass_hf2.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_voice_voice_clip.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
