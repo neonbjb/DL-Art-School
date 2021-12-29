@@ -60,8 +60,8 @@ class VoiceCLIP(nn.Module):
 
         # Introduce a random gap between the two clips.
         potential_gap = half_length // 4
-        if potential_gap > 0:
-            gap = random.randint(0, potential_gap)
+        gap = random.randint(0, potential_gap)
+        if gap > 0:
             first_half = first_half[:, :, :-gap]
             second_half = second_half[:, :, gap:]
 
@@ -111,6 +111,7 @@ def register_voice_to_voice_clip(opt_net, opt):
 
 if __name__ == '__main__':
     clip = VoiceCLIP()
-    clip(torch.randn((2,80,200)),
-         torch.randint(0,200*1024,(2,)),
-         return_loss=True)
+    for k in range(1000):
+        clip(torch.randn((2,80,156)),
+             torch.randint(130*1024,156*1024,(2,)),
+             return_loss=True)
