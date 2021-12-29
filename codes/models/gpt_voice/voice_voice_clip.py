@@ -70,6 +70,14 @@ class VoiceCLIP(nn.Module):
         loss = (F.cross_entropy(sim, labels) + F.cross_entropy(sim.t(), labels)) / 2
         return loss
 
+    def inference(self, speech_mels):
+        emb = self.encoder(speech_mels)
+        latent = self.to_latent(emb)
+        latent = F.normalize(latent, p=2, dim=-1)
+        temp = self.temperature.exp()
+        sim = einsum('i d, j d -> i j', latent, latent) * temp
+        return sim
+
 
 @register_model
 def register_voice_to_voice_clip(opt_net, opt):

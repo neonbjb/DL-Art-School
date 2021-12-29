@@ -485,5 +485,6 @@ def load_model_from_config(cfg_file=None, model_name=None, dev='cuda', also_load
         assert load_path is None
         load_path = opt['path'][f'pretrain_model_{model_name}']
     if load_path is not None:
+        print(f"Loading from {load_path}")
         model.load_state_dict(torch.load(load_path))
     return model
