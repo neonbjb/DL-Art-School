@@ -157,9 +157,10 @@ if __name__ == '__main__':
         'batch_size': batch_sz,
 
         'max_paired_audio_length': 255995,
-        'max_paired_text_length': 80,
+        'max_paired_text_length': 200,
         'max_solo_text_length': 330,
         'max_solo_audio_length': 300000,
+        'needs_collate': True,
         'paired_dataset_args': {
             'path': ['Z:\\bigasr_dataset\\libritts\\test-clean_list.txt'],
             'fetcher_mode': ['libritts'],
@@ -181,7 +182,7 @@ if __name__ == '__main__':
         'batch_size': batch_sz,
 
         'max_paired_audio_length': 255995,
-        'max_paired_text_length': 80,
+        'max_paired_text_length': 200,
         'max_solo_text_length': 330,
         'max_solo_audio_length': 300000,
         'only_paired': True,
