@@ -88,7 +88,7 @@ if __name__ == '__main__':
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_unified_voice.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_unified_voice\\models\\13750_gpt_ema.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_unified_voice\\models\\54000_gpt.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
     parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='')
     parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
