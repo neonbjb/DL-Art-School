@@ -51,6 +51,41 @@ def load_audio(audiopath, sampling_rate):
     return audio.unsqueeze(0)
 
 
+def load_similar_clips(path, sample_length, sample_rate, n=3, include_self=True):
+    sim_path = os.path.join(os.path.dirname(path), 'similarities.pth')
+    candidates = []
+    if os.path.exists(sim_path):
+        similarities = torch.load(sim_path)
+        fname = os.path.basename(path)
+        if fname in similarities.keys():
+            candidates = similarities[fname]
+        else:
+            print(f'Similarities list found for {path} but {fname} was not in that list.')
+    if len(candidates) == 0:
+        print(f"Falling back to non-similarity list for {path}")
+        candidates = find_files_of_type('img', os.path.dirname(path), qualifier=is_audio_file)[0]
+
+    assert len(candidates) < 50000  # Sanity check to ensure we aren't loading "related files" that aren't actually related.
+    if not include_self:
+        candidates.remove(path)
+    if len(candidates) == 0:
+        print(f"No conditioning candidates found for {path}")
+        raise NotImplementedError()
+
+    # Sample with replacement. This can get repeats, but more conveniently handles situations where there are not enough candidates.
+    related_clips = []
+    for k in range(n):
+        rel_clip = load_audio(os.path.join(os.path.dirname(path), random.choice(candidates)), sample_rate)
+        gap = rel_clip.shape[-1] - sample_length
+        if gap < 0:
+            rel_clip = F.pad(rel_clip, pad=(0, abs(gap)))
+        elif gap > 0:
+            rand_start = random.randint(0, gap)
+            rel_clip = rel_clip[:, rand_start:rand_start+sample_length]
+        related_clips.append(rel_clip)
+    return torch.stack(related_clips, dim=0)
+
+
 class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 
     def __init__(self, opt):
@@ -77,8 +112,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 
         # "Extra samples" are other audio clips pulled from wav files in the same directory as the 'clip' wav file.
         self.extra_samples = opt_get(opt, ['extra_samples'], 0)
-        self.extra_sample_len = opt_get(opt, ['extra_sample_length'], 2)
-        self.extra_sample_len *= self.sampling_rate
+        self.extra_sample_len = opt_get(opt, ['extra_sample_length'], 44000)
 
         self.debug_loading_failures = opt_get(opt, ['debug_loading_failures'], True)
 
@@ -92,38 +126,13 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         if self.extra_samples <= 0:
             return None, 0
         audiopath = self.audiopaths[index]
-        related_files = find_files_of_type('img', os.path.dirname(audiopath), qualifier=is_audio_file)[0]
-        assert audiopath in related_files
-        assert len(related_files) < 50000  # Sanity check to ensure we aren't loading "related files" that aren't actually related.
-        if len(related_files) == 0:
-            print(f"No related files for {audiopath}")
-        related_files.remove(audiopath)
-        related_clips = []
-        random.shuffle(related_clips)
-        i = 0
-        for related_file in related_files:
-            rel_clip = load_audio(related_file, self.sampling_rate)
-            gap = rel_clip.shape[-1] - self.extra_sample_len
-            if gap < 0:
-                rel_clip = F.pad(rel_clip, pad=(0, abs(gap)))
-            elif gap > 0:
-                rand_start = random.randint(0, gap)
-                rel_clip = rel_clip[:, rand_start:rand_start+self.extra_sample_len]
-            related_clips.append(rel_clip)
-            i += 1
-            if i >= self.extra_samples:
-                break
-        actual_extra_samples = i
-        while i < self.extra_samples:
-            related_clips.append(torch.zeros(1, self.extra_sample_len))
-            i += 1
-        return torch.stack(related_clips, dim=0), actual_extra_samples
+        return load_similar_clips(audiopath, self.extra_sample_len, self.sampling_rate, n=self.extra_samples)
 
     def __getitem__(self, index):
         try:
             # Split audio_norm into two tensors of equal size.
             audio_norm, filename = self.get_audio_for_index(index)
-            alt_files, actual_samples = self.get_related_audio_for_index(index)
+            alt_files = self.get_related_audio_for_index(index)
         except:
             if self.debug_loading_failures:
                 print(f"Error loading audio for file {self.audiopaths[index]} {sys.exc_info()}")
@@ -155,7 +164,6 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
             output['resampled_clip'] = clips[1]
         if self.extra_samples > 0:
             output['alt_clips'] = alt_files
-            output['num_alt_clips'] = actual_samples
         return output
 
     def __len__(self):

@@ -1,6 +1,7 @@
 import os
 import os
 import random
+import sys
 
 import torch
 import torch.nn.functional as F
@@ -11,7 +12,7 @@ from tokenizers import Tokenizer
 from tqdm import tqdm
 from transformers import GPT2TokenizerFast
 
-from data.audio.unsupervised_audio_dataset import load_audio
+from data.audio.unsupervised_audio_dataset import load_audio, load_similar_clips
 from data.util import find_files_of_type, is_audio_file
 from models.tacotron2.taco_utils import load_filepaths_and_text
 from models.tacotron2.text import text_to_sequence, sequence_to_text
@@ -68,7 +69,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         assert len(self.path) == len(fetcher_mode)
 
         self.load_conditioning = opt_get(hparams, ['load_conditioning'], False)
-        self.conditioning_candidates = opt_get(hparams, ['num_conditioning_candidates'], 3)
+        self.conditioning_candidates = opt_get(hparams, ['num_conditioning_candidates'], 1)
         self.conditioning_length = opt_get(hparams, ['conditioning_length'], 44100)
         self.debug_failures = opt_get(hparams, ['debug_loading_failures'], False)
         self.audiopaths_and_text = []
@@ -119,33 +120,15 @@ class TextWavLoader(torch.utils.data.Dataset):
         assert not torch.any(tokens == 0)
         return tokens
 
-    def load_conditioning_candidates(self, path):
-        candidates = find_files_of_type('img', os.path.dirname(path), qualifier=is_audio_file)[0]
-        assert len(candidates) < 50000  # Sanity check to ensure we aren't loading "related files" that aren't actually related.
-        if len(candidates) == 0:
-            print(f"No conditioning candidates found for {path} (not even the clip itself??)")
-            raise NotImplementedError()
-        # Sample with replacement. This can get repeats, but more conveniently handles situations where there are not enough candidates.
-        related_clips = []
-        for k in range(self.conditioning_candidates):
-            rel_clip = load_audio(random.choice(candidates), self.sample_rate)
-            gap = rel_clip.shape[-1] - self.conditioning_length
-            if gap < 0:
-                rel_clip = F.pad(rel_clip, pad=(0, abs(gap)))
-            elif gap > 0:
-                rand_start = random.randint(0, gap)
-                rel_clip = rel_clip[:, rand_start:rand_start+self.conditioning_length]
-            related_clips.append(rel_clip)
-        return torch.stack(related_clips, dim=0)
-
     def __getitem__(self, index):
         try:
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
-            cond = self.load_conditioning_candidates(self.audiopaths_and_text[index][0]) if self.load_conditioning else None
+            cond = load_similar_clips(self.audiopaths_and_text[index][0], self.conditioning_length, self.sample_rate,
+                                      n=self.conditioning_candidates) if self.load_conditioning else None
         except:
             if self.debug_failures:
-                print(f"error loading {self.audiopaths_and_text[index][0]}")
-            return self[index+1]
+                print(f"error loading {self.audiopaths_and_text[index][0]} {sys.exc_info()}")
+            return self[(index+1) % len(self)]
         if wav is None or \
             (self.max_wav_len is not None and wav.shape[-1] > self.max_wav_len) or \
             (self.max_text_len is not None and tseq.shape[0] > self.max_text_len):
@@ -247,7 +230,9 @@ if __name__ == '__main__':
         'max_wav_length': 255995,
         'max_text_length': 200,
         'sample_rate': 22050,
-        'load_conditioning': False,
+        'load_conditioning': True,
+        'num_conditioning_candidates': 2,
+        'conditioning_length': 44000,
         'use_bpe_tokenizer': False,
     }
     from data import create_dataset, create_dataloader
@@ -259,3 +244,4 @@ if __name__ == '__main__':
     for i, b in tqdm(enumerate(dl)):
         for ib in range(batch_sz):
             print(f"text_seq: {b['text_lengths'].max()}, speech_seq: {b['wav_lengths'].max()//1024}")
+

@@ -57,10 +57,15 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
         self.max_solo_text_length = opt['max_solo_text_length']
         self.collate = opt_get(opt, ['needs_collate'], False)
         self.sample_rate = sample_rate
+        self.num_conditioning_candidates = opt_get(opt, ['num_conditioning_candidates'], 0)
+        self.conditioning_length = opt_get(opt, ['conditioning_length'], 44000)
+        load_conditioning = self.num_conditioning_candidates > 0
 
         # Set some sane arguments for all three datasets.
         paired_dataset_args['needs_collate'] = self.collate
-        paired_dataset_args['load_conditioning'] = False
+        paired_dataset_args['load_conditioning'] = load_conditioning
+        paired_dataset_args['num_conditioning_candidates'] = self.num_conditioning_candidates
+        paired_dataset_args['conditioning_length'] = self.conditioning_length
         paired_dataset_args['sample_rate'] = sample_rate
         paired_dataset_args['max_wav_length'] = self.max_paired_audio_length
         paired_dataset_args['max_text_length'] = self.max_paired_text_length
@@ -70,6 +75,8 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
             unsupervised_audio_args['sampling_rate'] = sample_rate
             unsupervised_audio_args['do_augmentation'] = False
             unsupervised_audio_args['resample_clip'] = False
+            unsupervised_audio_args['extra_samples'] = self.num_conditioning_candidates
+            unsupervised_audio_args['extra_sample_length'] = self.conditioning_length
             if self.collate:
                 unsupervised_audio_args['pad_to_samples'] = self.max_solo_audio_length
             self.speech = UnsupervisedAudioDataset(unsupervised_audio_args)
@@ -96,7 +103,7 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
         fetched = self.speech_and_text[i % len(self.speech_and_text)]
         if self.collate:
             tseq, wav, path, text, cond = fetched
-            return {
+            res = {
                 'real_text': text,
                 'padded_text': tseq,
                 'text_lengths': torch.tensor(tseq.shape[0], dtype=torch.long),
@@ -104,13 +111,26 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
                 'wav_lengths': torch.tensor(wav.shape[-1], dtype=torch.long),
                 'filenames': path
             }
+            if self.num_conditioning_candidates > 0:
+                res['conditioning'] = cond
+            return res
         else:
             return fetched
+
+    def optionally_add_conditioning_candidates(self, res, paired, solo=None):
+        if self.num_conditioning_candidates > 0:
+            if solo is None:
+                res['paired_audio_conditioning'] = paired['conditioning']
+                res['speech_audio_conditioning'] = paired['conditioning']
+            else:
+                res['paired_audio_conditioning'] = paired['conditioning']
+                res['speech_audio_conditioning'] = solo['alt_clips']
+        return res
 
     def __getitem__(self, i):
         snt = self.fetch_snt_at(i)
         if self.only_paired:
-            return {
+            return self.optionally_add_conditioning_candidates({
                 'paired_audio': snt['wav'],
                 'paired_audio_lengths': snt['wav_lengths'],
                 'paired_text': snt['real_text'],
@@ -121,14 +141,14 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
                 'speech_file': snt['filenames'],
                 'text_text': snt['real_text'],
                 'text_tokens': snt['padded_text'],
-            }
+            }, snt)
         else:
             txt, txt_tok = self.fetch_text_at(i % len(self.text))
             sp = self.speech[i % len(self.speech)]
             # Set upper bound on solo speech lengths. This is handled automatically when collation is turned off, but needs to be done otherwise.
             sp['clip'] = sp['clip'][:, :self.max_solo_audio_length]
             sp['clip_lengths'] = clamp(sp['clip_lengths'], 0, self.max_solo_audio_length)
-            return {
+            return self.optionally_add_conditioning_candidates({
                 'paired_audio': snt['wav'],
                 'paired_audio_lengths': snt['wav_lengths'],
                 'paired_text': snt['real_text'],
@@ -139,7 +159,7 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
                 'speech_file': sp['path'],
                 'text_text': txt,
                 'text_tokens': txt_tok,
-            }
+            }, snt, sp)
 
     def __len__(self):
         if self.only_paired:
@@ -161,9 +181,11 @@ if __name__ == '__main__':
         'max_solo_text_length': 330,
         'max_solo_audio_length': 300000,
         'needs_collate': True,
+        'num_conditioning_candidates': 2,
+        'conditioning_length': 44000,
         'paired_dataset_args': {
-            'path': ['Z:\\bigasr_dataset\\libritts\\test-clean_list.txt'],
-            'fetcher_mode': ['libritts'],
+            'path': ['Y:\\clips\\podcasts-0-transcribed.tsv'],
+            'fetcher_mode': ['tsv'],
             'use_bpe_tokenizer': False,
         },
         'unsupervised_audio_args': {
@@ -198,8 +220,11 @@ if __name__ == '__main__':
     ds, c = create_dataset(train_params, return_collate=True)
     dl = create_dataloader(ds, train_params, collate_fn=c)
 
-    def save(b, i, ib, key):
-        torchaudio.save(f'{i}_clip_{ib}_{key}.wav', b[key][ib], 22050)
+    def save(b, i, ib, key, c=None):
+        if c is not None:
+            torchaudio.save(f'{i}_clip_{ib}_{key}_{c}.wav', b[key][ib][c], 22050)
+        else:
+            torchaudio.save(f'{i}_clip_{ib}_{key}.wav', b[key][ib], 22050)
 
     def decode(b, ib, key):
         return ds.speech_and_text.tokenizer.decode(b[key][ib].cpu().numpy())
@@ -208,10 +233,16 @@ if __name__ == '__main__':
     m = None
     for i, b in tqdm(enumerate(dl)):
         for ib in range(batch_sz):
-            #save(b, i, ib, 'paired_audio')
-            print(f'Paired text: {b["paired_text"][ib]}')
+            save(b, i, ib, 'paired_audio')
+            save(b, i, ib, 'paired_audio_conditioning', 0)
+            save(b, i, ib, 'paired_audio_conditioning', 1)
+            print(f'Paired file: {b["paired_file"][ib]} text: {b["paired_text"][ib]}')
             print(f'Paired text decoded: {decode(b, ib, "paired_text_tokens")}')
             #save(b, i, ib, 'speech_audio')
-            print(f'Text: {b["text_text"][ib]}')
-            print(f'Text decoded: {decode(b, ib, "text_tokens")}')
+            #save(b, i, ib, 'speech_audio_conditioning', 0)
+            #save(b, i, ib, 'speech_audio_conditioning', 1)
+            #print(f'Text: {b["text_text"][ib]}')
+            #print(f'Text decoded: {decode(b, ib, "text_tokens")}')
+        if i > 5:
+            break
 
