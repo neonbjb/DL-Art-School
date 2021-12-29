@@ -66,7 +66,7 @@ def process_subdir(subdir, options, clip_sz):
         stacked = torch.stack(clips[:256], dim=0).cuda()
         clips = clips[256:]
         mels = wav_to_mel(stacked)
-        outp = clip_model.inference(mels)
+        outp = clip_model.inference(mels).cpu()
         if sims is None:
             sims = outp
         else:
