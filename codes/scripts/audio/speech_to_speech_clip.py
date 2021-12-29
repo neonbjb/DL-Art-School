@@ -101,7 +101,9 @@ if __name__ == '__main__':
     with open(args.o, mode='r') as f:
         opt = yaml.load(f, Loader=Loader)
 
+    print("Finding applicable files..")
     all_files = recursively_find_audio_directories(args.root_path)
+    print(f"Found {len(all_files)}. Processing.")
     fn = functools.partial(process_subdir, options=opt, clip_sz=args.clip_size)
     if args.num_workers > 1:
         with ThreadPool(args.num_workers) as pool:
