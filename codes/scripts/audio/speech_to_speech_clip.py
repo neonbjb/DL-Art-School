@@ -46,6 +46,11 @@ def process_subdir(subdir, options, clip_sz):
 
     root, paths = subdir
     root = str(root)
+    output_file = os.path.join(root, 'similarities.pth')
+    if os.path.exists(output_file):
+        print(f'{root} already processed. Skipping.')
+        return
+    print(f'Processing {root}..')
 
     clips = []
     for path in paths:
@@ -70,6 +75,8 @@ def process_subdir(subdir, options, clip_sz):
             sims = torch.cat([sims, outp], dim=0)
 
     simmap = {}
+    # TODO: this can be further improved. We're just taking the topk here but, there is no gaurantee that there is 3
+    # samples from the same speaker in any given folder.
     for path, sim in zip(paths, sims):
         n = min(4, len(sim))
         top3 = torch.topk(sim, n)
@@ -82,7 +89,7 @@ def process_subdir(subdir, options, clip_sz):
                 top_ind = top3.indices[i]
                 simpaths.append(os.path.relpath(paths[top_ind], root))
         simmap[rel] = simpaths
-    torch.save(simmap, os.path.join(root, 'similarities.pth'))
+    torch.save(simmap, output_file)
 
 
 if __name__ == '__main__':
@@ -94,7 +101,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', type=str, help='Path to the options YAML file used to train the CLIP model', default='../options/train_voice_voice_clip.yml')
     parser.add_argument('--num_workers', type=int, help='Number concurrent processes to use', default=1)
-    parser.add_argument('--root_path', type=str, help='Root path to search for audio directories from', default='Z:\\clips\\podcasts-0\\7_Joe Rogan Experience #1004 - W. Kamau Bell')
+    parser.add_argument('--root_path', type=str, help='Root path to search for audio directories from', default='Y:\\clips\\podcasts-0\\5177_20190625-Food Waste is Solvable')
     parser.add_argument('--clip_size', type=int, help='Amount of audio samples to pull from each file', default=22050)
     args = parser.parse_args()
 
