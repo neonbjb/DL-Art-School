@@ -11,7 +11,7 @@ from trainer.inject import Injector
 from utils.util import opt_get
 
 
-def spec_augment(mel_spectrogram, frequency_masking_para=27, time_masking_para=70, frequency_mask_num=1, time_mask_num=1):
+def spec_augment(mel_spectrogram, frequency_masking_para=27, time_masking_para=5, frequency_mask_num=1, time_mask_num=1):
 
     v = mel_spectrogram.shape[1]
     tau = mel_spectrogram.shape[2]

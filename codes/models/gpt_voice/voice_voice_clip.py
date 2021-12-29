@@ -1,3 +1,4 @@
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +7,7 @@ from torch import einsum
 
 from models.gpt_voice.mini_encoder import AudioMiniEncoder
 from models.lucidrains.dalle.transformer import Transformer
+from trainer.injectors.spec_augment import spec_augment
 from trainer.networks import register_model
 from utils.util import opt_get
 
@@ -47,10 +49,33 @@ class VoiceCLIP(nn.Module):
         return_loss=True
     ):
         half_length = min(speech_mels.shape[-1], torch.min(speech_lengths).item() // self.mel_compression_ratio) // 2
-        half_length = (half_length // 4) * 4  # Must be a multiple of 4.
 
+        # Extract two speech MELs from the same clip, apply some random noise to them and also apply specaugment to them.
         first_half = speech_mels[:, :, :half_length]
+        first_half = first_half + torch.rand_like(first_half) * .00001
+        first_half = spec_augment(first_half)
         second_half = speech_mels[:, :, half_length:half_length*2]
+        second_half = second_half + torch.rand_like(second_half) * .00001
+        second_half = spec_augment(second_half)
+
+        # Introduce a random gap between the two clips.
+        potential_gap = half_length // 4
+        if potential_gap > 0:
+            gap = random.randint(0, potential_gap)
+            first_half = first_half[:, :, :-gap]
+            second_half = second_half[:, :, gap:]
+
+        # The clips must be multiples of 4.
+        if first_half.shape[-1] % 4 != 0:
+            first_half = first_half[:, :, :first_half.shape[-1] // 4 * 4]
+        if second_half.shape[-1] % 4 != 0:
+            second_half = second_half[:, :, :second_half.shape[-1] // 4 * 4]
+
+        # Flip the clips randomly
+        if random.random() < .5:
+            t = first_half
+            first_half = second_half
+            second_half = t
 
         first_emb = self.encoder(first_half)
         first_latents = self.to_latent(first_emb)
