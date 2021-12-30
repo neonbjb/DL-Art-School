@@ -235,14 +235,14 @@ if __name__ == '__main__':
     m = None
     for i, b in tqdm(enumerate(dl)):
         for ib in range(batch_sz):
-            #save(b, i, ib, 'paired_audio')
-            #save(b, i, ib, 'paired_audio_conditioning', 0)
-            #save(b, i, ib, 'paired_audio_conditioning', 1)
-            #print(f'Paired file: {b["paired_file"][ib]} text: {b["paired_text"][ib]}')
-            #print(f'Paired text decoded: {decode(b, ib, "paired_text_tokens")}')
-            save(b, i, ib, 'speech_audio')
-            save(b, i, ib, 'speech_audio_conditioning', 0)
-            save(b, i, ib, 'speech_audio_conditioning', 1)
+            save(b, i, ib, 'paired_audio')
+            save(b, i, ib, 'paired_audio_conditioning', 0)
+            save(b, i, ib, 'paired_audio_conditioning', 1)
+            print(f'Paired file: {b["paired_file"][ib]} text: {b["paired_text"][ib]}')
+            print(f'Paired text decoded: {decode(b, ib, "paired_text_tokens")}')
+            #save(b, i, ib, 'speech_audio')
+            #save(b, i, ib, 'speech_audio_conditioning', 0)
+            #save(b, i, ib, 'speech_audio_conditioning', 1)
             #print(f'Text: {b["text_text"][ib]}')
             #print(f'Text decoded: {decode(b, ib, "text_tokens")}')
         if i > 5:

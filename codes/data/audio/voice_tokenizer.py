@@ -1,6 +1,7 @@
 import re
 
 import datasets
+import torch
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
@@ -9,6 +10,25 @@ from tokenizers.trainers import BpeTrainer
 
 from data.audio.paired_voice_audio_dataset import load_mozilla_cv, load_voxpopuli, load_tsv
 from models.tacotron2.taco_utils import load_filepaths_and_text
+from models.tacotron2.text.cleaners import english_cleaners
+
+
+class VoiceBpeTokenizer:
+    def __init__(self, vocab_file):
+        self.tokenizer = Tokenizer.from_file(vocab_file)
+
+    def encode(self, txt):
+        txt = english_cleaners(txt)
+        txt = remove_extraneous_punctuation(txt)
+        txt = txt.replace(' ', '[SPACE]')
+        return self.tokenizer.encode(txt).ids
+
+    def decode(self, seq):
+        if isinstance(seq, torch.Tensor):
+            seq = seq.cpu().numpy()
+        txt = self.tokenizer.decode(seq, skip_special_tokens=False).replace(' ', '')
+        txt = txt.replace('[SPACE]', ' ')
+        return txt
 
 
 def build_text_file_from_priors(priors, output):
@@ -30,14 +50,33 @@ def build_text_file_from_priors(priors, output):
             out.flush()
 
 
+def remove_extraneous_punctuation(word):
+    replacement_punctuation = {
+        '{': '(', '}': ')',
+        '[': '(', ']': ')',
+        '`': '\'', '—': '-',
+        '—': '-', '`': '\'',
+        'ʼ': '\''
+    }
+    replace = re.compile("|".join([re.escape(k) for k in sorted(replacement_punctuation, key=len, reverse=True)]), flags=re.DOTALL)
+    word = replace.sub(lambda x: replacement_punctuation[x.group(0)], word)
+
+    # TODO: some of these are spoken ('@', '%', '+', etc). Integrate them into the cleaners.
+    extraneous = re.compile(r'^[@#%_=\$\^&\*\+\\]$')
+    word = extraneous.sub('', word)
+    return word
+
+
 def train():
     with open('all_texts.txt', 'r', encoding='utf-8') as at:
         ttsd = at.readlines()
     #bcd = datasets.load_dataset('bookcorpus', cache_dir='Z:\\huggingface_datasets\\cache')['train']
 
-    allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\'\?—–ʼ]+$')
+    #allowed_characters_re = re.compile(r'^[0-9a-z!@#%_=:;"/, \-\$\^&\*\(\)\+\{\[\]\}\\\.\'\?—–ʼ]+$')
+    allowed_characters_re = re.compile(r'^[a-z!:;"/, \-\(\)\.\'\?ʼ]+$')
     def preprocess_word(word, report=False):
-        word = word.strip().lower()
+        word = english_cleaners(word)
+        word = remove_extraneous_punctuation(word)
         if not bool(allowed_characters_re.match(word)):
             if report and word:
                 print(f"REPORTING: '{word}'")
@@ -53,7 +92,7 @@ def train():
         #for i in range(0, len(bcd), batch_size):
         #    yield [preprocess_word(t) for t in bcd[i:i+batch_size]['text']]
 
-    trainer = BpeTrainer(special_tokens=['[STOP]', '[UNK]'], vocab_size=511, continuing_subword_prefix='$$$')
+    trainer = BpeTrainer(special_tokens=['[STOP]', '[UNK]', '[SPACE]'], vocab_size=255)
     tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
     tokenizer.pre_tokenizer = Whitespace()
     tokenizer.train_from_iterator(batch_iterator(), trainer, length=len(ttsd))#+len(bcd))
@@ -61,6 +100,18 @@ def train():
     print(tokenizer.decode(tokenizer.encode("i was traveling throughhadslfghds the woods in 1235375t137{{}}").ids))
 
     tokenizer.save('gpt_tts_tokenizer.json')
+
+
+def test():
+    tok = VoiceBpeTokenizer('gpt_tts_tokenizer.json')
+    with open('all_texts.txt', 'r', encoding='utf-8') as at:
+        ttsd = at.readlines()
+        for line in ttsd:
+            line = line.strip()
+            seq = tok.encode(line)
+            out = tok.decode(seq)
+            print(f">>>{line}")
+            print(f"<<<{out}")
 
 
 if __name__ == '__main__':
@@ -73,4 +124,5 @@ if __name__ == '__main__':
                                  ('Y:\\clips\\books2-transcribed.tsv', 'tsv'),
                                  ('Y:\\clips\\podcasts-0-transcribed.tsv', 'tsv')], 'all_texts.txt')
     '''
-    train()
+    #train()
+    test()
