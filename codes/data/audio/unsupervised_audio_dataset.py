@@ -51,19 +51,21 @@ def load_audio(audiopath, sampling_rate):
     return audio.unsqueeze(0)
 
 
-def load_similar_clips(path, sample_length, sample_rate, n=3, include_self=True):
+def load_similar_clips(path, sample_length, sample_rate, n=3, include_self=True, fallback_to_self=True):
     sim_path = os.path.join(os.path.dirname(path), 'similarities.pth')
     candidates = []
     if os.path.exists(sim_path):
         similarities = torch.load(sim_path)
         fname = os.path.basename(path)
         if fname in similarities.keys():
-            candidates = similarities[fname]
+            candidates = [os.path.join(os.path.dirname(path), s) for s in similarities[fname]]
         else:
             print(f'Similarities list found for {path} but {fname} was not in that list.')
     if len(candidates) == 0:
-        print(f"Falling back to non-similarity list for {path}")
-        candidates = find_files_of_type('img', os.path.dirname(path), qualifier=is_audio_file)[0]
+        if fallback_to_self:
+            candidates = [path]
+        else:
+            candidates = find_files_of_type('img', os.path.dirname(path), qualifier=is_audio_file)[0]
 
     assert len(candidates) < 50000  # Sanity check to ensure we aren't loading "related files" that aren't actually related.
     if not include_self:
@@ -75,7 +77,7 @@ def load_similar_clips(path, sample_length, sample_rate, n=3, include_self=True)
     # Sample with replacement. This can get repeats, but more conveniently handles situations where there are not enough candidates.
     related_clips = []
     for k in range(n):
-        rel_clip = load_audio(os.path.join(os.path.dirname(path), random.choice(candidates)), sample_rate)
+        rel_clip = load_audio(random.choice(candidates), sample_rate)
         gap = rel_clip.shape[-1] - sample_length
         if gap < 0:
             rel_clip = F.pad(rel_clip, pad=(0, abs(gap)))

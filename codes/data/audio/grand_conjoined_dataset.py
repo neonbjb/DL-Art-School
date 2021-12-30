@@ -1,6 +1,7 @@
 import os
 import os
 import random
+import shutil
 
 import torch
 import torch.nn.functional as F
@@ -189,8 +190,8 @@ if __name__ == '__main__':
             'use_bpe_tokenizer': False,
         },
         'unsupervised_audio_args': {
-            'path': ['Z:\\bigasr_dataset\\librispeech\\test_clean'],
-            'cache_path': 'test_cache_delete_me.pth',
+            'path': ['Y:\\clips\\podcasts-0\\6175_20170425-How the National Security Council Works'],
+            'cache_path': 'test_cache_delete_me2.pth',
         },
         'text_corpus_args': {
             'corpi': [['bookcorpus', '']],
@@ -216,6 +217,7 @@ if __name__ == '__main__':
         },
     }
     from data import create_dataset, create_dataloader
+    os.remove('test_cache_delete_me2.pth')
 
     ds, c = create_dataset(train_params, return_collate=True)
     dl = create_dataloader(ds, train_params, collate_fn=c)
@@ -233,14 +235,14 @@ if __name__ == '__main__':
     m = None
     for i, b in tqdm(enumerate(dl)):
         for ib in range(batch_sz):
-            save(b, i, ib, 'paired_audio')
-            save(b, i, ib, 'paired_audio_conditioning', 0)
-            save(b, i, ib, 'paired_audio_conditioning', 1)
-            print(f'Paired file: {b["paired_file"][ib]} text: {b["paired_text"][ib]}')
-            print(f'Paired text decoded: {decode(b, ib, "paired_text_tokens")}')
-            #save(b, i, ib, 'speech_audio')
-            #save(b, i, ib, 'speech_audio_conditioning', 0)
-            #save(b, i, ib, 'speech_audio_conditioning', 1)
+            #save(b, i, ib, 'paired_audio')
+            #save(b, i, ib, 'paired_audio_conditioning', 0)
+            #save(b, i, ib, 'paired_audio_conditioning', 1)
+            #print(f'Paired file: {b["paired_file"][ib]} text: {b["paired_text"][ib]}')
+            #print(f'Paired text decoded: {decode(b, ib, "paired_text_tokens")}')
+            save(b, i, ib, 'speech_audio')
+            save(b, i, ib, 'speech_audio_conditioning', 0)
+            save(b, i, ib, 'speech_audio_conditioning', 1)
             #print(f'Text: {b["text_text"][ib]}')
             #print(f'Text decoded: {decode(b, ib, "text_tokens")}')
         if i > 5:

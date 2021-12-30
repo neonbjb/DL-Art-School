@@ -45,6 +45,8 @@ def process_subdir(subdir, options, clip_sz):
         clip_model = load_model_from_config(preloaded_options=options, model_name='clip', also_load_savepoint=True)
 
     root, paths = subdir
+    if len(paths) == 0:
+        return
     root = str(root)
     output_file = os.path.join(root, 'similarities.pth')
     if os.path.exists(output_file):
@@ -100,8 +102,8 @@ if __name__ == '__main__':
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', type=str, help='Path to the options YAML file used to train the CLIP model', default='../options/train_voice_voice_clip.yml')
-    parser.add_argument('--num_workers', type=int, help='Number concurrent processes to use', default=1)
-    parser.add_argument('--root_path', type=str, help='Root path to search for audio directories from', default='Y:\\clips\\podcasts-0\\5177_20190625-Food Waste is Solvable')
+    parser.add_argument('--num_workers', type=int, help='Number concurrent processes to use', default=6)
+    parser.add_argument('--root_path', type=str, help='Root path to search for audio directories from', default='Y:\\bigasr_dataset\\tedlium')
     parser.add_argument('--clip_size', type=int, help='Amount of audio samples to pull from each file', default=22050)
     args = parser.parse_args()
 
