@@ -13,13 +13,35 @@ from models.tacotron2.taco_utils import load_filepaths_and_text
 from models.tacotron2.text.cleaners import english_cleaners
 
 
+def remove_extraneous_punctuation(word):
+    replacement_punctuation = {
+        '{': '(', '}': ')',
+        '[': '(', ']': ')',
+        '`': '\'', '—': '-',
+        '—': '-', '`': '\'',
+        'ʼ': '\''
+    }
+    replace = re.compile("|".join([re.escape(k) for k in sorted(replacement_punctuation, key=len, reverse=True)]), flags=re.DOTALL)
+    word = replace.sub(lambda x: replacement_punctuation[x.group(0)], word)
+
+    # TODO: some of these are spoken ('@', '%', '+', etc). Integrate them into the cleaners.
+    extraneous = re.compile(r'^[@#%_=\$\^&\*\+\\]$')
+    word = extraneous.sub('', word)
+    return word
+
+
 class VoiceBpeTokenizer:
     def __init__(self, vocab_file):
-        self.tokenizer = Tokenizer.from_file(vocab_file)
+        if vocab_file is not None:
+            self.tokenizer = Tokenizer.from_file(vocab_file)
 
-    def encode(self, txt):
+    def preprocess_text(self, txt):
         txt = english_cleaners(txt)
         txt = remove_extraneous_punctuation(txt)
+        return txt
+
+    def encode(self, txt):
+        txt = self.preprocess_text(txt)
         txt = txt.replace(' ', '[SPACE]')
         return self.tokenizer.encode(txt).ids
 
@@ -28,6 +50,9 @@ class VoiceBpeTokenizer:
             seq = seq.cpu().numpy()
         txt = self.tokenizer.decode(seq, skip_special_tokens=False).replace(' ', '')
         txt = txt.replace('[SPACE]', ' ')
+        txt = txt.replace('[STOP]', '')
+        txt = txt.replace('[UNK]', '')
+
         return txt
 
 
@@ -48,23 +73,6 @@ def build_text_file_from_priors(priors, output):
             for path, text in apt:
                 out.write(text + "\n")
             out.flush()
-
-
-def remove_extraneous_punctuation(word):
-    replacement_punctuation = {
-        '{': '(', '}': ')',
-        '[': '(', ']': ')',
-        '`': '\'', '—': '-',
-        '—': '-', '`': '\'',
-        'ʼ': '\''
-    }
-    replace = re.compile("|".join([re.escape(k) for k in sorted(replacement_punctuation, key=len, reverse=True)]), flags=re.DOTALL)
-    word = replace.sub(lambda x: replacement_punctuation[x.group(0)], word)
-
-    # TODO: some of these are spoken ('@', '%', '+', etc). Integrate them into the cleaners.
-    extraneous = re.compile(r'^[@#%_=\$\^&\*\+\\]$')
-    word = extraneous.sub('', word)
-    return word
 
 
 def train():

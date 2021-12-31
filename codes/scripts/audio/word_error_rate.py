@@ -5,6 +5,7 @@ import Levenshtein as Lev
 import torch
 from tqdm import tqdm
 
+from data.audio.voice_tokenizer import VoiceBpeTokenizer
 from models.tacotron2.text import cleaners
 
 
@@ -56,9 +57,27 @@ class WordErrorRate:
         return Lev.distance(''.join(w1), ''.join(w2))
 
 
+def load_truths(file):
+    niltok = VoiceBpeTokenizer(None)
+    out = {}
+    with open(file, 'r', encoding='utf-8') as f:
+        for line in f.readline():
+            spl = line.split('|')
+            if len(spl) != 2:
+                continue
+            path, truth = spl
+            path = path.replace('wav/', '')
+            truth = niltok.preprocess_text(truth)  # This may or may not be considered a "cheat", but the model is only trained on preprocessed text.
+            out[path] = truth
+    return out
+
+
 if __name__ == '__main__':
-    inference_tsv = 'D:\\dlas\\codes\\results.tsv'
-    libri_base = 'Z:\\libritts\\test-clean'
+    inference_tsv = 'results.tsv'
+    libri_base = '/h/bigasr_dataset/librispeech/test_clean/test_clean.txt'
+
+    # Pre-process truth values
+    truths = load_truths(libri_base)
 
     wer = WordErrorRate()
     wer_scores = []
@@ -67,13 +86,6 @@ if __name__ == '__main__':
         for line in tqdm(tsv):
             sentence_pred, wav = line.split('\t')
             sentence_pred = normalize_text(sentence_pred)
-
-            wav_comp = wav.split('_')
-            reader = wav_comp[0]
-            book = wav_comp[1]
-            txt_file = os.path.join(libri_base, reader, book, wav.replace('.wav', '.normalized.txt'))
-            with open(txt_file, 'r') as txt_file_hndl:
-                txt_uncleaned = txt_file_hndl.read()
-                sentence_real = normalize_text(clean_text(txt_uncleaned))
-                wer_scores.append(wer.wer_calc(sentence_real, sentence_pred))
+            sentence_real = normalize_text(truths[wav])
+            wer_scores.append(wer.wer_calc(sentence_real, sentence_pred))
     print(f"WER: {torch.tensor(wer_scores, dtype=torch.float).mean()}")
