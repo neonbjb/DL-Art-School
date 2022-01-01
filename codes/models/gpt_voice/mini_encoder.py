@@ -90,7 +90,8 @@ class ResBlock(nn.Module):
 
 
 class AudioMiniEncoder(nn.Module):
-    def __init__(self, spec_dim,
+    def __init__(self,
+                 spec_dim,
                  embedding_dim,
                  base_channels=128,
                  depth=2,
