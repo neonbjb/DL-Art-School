@@ -28,10 +28,6 @@ def build_paired_voice_dataset(args):
     return D(dataset_opt)
 
 
-def clamp(x, minimum, maximum):
-    return max(minimum, min(x, maximum))
-
-
 class GrandConjoinedDataset(torch.utils.data.Dataset):
     """
     A joint text & speech dataset that joins three separate datasets into a single batch:
@@ -78,7 +74,7 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
             unsupervised_audio_args['resample_clip'] = False
             unsupervised_audio_args['extra_samples'] = self.num_conditioning_candidates
             unsupervised_audio_args['extra_sample_length'] = self.conditioning_length
-            if self.collate:
+            if not self.collate:
                 unsupervised_audio_args['pad_to_samples'] = self.max_solo_audio_length
             self.speech = UnsupervisedAudioDataset(unsupervised_audio_args)
             self.text = HfDataset(**text_corpus_args)
@@ -148,7 +144,7 @@ class GrandConjoinedDataset(torch.utils.data.Dataset):
             sp = self.speech[i % len(self.speech)]
             # Set upper bound on solo speech lengths. This is handled automatically when collation is turned off, but needs to be done otherwise.
             sp['clip'] = sp['clip'][:, :self.max_solo_audio_length]
-            sp['clip_lengths'] = clamp(sp['clip_lengths'], 0, self.max_solo_audio_length)
+            sp['clip_lengths'] = sp['clip_lengths'].clamp(0, self.max_solo_audio_length)
             return self.optionally_add_conditioning_candidates({
                 'paired_audio': snt['wav'],
                 'paired_audio_lengths': snt['wav_lengths'],
@@ -181,8 +177,8 @@ if __name__ == '__main__':
         'max_paired_text_length': 200,
         'max_solo_text_length': 330,
         'max_solo_audio_length': 300000,
-        'needs_collate': True,
-        'num_conditioning_candidates': 2,
+        'needs_collate': False,
+        'num_conditioning_candidates': 1,
         'conditioning_length': 44000,
         'paired_dataset_args': {
             'path': ['Y:\\clips\\podcasts-0-transcribed.tsv'],
@@ -209,7 +205,7 @@ if __name__ == '__main__':
         'max_solo_text_length': 330,
         'max_solo_audio_length': 300000,
         'only_paired': True,
-        'needs_collate': True,
+        'needs_collate': False,
         'paired_dataset_args': {
             'path': ['Z:\\bigasr_dataset\\libritts\\test-clean_list.txt'],
             'fetcher_mode': ['libritts'],
