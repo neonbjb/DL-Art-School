@@ -162,7 +162,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 
         output = {
             'clip': clips[0],
-            'clip_lengths': audio_norm.shape[-1],
+            'clip_lengths': torch.tensor(audio_norm.shape[-1]),
             'path': filename,
         }
         if self.should_resample_clip:
