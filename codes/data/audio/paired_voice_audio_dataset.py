@@ -135,8 +135,8 @@ class TextWavLoader(torch.utils.data.Dataset):
             (self.max_text_len is not None and tseq.shape[0] > self.max_text_len):
             # Basically, this audio file is nonexistent or too long to be supported by the dataset.
             # It's hard to handle this situation properly. Best bet is to return the a random valid token and skew the dataset somewhat as a result.
-            #if wav is not None:
-            #    print(f"Exception {index} wav_len:{wav.shape[-1]} text_len:{tseq.shape[0]} fname: {path}")
+            if self.debug_failures:
+                print(f"error loading {path}: ranges are out of bounds; {wav.shape[-1]}, {tseq.shape[0]}")
             rv = random.randint(0,len(self)-1)
             return self[rv]
         orig_output = wav.shape[-1]

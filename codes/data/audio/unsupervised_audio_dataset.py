@@ -85,7 +85,10 @@ def load_similar_clips(path, sample_length, sample_rate, n=3, include_self=True,
             rand_start = random.randint(0, gap)
             rel_clip = rel_clip[:, rand_start:rand_start+sample_length]
         related_clips.append(rel_clip)
-    return torch.stack(related_clips, dim=0)
+    if n > 1:
+        return torch.stack(related_clips, dim=0)
+    else:
+        return related_clips[0]
 
 
 class UnsupervisedAudioDataset(torch.utils.data.Dataset):
