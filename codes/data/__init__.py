@@ -89,7 +89,7 @@ def create_dataset(dataset_opt, return_collate=False):
     elif mode == 'grand_conjoined_voice':
         from data.audio.grand_conjoined_dataset import GrandConjoinedDataset as D
         from data.zero_pad_dict_collate import ZeroPadDictCollate as C
-        if opt_get(dataset_opt, ['needs_collate'], True):
+        if opt_get(dataset_opt, ['needs_collate'], False):
             collate = C()
     else:
         raise NotImplementedError('Dataset [{:s}] is not recognized.'.format(mode))
