@@ -174,15 +174,15 @@ if __name__ == '__main__':
         'batch_size': batch_sz,
 
         'max_paired_audio_length': 255995,
-        'max_paired_text_length': 200,
-        'max_solo_text_length': 330,
-        'max_solo_audio_length': 300000,
-        'needs_collate': False,
+        'max_paired_text_length': 100,
+        'max_solo_text_length': 200,
+        'max_solo_audio_length': 307195,
         'num_conditioning_candidates': 1,
         'conditioning_length': 44000,
+        'needs_collate': True,
         'paired_dataset_args': {
-            'path': ['Y:\\clips\\podcasts-0-transcribed.tsv'],
-            'fetcher_mode': ['tsv'],
+            'path': ['Z:\\bigasr_dataset\\tedlium\\train-all.txt'],
+            'fetcher_mode': ['libritts'],
             'use_bpe_tokenizer': False,
         },
         'unsupervised_audio_args': {
