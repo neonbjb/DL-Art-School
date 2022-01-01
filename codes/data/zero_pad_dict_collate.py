@@ -35,7 +35,7 @@ class ZeroPadDictCollate():
         first_dict = batch[0]
         collated = {}
         for key in first_dict.keys():
-            if isinstance(first_dict[key], torch.Tensor):
+            if isinstance(first_dict[key], torch.Tensor) and len(first_dict[key].shape) > 0:
                 collated[key] = self.collate_tensors(batch, key)
             else:
                 collated[key] = self.collate_into_list(batch, key)
