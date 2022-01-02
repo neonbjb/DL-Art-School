@@ -1,21 +1,20 @@
 import functools
-import random
-from time import time
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import GPT2Model, GPT2Config, GPT2LMHeadModel, GPT2PreTrainedModel
+from transformers import GPT2Model, GPT2Config, GPT2PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.utils.model_parallel_utils import get_device_map, assert_device_map
 
-from models.tacotron2.text import symbols
 from trainer.networks import register_model
-from utils.audio import plot_spectrogram
 from utils.util import opt_get
 
 
 class ResBlock(nn.Module):
+    """
+    Basic residual convolutional block that uses GroupNorm.
+    """
     def __init__(self, chan):
         super().__init__()
         self.net = nn.Sequential(
@@ -30,30 +29,10 @@ class ResBlock(nn.Module):
         return F.relu(self.net(x) + x)
 
 
-class MelEncoder(nn.Module):
-    def __init__(self, channels, mel_channels=80, resblocks_per_reduction=2):
-        super().__init__()
-        self.channels = channels
-        self.encoder = nn.Sequential(nn.Conv1d(mel_channels, channels//4, kernel_size=3, padding=1),
-                                     nn.Sequential(*[ResBlock(channels//4) for _ in range(resblocks_per_reduction)]),
-                                     nn.Conv1d(channels//4, channels//2, kernel_size=3, stride=2, padding=1),
-                                     nn.GroupNorm(channels//16, channels//2),
-                                     nn.ReLU(),
-                                     nn.Sequential(*[ResBlock(channels//2) for _ in range(resblocks_per_reduction)]),
-                                     nn.Conv1d(channels//2, channels, kernel_size=3, stride=2, padding=1),
-                                     nn.GroupNorm(channels//8, channels),
-                                     nn.ReLU(),
-                                     nn.Sequential(*[ResBlock(channels) for _ in range(resblocks_per_reduction)]),
-                                     )
-        self.reduction = 4
-
-    def forward(self, x):
-        for e in self.encoder:
-            x = e(x)
-        return x
-
-
 class LeanMelEncoder(nn.Module):
+    """
+    Encodes a BxCxS MEL tensor into a latent space suitable for use with a transformer.
+    """
     def __init__(self, channels, mel_channels=80, resblocks_per_reduction=1):
         super().__init__()
         self.channels = channels
@@ -76,6 +55,14 @@ class LeanMelEncoder(nn.Module):
         for e in self.encoder:
             x = e(x)
         return x
+
+
+def null_position_embeddings(range, dim):
+    """
+    Helper method which simply returns a range-shaped tensor filled with zeros. Useful for emulating a no-effect
+    embedding.
+    """
+    return torch.zeros((range.shape[0], range.shape[1], dim), device=range.device)
 
 
 class GPT2InferenceModel(GPT2PreTrainedModel):
@@ -231,23 +218,20 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
         )
 
 
-def null_position_embeddings(range, dim):
-    return torch.zeros((range.shape[0], range.shape[1], dim), device=range.device)
-
-
 class GptAsrHf2(nn.Module):
-    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=800, max_mel_frames=3000, checkpointing=True,
-                 number_text_tokens=512, start_token=511, stop_token=0, lean_encoder=False):
+    """
+    Core module that encapsulates a set of embeddings, a MEL encoder, a GPT-style transformer and the head needed to
+    make its output useful.
+    """
+    def __init__(self, layers=8, model_dim=512, heads=8, max_symbols_per_phrase=800, max_mel_frames=3000,
+                 checkpointing=True, number_text_tokens=512, start_token=511, stop_token=0):
         super().__init__()
         self.number_text_tokens = number_text_tokens
         self.start_token = start_token
         self.stop_token = stop_token
         self.max_symbols_per_phrase = max_symbols_per_phrase
         self.model_dim = model_dim
-        if lean_encoder:
-            self.mel_encoder = LeanMelEncoder(model_dim)
-        else:
-            self.mel_encoder = MelEncoder(model_dim, resblocks_per_reduction=1)
+        self.mel_encoder = LeanMelEncoder(model_dim)
         self.max_mel_frames = max_mel_frames // self.mel_encoder.reduction
         seq_length = 2+self.max_symbols_per_phrase+self.max_mel_frames
         self.gpt_config = GPT2Config(vocab_size=self.number_text_tokens,
@@ -268,6 +252,7 @@ class GptAsrHf2(nn.Module):
         self.mel_pos_embedding = nn.Embedding(self.max_mel_frames, model_dim)
         self.text_solo_embedding = nn.Parameter(torch.randn(1,1,512) * self.gpt.config.initializer_range, requires_grad=True)
 
+        # Head layers
         self.final_norm = nn.LayerNorm(model_dim)
         self.text_head = nn.Linear(model_dim, self.number_text_tokens)
 
@@ -278,11 +263,17 @@ class GptAsrHf2(nn.Module):
                 module.weight.data[module.padding_idx].zero_()
 
     def build_aligned_inputs_and_targets(self, input, start_token, stop_token):
+        """
+        Helper function for producing inputs and outputs for the GPT model.
+        """
         inp = F.pad(input, (1,0), value=start_token)
         tar = F.pad(input, (0,1), value=stop_token)
         return inp, tar
 
     def get_logits(self, mel_inputs, text_emb, get_attns=False):
+        """
+        Helper function for producing text logits.
+        """
         if mel_inputs is None:
             emb = text_emb
             mel_len = 0
@@ -303,6 +294,10 @@ class GptAsrHf2(nn.Module):
         return text_logits
 
     def forward(self, mel_inputs, text_inputs, return_attentions=False):
+        """
+        "Normal" forward pass which produces a text loss when given a MEL-encoded audio clip and transcribed text
+        targets.
+        """
         assert text_inputs.shape[1] <= self.max_symbols_per_phrase, str(text_inputs.shape[1])
         assert text_inputs.max() <= self.number_text_tokens, str(text_inputs.max())
 
@@ -317,6 +312,9 @@ class GptAsrHf2(nn.Module):
         return loss_text.mean(), text_logits
 
     def text_only(self, text_inputs):
+        """
+        Used to train on only text inputs.
+        """
         assert text_inputs.shape[1] <= self.max_symbols_per_phrase, str(text_inputs.shape[1])
         assert text_inputs.max() <= self.number_text_tokens, str(text_inputs.max())
 
@@ -329,6 +327,9 @@ class GptAsrHf2(nn.Module):
         return loss_text.mean(), text_logits
 
     def inference(self, mel_inputs, do_sample=False, temperature=1.0, num_beams=8):
+        """
+        Performs inference by transcribing mel_inputs into text. Returns the text tokens.
+        """
         if not hasattr(self, 'inference_model'):
             self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.text_pos_embedding, self.final_norm, self.text_head)
 
@@ -369,9 +370,9 @@ def distill():
 if __name__ == '__main__':
     #distill()
 
-    gpt = GptAsrHf2(max_symbols_per_phrase=250, max_mel_frames=1400, layers=16, model_dim=512, heads=8, lean_encoder=True)
-    l = gpt(torch.randn(2,80,640), torch.randint(high=len(symbols), size=(2,80)))
-    gpt.text_only(torch.randint(high=len(symbols), size=(2,120)))
+    gpt = GptAsrHf2(max_symbols_per_phrase=250, max_mel_frames=1400, layers=16, model_dim=512, heads=8)
+    l = gpt(torch.randn(2,80,640), torch.randint(high=100, size=(2,80)))
+    gpt.text_only(torch.randint(high=100, size=(2,120)))
 
     #start = time()
     #gpt.inference(torch.randn(1,80,350), num_beams=1)
