@@ -231,7 +231,7 @@ class UnifiedGptVoice(nn.Module):
         speech_conditioning_input = self.conditioning_encoder(speech_conditioning_input).unsqueeze(1)
 
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.start_text_token, self.stop_text_token)
-        text_emb = self.text_embedding(text_inputs) + self.text_pos_solo_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device)) + self.text_solo_embedding
+        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device)) + self.text_solo_embedding
         text_logits = self.get_logits(speech_conditioning_input, text_emb, self.text_head)
         loss_text = F.cross_entropy(text_logits, text_targets.long())
         return loss_text.mean()
@@ -249,7 +249,7 @@ class UnifiedGptVoice(nn.Module):
 
         mel_inputs, mel_targets = self.build_aligned_inputs_and_targets(mel_inputs, self.start_mel_token, self.stop_mel_token)
         mel_emb = self.gpt.get_input_embeddings()(mel_inputs)
-        mel_emb = mel_emb + self.mel_pos_solo_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device)) + self.mel_solo_embedding
+        mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device)) + self.mel_solo_embedding
         mel_logits = self.get_logits(speech_conditioning_input, mel_emb, self.mel_head)
         loss_mel = F.cross_entropy(mel_logits, mel_targets.long())
         return loss_mel.mean()
