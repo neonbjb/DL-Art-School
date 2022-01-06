@@ -127,16 +127,16 @@ class BaseModel():
                 load_net_clean[k] = v
         network.load_state_dict(load_net_clean, strict=strict)
 
-    def save_training_state(self, epoch, iter_step):
+    def save_training_state(self, state):
         """Save training state during training, which will be used for resuming"""
-        state = {'epoch': epoch, 'iter': iter_step, 'schedulers': [], 'optimizers': []}
+        state.update({'schedulers': [], 'optimizers': []})
         for s in self.schedulers:
             state['schedulers'].append(s.state_dict())
         for o in self.optimizers:
             state['optimizers'].append(o.state_dict())
         if 'amp_opt_level' in self.opt.keys():
             state['amp'] = amp.state_dict()
-        save_filename = '{}.state'.format(iter_step)
+        save_filename = '{}.state'.format(utils.util.opt_get(state, ['iter'], 'no_step_provided'))
         save_path = os.path.join(self.opt['path']['training_state'], save_filename)
         torch.save(state, save_path)
         if '__state__' not in self.save_history.keys():

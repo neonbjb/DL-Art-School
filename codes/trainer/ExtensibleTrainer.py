@@ -270,7 +270,7 @@ class ExtensibleTrainer(BaseModel):
                     if self.auto_recover is None:
                         print("Detected NaN grads more than 10 steps in a row. Saving model weights and aborting.")
                         self.save(step)
-                        self.save_training_state(0, step)
+                        self.save_training_state({'iter': step})
                         raise ArithmeticError
                     else:
                         print(f"!!!!!!!!Detected NaN grads more than 10 steps in a row. Restoring to a state {self.auto_recover} saves ago.")

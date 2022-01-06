@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     # Also convert the state.
     resume_state_from = torch.load(opt_from['path']['resume_state'])
-    resume_state_to = model_to.save_training_state(0, 0, return_state=True)
+    resume_state_to = model_to.save_training_state({}, return_state=True)
     resume_state_from['optimizers'][0]['param_groups'].append(resume_state_to['optimizers'][0]['param_groups'][-1])
     torch.save(resume_state_from, "converted_state.pth")
 

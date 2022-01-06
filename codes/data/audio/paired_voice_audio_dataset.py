@@ -120,7 +120,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         try:
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
             cond, cond_is_self = load_similar_clips(self.audiopaths_and_text[index][0], self.conditioning_length, self.sample_rate,
-                                      n=self.conditioning_candidates) if self.load_conditioning else None
+                                      n=self.conditioning_candidates) if self.load_conditioning else None, False
         except:
             if self.skipped_items > 100:
                 raise  # Rethrow if we have nested too far.
@@ -160,6 +160,37 @@ class TextWavLoader(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.audiopaths_and_text)
+
+
+class PairedVoiceDebugger:
+    def __init__(self):
+        self.total_items = 0
+        self.loaded_items = 0
+        self.self_conditioning_items = 0
+
+    def get_state(self):
+        return {'total_items': self.total_items,
+                'loaded_items': self.loaded_items,
+                'self_conditioning_items': self.self_conditioning_items}
+
+    def load_state(self, state):
+        if isinstance(state, dict):
+            self.total_items = opt_get(state, ['total_items'], 0)
+            self.loaded_items = opt_get(state, ['loaded_items'], 0)
+            self.self_conditioning_items = opt_get(state, ['self_conditioning_items'], 0)
+
+    def update(self, batch):
+        self.total_items += batch['wav'].shape[0]
+        self.loaded_items += batch['skipped_items'].sum().item()
+        if 'conditioning' in batch.keys():
+            self.self_conditioning_items += batch['conditioning_contains_self'].sum().item()
+
+    def get_debugging_map(self):
+        return {
+            'total_samples_loaded': self.total_items,
+            'percent_skipped_samples': (self.loaded_items - self.total_items) / self.loaded_items,
+            'percent_conditioning_is_self': self.self_conditioning_items / self.loaded_items,
+        }
 
 
 if __name__ == '__main__':
