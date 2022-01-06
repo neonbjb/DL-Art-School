@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import einsum
 
-from models.gpt_voice.dvae_arch_playground.discretization_loss import DiscretizationLoss
+from models.gpt_voice.lucidrains_dvae import DiscretizationLoss
 from models.vqvae.vector_quantizer import VectorQuantize
 from models.vqvae.vqvae import Quantize
 from trainer.networks import register_model

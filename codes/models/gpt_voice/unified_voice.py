@@ -119,8 +119,8 @@ class UnifiedGptVoice(nn.Module):
         self.mel_pos_embedding = nn.Embedding(self.max_mel_tokens + 1, model_dim)
         seq_length = 2+max_text_tokens+self.max_mel_tokens+self.max_conditioning_inputs
         self.gpt_config = GPT2Config(vocab_size=self.number_mel_codes,
-                                     n_positions=seq_length,
-                                     n_ctx=seq_length,
+                                     n_positions=seq_length-100, # -100 is a hack for backwards compatibility. TODO: remove at some point.
+                                     n_ctx=seq_length-100,
                                      n_embd=model_dim,
                                      n_layer=layers,
                                      n_head=heads,
@@ -285,10 +285,10 @@ class UnifiedGptVoice(nn.Module):
 
     def inference_speech(self, speech_conditioning_input, text_inputs, **hf_generate_kwargs):
         if not hasattr(self, 'inference_model'):
-            self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.mel_pos_paired_embedding, self.final_norm, self.mel_head)
+            self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.mel_pos_embedding, self.final_norm, self.mel_head)
 
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.start_text_token, self.stop_text_token)
-        text_emb = self.text_embedding(text_inputs) + self.text_pos_paired_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device))
+        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device))
 
         if self.shuffle_conditioning:
             # Randomly permute the conditioning spectrogram, to destroy any structure present.

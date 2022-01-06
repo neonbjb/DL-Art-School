@@ -86,14 +86,15 @@ if __name__ == '__main__':
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
     parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae_full\\models\\6100_generator_ema.pth')
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
-    parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_unified_voice.yml')
+    parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_unified_finetune_tts.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_unified_voice\\models\\54000_gpt.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_unified_finetune_tts_libri_all_and_hifi_no_unsupervised\\models\\4000_gpt.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
     parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='')
     parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
     parser.add_argument('-num_samples', type=int, help='How many outputs to produce.', default=1)
     args = parser.parse_args()
+    # libritts_text = 'fall passed so quickly, there was so much going on around him, the tree quite forgot to look to himself.'
 
     print("Loading GPT TTS..")
     with open(args.opt_gpt_tts, mode='r') as f:
@@ -103,11 +104,10 @@ if __name__ == '__main__':
 
     print("Loading data..")
     tokenizer = CharacterTokenizer()
-    text = torch.IntTensor(tokenizer.encode(args.text.strip().lower()).ids).unsqueeze(0).cuda()
+    text = torch.IntTensor(tokenizer.encode(args.text)).unsqueeze(0).cuda()
+    text = F.pad(text, (0,1))  # This may not be necessary.
     paired_text_length = gpt_opt['datasets']['train']['max_paired_text_length']
-    padding_needed = paired_text_length - text.shape[1]
-    assert padding_needed > 0
-    text = F.pad(text, (0,padding_needed))
+    assert paired_text_length >= text.shape[1]
 
     cond_path = args.cond_path if args.cond_preset is None else preselected_cond_voices[args.cond_preset]
     conds, cond_wav = load_conditioning(cond_path)
