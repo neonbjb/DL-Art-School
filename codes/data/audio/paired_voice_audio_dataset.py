@@ -120,7 +120,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         try:
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
             cond, cond_is_self = load_similar_clips(self.audiopaths_and_text[index][0], self.conditioning_length, self.sample_rate,
-                                      n=self.conditioning_candidates) if self.load_conditioning else None, False
+                                      n=self.conditioning_candidates) if self.load_conditioning else (None, False)
         except:
             if self.skipped_items > 100:
                 raise  # Rethrow if we have nested too far.
