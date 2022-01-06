@@ -119,8 +119,8 @@ class UnifiedGptVoice(nn.Module):
         self.mel_pos_embedding = nn.Embedding(self.max_mel_tokens + 1, model_dim)
         seq_length = 2+max_text_tokens+self.max_mel_tokens+self.max_conditioning_inputs
         self.gpt_config = GPT2Config(vocab_size=self.number_mel_codes,
-                                     n_positions=seq_length-100, # -100 is a hack for backwards compatibility. TODO: remove at some point.
-                                     n_ctx=seq_length-100,
+                                     n_positions=seq_length,
+                                     n_ctx=seq_length,
                                      n_embd=model_dim,
                                      n_layer=layers,
                                      n_head=heads,
@@ -150,6 +150,13 @@ class UnifiedGptVoice(nn.Module):
             module.weight.data.normal_(mean=0.0, std=self.gpt.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def load_state_dict(self, state_dict: 'OrderedDict[str, Tensor]', strict: bool = True):
+        # Remove the attention biases. I don't know why these are called biases because they are really just fixed attention masks forced into nn.Parameters, which are
+        # easily regenerated and do not need to be saved. This is a hack to allow length modifications and should be removed in the future.
+        filtered = dict(filter(lambda i: not i[0].endswith('.attn.bias'), state_dict.items()))
+        assert len(filtered) == len(state_dict) - len(self.gpt.h)
+        return super().load_state_dict(filtered, strict)
 
     def build_aligned_inputs_and_targets(self, input, start_token, stop_token):
         inp = F.pad(input, (1,0), value=start_token)
@@ -298,7 +305,7 @@ class UnifiedGptVoice(nn.Module):
         emb = torch.cat([cond, text_emb], dim=1)
         self.inference_model.store_mel_emb(emb)
 
-        fake_inputs = torch.full((emb.shape[0],emb.shape[1]+1,), fill_value=1, dtype=torch.long, device=text_inputs.device)
+        fake_inputs = torch.full((emb.shape[0], emb.shape[1]+1,), fill_value=1, dtype=torch.long, device=text_inputs.device)
         fake_inputs[:,-1] = self.start_mel_token
 
         gen = self.inference_model.generate(fake_inputs, bos_token_id=self.start_mel_token, pad_token_id=self.stop_mel_token, eos_token_id=self.stop_mel_token,
