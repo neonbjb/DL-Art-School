@@ -96,6 +96,7 @@ class TextWavLoader(torch.utils.data.Dataset):
             self.tokenizer = VoiceBpeTokenizer(opt_get(hparams, ['tokenizer_vocab'], '../experiments/bpe_lowercase_asr_256.json'))
         else:
             self.tokenizer = CharacterTokenizer()
+        self.skipped_items = 0  # records how many items are skipped when accessing an index.
 
     def get_wav_text_pair(self, audiopath_and_text):
         # separate filename and text
@@ -115,14 +116,19 @@ class TextWavLoader(torch.utils.data.Dataset):
         return tokens
 
     def __getitem__(self, index):
+        self.skipped_items += 1
         try:
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
-            cond = load_similar_clips(self.audiopaths_and_text[index][0], self.conditioning_length, self.sample_rate,
+            cond, cond_is_self = load_similar_clips(self.audiopaths_and_text[index][0], self.conditioning_length, self.sample_rate,
                                       n=self.conditioning_candidates) if self.load_conditioning else None
         except:
+            if self.skipped_items > 100:
+                raise  # Rethrow if we have nested too far.
             if self.debug_failures:
                 print(f"error loading {self.audiopaths_and_text[index][0]} {sys.exc_info()}")
             return self[(index+1) % len(self)]
+        actually_skipped_items = self.skipped_items
+        self.skipped_items = 0
         if wav is None or \
             (self.max_wav_len is not None and wav.shape[-1] > self.max_wav_len) or \
             (self.max_text_len is not None and tseq.shape[0] > self.max_text_len):
@@ -144,10 +150,12 @@ class TextWavLoader(torch.utils.data.Dataset):
             'text_lengths': torch.tensor(orig_text_len, dtype=torch.long),
             'wav': wav,
             'wav_lengths': torch.tensor(orig_output, dtype=torch.long),
-            'filenames': path
+            'filenames': path,
+            'skipped_items': actually_skipped_items,
         }
         if self.load_conditioning:
             res['conditioning'] = cond
+            res['conditioning_contains_self'] = cond_is_self
         return res
 
     def __len__(self):
