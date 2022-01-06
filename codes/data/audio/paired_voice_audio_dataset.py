@@ -7,13 +7,9 @@ import torch
 import torch.nn.functional as F
 import torch.utils.data
 import torchaudio
-from munch import munchify
-from tokenizers import Tokenizer
 from tqdm import tqdm
-from transformers import GPT2TokenizerFast
 
 from data.audio.unsupervised_audio_dataset import load_audio, load_similar_clips
-from data.util import find_files_of_type, is_audio_file
 from models.tacotron2.taco_utils import load_filepaths_and_text
 from models.tacotron2.text import text_to_sequence, sequence_to_text
 from utils.util import opt_get
@@ -222,7 +218,7 @@ if __name__ == '__main__':
     batch_sz = 8
     params = {
         'mode': 'paired_voice_audio',
-        'path': ['Y:\\bigasr_dataset\\hifi_tts_mp3\\test.txt'],
+        'path': ['Y:\\bigasr_dataset\\hifi_tts\\test.txt'],
         'fetcher_mode': ['libritts'],
         'phase': 'train',
         'n_workers': 0,
