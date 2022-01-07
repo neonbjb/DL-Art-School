@@ -339,12 +339,16 @@ class GptAsrHf2(nn.Module):
         loss_text = F.cross_entropy(text_logits, text_targets.long())
         return loss_text.mean(), text_logits
 
-    def inference(self, mel_inputs, do_sample=False, temperature=1.0, num_beams=8):
+    def inference(self, mel_inputs, wav_lengths, do_sample=False, temperature=1.0, num_beams=8):
         """
         Performs inference by transcribing mel_inputs into text. Returns the text tokens.
         """
         if not hasattr(self, 'inference_model'):
             self.inference_model = GPT2InferenceModel(self.gpt_config, self.gpt, self.text_pos_embedding, self.final_norm, self.text_head)
+
+        # TODO: get rid of this..
+        max_mel_len = wav_lengths.max() // self.mel_compression
+        mel_inputs = mel_inputs[:, :, :max_mel_len]
 
         mel_emb = self.mel_encoder(mel_inputs)
         assert mel_emb.shape[-1] <= self.max_mel_frames

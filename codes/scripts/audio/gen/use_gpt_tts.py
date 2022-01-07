@@ -78,7 +78,7 @@ if __name__ == '__main__':
         'simmons': 'Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav',
         'news_girl': 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav',
         'dan_carlin': 'Y:\\clips\\books1\5_dchha06 Shield of the West\\00476.wav',
-        'libri_test': 'Z:\\bigasr_dataset\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav'
+        'libri_test': 'Y:\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav'
     }
 
     parser = argparse.ArgumentParser()

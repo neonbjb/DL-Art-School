@@ -24,7 +24,7 @@ def create_loss(opt_loss, env):
     elif 'lightweight_gan_divergence' == type:
         from models.lightweight_gan import LightweightGanDivergenceLoss
         return LightweightGanDivergenceLoss(opt_loss, env)
-    elif type == 'crossentropy':
+    elif type == 'crossentropy' or type == 'cross_entropy':
         return CrossEntropy(opt_loss, env)
     elif type == 'distillation':
         return Distillation(opt_loss, env)
