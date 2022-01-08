@@ -76,8 +76,7 @@ class VoiceCLIP(nn.Module):
         speech_tokens = speech_tokens[:, :max_mel_len]
 
         b, device = text.shape[0], text.device
-        if self.text_mask_percentage > 0:
-            text_mask = torch.rand_like(text.float()) > self.text_mask_percentage
+        text_mask = torch.rand_like(text.float()) > self.text_mask_percentage
 
         text_emb = self.text_emb(text)
         text_emb += self.text_pos_emb(torch.arange(text.shape[1], device=device))
