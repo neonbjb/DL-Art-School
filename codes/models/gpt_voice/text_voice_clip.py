@@ -32,14 +32,16 @@ class VoiceCLIP(nn.Module):
             dim_text=512,
             dim_speech=512,
             dim_latent=512,
-            num_text_tokens=10000,
+            num_text_tokens=256,
             text_enc_depth=6,
-            text_seq_len=200,
+            text_seq_len=120,
             text_heads=8,
             num_speech_tokens=8192,
             speech_enc_depth=6,
             speech_heads=8,
             speech_seq_len=250,
+            text_mask_percentage: 0,
+            wav_token_compression = 1024,
     ):
         super().__init__()
         self.text_emb = nn.Embedding(num_text_tokens, dim_text)
@@ -55,15 +57,27 @@ class VoiceCLIP(nn.Module):
         self.to_speech_latent = nn.Linear(dim_speech, dim_latent, bias=False)
 
         self.temperature = nn.Parameter(torch.tensor(1.))
+        self.text_mask_percentage = text_mask_percentage
+        self.wav_token_compression = wav_token_compression
 
     def forward(
             self,
             text,
+            text_lengths,
             speech_tokens,
-            text_mask=None,
+            wav_lengths,
             return_loss=False
     ):
+        # This model will receive micro-batches with a ton of padding for both the text and MELs. Ameliorate this by
+        # chopping the inputs by the maximum actual length.
+        max_text_len = text_lengths.max()
+        text = text[:, :max_text_len]
+        max_mel_len = wav_lengths.max() // self.wav_token_compression
+        speech_tokens = speech_tokens[:, :max_mel_len]
+
         b, device = text.shape[0], text.device
+        if self.text_mask_percentage > 0:
+            text_mask = torch.rand_like(text.float()) > self.text_mask_percentage
 
         text_emb = self.text_emb(text)
         text_emb += self.text_pos_emb(torch.arange(text.shape[1], device=device))
@@ -74,7 +88,7 @@ class VoiceCLIP(nn.Module):
         enc_text = self.text_transformer(text_emb, mask=text_mask)
         enc_speech = self.speech_transformer(speech_emb)
 
-        if exists(text_mask):
+        if self.text_mask_percentage > 0:
             text_latents = masked_mean(enc_text, text_mask, dim=1)
         else:
             text_latents = enc_text.mean(dim=1)
@@ -104,7 +118,7 @@ def register_voice_clip(opt_net, opt):
 
 
 if __name__ == '__main__':
-    clip = VoiceCLIP()
-    clip(torch.randint(0,1000,(2,200)),
+    clip = VoiceCLIP(text_mask_percentage=.2)
+    clip(torch.randint(0,256,(2,120)),
          torch.randint(0,8192,(2,250)),
          return_loss=True)
