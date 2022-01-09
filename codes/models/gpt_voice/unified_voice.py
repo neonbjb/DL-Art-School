@@ -8,6 +8,7 @@ from transformers import GPT2Model, GPT2Config
 from models.arch_util import AttentionBlock
 from models.gpt_voice.gpt_asr_hf import GPT2InferenceModel
 from models.gpt_voice.gpt_asr_hf2 import ResBlock
+from models.gpt_voice.transformer_builders import build_hf_gpt_transformer
 from models.tacotron2.text import symbols
 from trainer.networks import register_model
 from utils.util import opt_get
@@ -57,22 +58,6 @@ class MelEncoder(nn.Module):
         for e in self.encoder:
             x = e(x)
         return x.permute(0,2,1)
-
-
-def null_position_embeddings(range, dim):
-    return torch.zeros((range.shape[0], range.shape[1], dim), device=range.device)
-
-
-def build_hf_gpt_transformer(layers, model_dim, heads, num_tokens, max_seq_len, checkpointing):
-    gpt_config = GPT2Config(vocab_size=num_tokens,
-                                 n_positions=max_seq_len,
-                                 n_ctx=max_seq_len,
-                                 n_embd=model_dim,
-                                 n_layer=layers,
-                                 n_head=heads,
-                                 gradient_checkpointing=checkpointing,
-                                 use_cache=not checkpointing)
-    return GPT2Model(gpt_config)
 
 
 class UnifiedGptVoice(nn.Module):
@@ -133,14 +118,11 @@ class UnifiedGptVoice(nn.Module):
         self.seq_length = 4+max_text_tokens+self.max_mel_tokens+self.max_conditioning_inputs
         self.gpt = build_hf_gpt_transformer(layers, model_dim, heads, number_mel_codes, self.seq_length, checkpointing)
         if train_solo_embeddings:
-            self.mel_solo_embedding = nn.Parameter(torch.randn(1, 1, model_dim) * self.gpt.config.initializer_range, requires_grad=True)
-            self.text_solo_embedding = nn.Parameter(torch.randn(1, 1, model_dim) * self.gpt.config.initializer_range, requires_grad=True)
+            self.mel_solo_embedding = nn.Parameter(torch.randn(1, 1, model_dim) * .02, requires_grad=True)
+            self.text_solo_embedding = nn.Parameter(torch.randn(1, 1, model_dim) * .02, requires_grad=True)
         else:
             self.mel_solo_embedding = 0
             self.text_solo_embedding = 0
-        # Override the built in positional embeddings
-        del self.gpt.wpe
-        self.gpt.wpe = functools.partial(null_position_embeddings, dim=model_dim)
 
         if not use_mel_codes_as_input:
             self.gpt.wte = MelEncoder(model_dim, resblocks_per_reduction=1)
