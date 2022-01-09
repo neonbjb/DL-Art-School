@@ -267,6 +267,10 @@ class Trainer:
                     import wandb
                     wandb.log(eval_dict)
 
+        # Should not be necessary, but make absolutely sure that there is no grad leakage from validation runs.
+        for net in self.model.networks.values():
+            net.zero_grad()
+
     def do_training(self):
         self.logger.info('Start training from epoch: {:d}, iter: {:d}'.format(self.start_epoch, self.current_step))
         for epoch in range(self.start_epoch, self.total_epochs + 1):

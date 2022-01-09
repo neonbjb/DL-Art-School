@@ -322,9 +322,7 @@ class ConfigurableStep(Module):
                 self.scaler.step(opt)
                 self.scaler.update()
             else:
-                for pg in opt.param_groups:
-                    for p in pg['params']:
-                        p.grad = 0
+                opt.zero_grad()
 
     def get_metrics(self):
         return self.loss_accumulator.as_dict()
