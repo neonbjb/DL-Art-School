@@ -321,6 +321,10 @@ class ConfigurableStep(Module):
             if not nan_found:
                 self.scaler.step(opt)
                 self.scaler.update()
+            else:
+                for pg in opt.param_groups:
+                    for p in pg['params']:
+                        p.grad = 0
 
     def get_metrics(self):
         return self.loss_accumulator.as_dict()
