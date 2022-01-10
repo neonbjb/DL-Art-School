@@ -124,7 +124,7 @@ if __name__ == '__main__':
     text = F.pad(text, (0,1))  # This may not be necessary.
 
     cond_path = args.cond_path if args.cond_preset is None else preselected_cond_voices[args.cond_preset]
-    conds, cond_wav = load_conditioning(cond_path)
+    conds, cond_wav = load_conditioning(cond_path, cond_length=88000)
 
     with torch.no_grad():
         print("Performing GPT inference..")
