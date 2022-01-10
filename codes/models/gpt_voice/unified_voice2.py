@@ -105,14 +105,12 @@ class UnifiedVoice(nn.Module):
         self.mel_length_compression = mel_length_compression
         self.conditioning_encoder = ConditioningEncoder(80, model_dim, num_attn_heads=heads)
         self.text_embedding = nn.Embedding(self.number_text_tokens, model_dim)
-        self.text_pos_embedding = nn.Embedding(self.max_text_tokens + 2, model_dim)
         if use_mel_codes_as_input:
             self.mel_embedding = nn.Embedding(self.number_mel_codes, model_dim)
         else:
             self.mel_embedding = MelEncoder(model_dim, resblocks_per_reduction=1)
-        self.mel_pos_embedding = nn.Embedding(self.max_mel_tokens + 2, model_dim)
-        self.seq_length = 4+max_text_tokens+self.max_mel_tokens+self.max_conditioning_inputs
-        self.gpt = build_hf_gpt_transformer(layers, model_dim, heads, number_mel_codes, self.seq_length, checkpointing)
+        self.gpt, self.mel_pos_embedding, self.text_pos_embedding, self.mel_layer_pos_embedding, self.text_layer_pos_embedding = \
+            build_hf_gpt_transformer(layers, model_dim, heads, self.max_text_tokens+2, self.max_mel_tokens+3, checkpointing)
         if train_solo_embeddings:
             self.mel_solo_embedding = nn.Parameter(torch.randn(1, 1, model_dim) * .02, requires_grad=True)
             self.text_solo_embedding = nn.Parameter(torch.randn(1, 1, model_dim) * .02, requires_grad=True)
@@ -126,13 +124,11 @@ class UnifiedVoice(nn.Module):
         self.max_conditioning_length = max_conditioning_length
 
         # Initialize the embeddings per the GPT-2 scheme
-        embeddings = [self.text_embedding, self.text_pos_embedding, self.mel_pos_embedding]
+        embeddings = [self.text_embedding]
         if use_mel_codes_as_input:
             embeddings.append(self.mel_embedding)
-        for module in:
+        for module in embeddings:
             module.weight.data.normal_(mean=0.0, std=.02)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
     def build_aligned_inputs_and_targets(self, input, start_token, stop_token):
         inp = F.pad(input, (1,0), value=start_token)
@@ -218,14 +214,14 @@ class UnifiedVoice(nn.Module):
         speech_conditioning_input = self.conditioning_encoder(speech_conditioning_input).unsqueeze(1)
 
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.start_text_token, self.stop_text_token)
-        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device))
+        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(text_inputs)
         mel_codes, mel_targets = self.build_aligned_inputs_and_targets(mel_codes, self.start_mel_token, self.stop_mel_token)
         if raw_mels is not None:
             mel_inp = F.pad(raw_mels, (0, 8))
         else:
             mel_inp = mel_codes
         mel_emb = self.mel_embedding(mel_inp)
-        mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device))
+        mel_emb = mel_emb + self.mel_pos_embedding(mel_codes)
         if text_first:
             text_logits, mel_logits = self.get_logits(speech_conditioning_input, text_emb, self.text_head, mel_emb, self.mel_head, get_attns=return_attentions)
         else:
@@ -254,7 +250,7 @@ class UnifiedVoice(nn.Module):
         speech_conditioning_input = self.conditioning_encoder(speech_conditioning_input).unsqueeze(1)
 
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.start_text_token, self.stop_text_token)
-        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device)) + self.text_solo_embedding
+        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(text_inputs) + self.text_solo_embedding
         text_logits = self.get_logits(speech_conditioning_input, text_emb, self.text_head)
         loss_text = F.cross_entropy(text_logits, text_targets.long())
         return loss_text.mean()
@@ -283,7 +279,7 @@ class UnifiedVoice(nn.Module):
         else:
             mel_inp = mel_codes
         mel_emb = self.mel_embedding(mel_inp)
-        mel_emb = mel_emb + self.mel_pos_embedding(torch.arange(mel_emb.shape[1], device=mel_emb.device)) + self.mel_solo_embedding
+        mel_emb = mel_emb + self.mel_pos_embedding(mel_codes) + self.mel_solo_embedding
         mel_logits = self.get_logits(speech_conditioning_input, mel_emb, self.mel_head)
         loss_mel = F.cross_entropy(mel_logits, mel_targets.long())
         return loss_mel.mean()
@@ -291,9 +287,10 @@ class UnifiedVoice(nn.Module):
     def inference_speech(self, speech_conditioning_input, text_inputs, **hf_generate_kwargs):
         if not hasattr(self, 'inference_model'):
             # TODO: Decouple gpt_config from this inference model.
+            seq_length = self.max_mel_tokens + self.max_text_tokens  + 5
             gpt_config = GPT2Config(vocab_size=self.max_mel_tokens,
-                                    n_positions=self.seq_length,
-                                    n_ctx=self.seq_length,
+                                    n_positions=seq_length,
+                                    n_ctx=seq_length,
                                     n_embd=self.model_dim,
                                     n_layer=self.layers,
                                     n_head=self.heads,
@@ -303,7 +300,7 @@ class UnifiedVoice(nn.Module):
 
         text_inputs = F.pad(text_inputs, (0, 1), value=self.stop_text_token)
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(text_inputs, self.start_text_token, self.stop_text_token)
-        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(torch.arange(text_inputs.shape[1], device=text_inputs.device))
+        text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(text_inputs)
 
         if self.shuffle_conditioning:
             # Randomly permute the conditioning spectrogram, to destroy any structure present.
