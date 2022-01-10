@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torchaudio
 import yaml
 from tokenizers import Tokenizer
+from tqdm import tqdm
 
 from data.audio.paired_voice_audio_dataset import CharacterTokenizer
 from data.audio.unsupervised_audio_dataset import load_audio
@@ -64,12 +65,17 @@ def fix_autoregressive_output(codes, stop_token):
     stop_token_indices = (codes == stop_token).nonzero()
     if len(stop_token_indices) == 0:
         print("No stop tokens found, enjoy that output of yours!")
+        return
     else:
-        codes = codes[:stop_token_indices[0]]
+        codes[stop_token_indices] = 83
+    stm = stop_token_indices.min().item()
+    codes[stm:] = 83
+    if stm - 3 < codes.shape[0]:
+        codes[-3] = 45
+        codes[-2] = 45
+        codes[-1] = 248
 
-    padding = torch.tensor([83,   83,   83,  83,   83,   83,  83,   83,   83,   45,   45,  248],
-                           dtype=torch.long, device=codes.device)
-    return torch.cat([codes, padding])
+    return codes
 
 
 if __name__ == '__main__':
@@ -79,7 +85,7 @@ if __name__ == '__main__':
         'ed_sheeran': 'D:\\data\\audio\\sample_voices\\ed_sheeran.wav',
         'simmons': 'Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav',
         'news_girl': 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav',
-        'dan_carlin': 'Y:\\clips\\books1\5_dchha06 Shield of the West\\00476.wav',
+        'dan_carlin': 'Y:\\clips\\books1\\5_dchha06 Shield of the West\\00476.wav',
         'libri_test': 'Y:\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav'
     }
 
@@ -90,11 +96,16 @@ if __name__ == '__main__':
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts_unified.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_unified\\models\\30500_gpt.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_unified\\models\\60000_gpt.pth')
+    parser.add_argument('-opt_clip', type=str, help='Path to options YAML file used to train the CLIP model', default='X:\\dlas\\experiments\\train_clip_text_to_voice.yml')
+    parser.add_argument('-clip_model_name', type=str, help='Name of the CLIP model in opt.', default='clip')
+    parser.add_argument('-clip_model_path', type=str, help='CLIP model checkpoint to load.', default='X:\\dlas\\experiments\\train_clip_text_to_voice_masking_bigger_batch\\models\\23500_clip_ema.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
     parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='')
     parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
-    parser.add_argument('-num_samples', type=int, help='How many outputs to produce.', default=8)
+    parser.add_argument('-num_samples', type=int, help='How many total outputs the autoregressive transformer should produce.', default=128)
+    parser.add_argument('-num_batches', type=int, help='How many batches those samples should be produced over.', default=2)
+    parser.add_argument('-num_outputs', type=int, help='Number of outputs to produce.', default=2)
     parser.add_argument('-output_path', type=str, help='Where to store outputs.', default='../results/use_gpt_tts')
     args = parser.parse_args()
     os.makedirs(args.output_path, exist_ok=True)
@@ -104,7 +115,8 @@ if __name__ == '__main__':
     with open(args.opt_gpt_tts, mode='r') as f:
         gpt_opt = yaml.load(f, Loader=Loader)
     gpt_opt['networks'][args.gpt_tts_model_name]['kwargs']['checkpointing'] = False  # Required for beam search
-    gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path, strict_load=False)
+    gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path, strict_load=False).eval()
+    stop_mel_token = gpt.stop_mel_token
 
     print("Loading data..")
     tokenizer = VoiceBpeTokenizer('../experiments/bpe_lowercase_asr_256.json')
@@ -114,24 +126,42 @@ if __name__ == '__main__':
     cond_path = args.cond_path if args.cond_preset is None else preselected_cond_voices[args.cond_preset]
     conds, cond_wav = load_conditioning(cond_path)
 
-    print("Performing GPT inference..")
-    codes = gpt.inference_speech(conds, text, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=20, top_p=.95,
-                          num_return_sequences=args.num_samples, length_penalty=1, early_stopping=True)
+    with torch.no_grad():
+        print("Performing GPT inference..")
+        samples = []
+        for b in tqdm(range(args.num_batches)):
+            codes = gpt.inference_speech(conds, text, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=20, top_p=.95,
+                                  num_return_sequences=args.num_samples//args.num_batches, length_penalty=1)
+            padding_needed = 250 - codes.shape[1]
+            codes = F.pad(codes, (0, padding_needed), value=stop_mel_token)
+            samples.append(codes)
+        samples = torch.cat(samples, dim=0)
+        del gpt
 
-    # Delete the GPT TTS model to free up GPU memory
-    stop_token = gpt.stop_mel_token
-    del gpt
+        print("Loading CLIP..")
+        clip = load_model_from_config(args.opt_clip, model_name=args.clip_model_name, also_load_savepoint=False, load_path=args.clip_model_path).eval()
+        print("Performing CLIP filtering..")
+        for i in range(samples.shape[0]):
+            samples[i] = fix_autoregressive_output(samples[i], stop_mel_token)
+        clip_results = clip(text.repeat(samples.shape[0], 1),
+                            torch.full((samples.shape[0],), fill_value=text.shape[1]-1, dtype=torch.long, device='cuda'),
+                            samples, torch.full((samples.shape[0],), fill_value=samples.shape[1]*1024, dtype=torch.long, device='cuda'),
+                            return_loss=False)
+        best_results = samples[torch.topk(clip_results, k=args.num_outputs).indices]
 
-    print("Loading DVAE..")
-    dvae = load_model_from_config(args.opt_diffuse, args.dvae_model_name)
-    print("Loading Diffusion Model..")
-    diffusion = load_model_from_config(args.opt_diffuse, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path)
-    diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=50)
+        # Delete the GPT TTS model to free up GPU memory
+        del samples, clip
 
-    print("Performing vocoding..")
-    # Perform vocoding on each batch element separately: Vocoding is very memory intensive.
-    for b in range(codes.shape[0]):
-        code = fix_autoregressive_output(codes[b], stop_token).unsqueeze(0)
-        wav = do_spectrogram_diffusion(diffusion, dvae, diffuser, code, cond_wav,
-                                       spectrogram_compression_factor=128, plt_spec=False)
-        torchaudio.save(os.path.join(args.output_path, f'gpt_tts_output_{b}.wav'), wav.squeeze(0).cpu(), 11025)
+        print("Loading DVAE..")
+        dvae = load_model_from_config(args.opt_diffuse, args.dvae_model_name).eval()
+        print("Loading Diffusion Model..")
+        diffusion = load_model_from_config(args.opt_diffuse, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path).eval()
+        diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=50)
+
+        print("Performing vocoding..")
+        # Perform vocoding on each batch element separately: Vocoding is very memory intensive.
+        for b in range(best_results.shape[0]):
+            code = best_results[b].unsqueeze(0)
+            wav = do_spectrogram_diffusion(diffusion, dvae, diffuser, code, cond_wav,
+                                           spectrogram_compression_factor=128, plt_spec=False)
+            torchaudio.save(os.path.join(args.output_path, f'gpt_tts_output_{b}.wav'), wav.squeeze(0).cpu(), 11025)

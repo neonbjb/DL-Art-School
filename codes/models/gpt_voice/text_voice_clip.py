@@ -126,3 +126,9 @@ if __name__ == '__main__':
          torch.randint(0,8192,(2,250)),
          torch.tensor([101,102]),
          return_loss=True)
+    nonloss = clip(torch.randint(0,256,(2,120)),
+         torch.tensor([50,100]),
+         torch.randint(0,8192,(2,250)),
+         torch.tensor([101,102]),
+         return_loss=False)
+    print(nonloss.shape)
