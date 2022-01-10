@@ -10,7 +10,7 @@ from contextlib import contextmanager
 
 from local_attention import LocalAttention
 from axial_positional_embedding import AxialPositionalEmbedding
-from reversible import ReversibleSequence, SequentialSequence
+from models.lucidrains.performer.reversible import ReversibleSequence, SequentialSequence
 
 from distutils.version import LooseVersion
 
