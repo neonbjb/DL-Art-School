@@ -40,3 +40,4 @@ linear_attention_transformer
 rotary-embedding-torch
 axial_positional_embedding
 g-mlp-pytorch
+x-clip
