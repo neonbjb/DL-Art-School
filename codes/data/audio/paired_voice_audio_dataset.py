@@ -23,6 +23,21 @@ def load_tsv(filename):
     return filepaths_and_text
 
 
+def load_tsv_aligned_codes(filename):
+    with open(filename, encoding='utf-8') as f:
+        components = [line.strip().split('\t') for line in f]
+        base = os.path.dirname(filename)
+        def convert_string_list_to_tensor(strlist):
+            if strlist.startswith('['):
+                strlist = strlist[1:]
+            if strlist.endswith(']'):
+                strlist = strlist[:-1]
+            as_ints = [int(s) for s in strlist.split(', ')]
+            return torch.tensor(as_ints)
+        filepaths_and_text = [[os.path.join(base, f'{component[1]}'), component[0], convert_string_list_to_tensor(component[2])] for component in components]
+    return filepaths_and_text
+
+
 def load_mozilla_cv(filename):
     with open(filename, encoding='utf-8') as f:
         components = [line.strip().split('\t') for line in f][1:]  # First line is the header
@@ -68,12 +83,14 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.conditioning_candidates = opt_get(hparams, ['num_conditioning_candidates'], 1)
         self.conditioning_length = opt_get(hparams, ['conditioning_length'], 44100)
         self.debug_failures = opt_get(hparams, ['debug_loading_failures'], False)
+        self.load_aligned_codes = opt_get(hparams, ['load_aligned_codes'], False)
+        self.aligned_codes_to_audio_ratio = opt_get(hparams, ['aligned_codes_ratio'], 443)
         self.audiopaths_and_text = []
         for p, fm in zip(self.path, fetcher_mode):
             if fm == 'lj' or fm == 'libritts':
                 fetcher_fn = load_filepaths_and_text
             elif fm == 'tsv':
-                fetcher_fn = load_tsv
+                fetcher_fn = load_tsv_aligned_codes if self.load_aligned_codes else load_tsv
             elif fm == 'mozilla_cv':
                 assert not self.load_conditioning  # Conditioning inputs are incompatible with mozilla_cv
                 fetcher_fn = load_mozilla_cv
@@ -88,6 +105,8 @@ class TextWavLoader(torch.utils.data.Dataset):
         random.seed(hparams.seed)
         random.shuffle(self.audiopaths_and_text)
         self.max_wav_len = opt_get(hparams, ['max_wav_length'], None)
+        if self.max_wav_len is not None:
+            self.max_aligned_codes = self.max_wav_len / self.aligned_codes_to_audio_ratio
         self.max_text_len = opt_get(hparams, ['max_text_length'], None)
         assert self.max_wav_len is not None and self.max_text_len is not None
         self.use_bpe_tokenizer = opt_get(hparams, ['use_bpe_tokenizer'], True)
@@ -119,6 +138,8 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.skipped_items += 1
         try:
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
+            if text is None or len(text.strip()) == 0:
+                raise ValueError
             cond, cond_is_self = load_similar_clips(self.audiopaths_and_text[index][0], self.conditioning_length, self.sample_rate,
                                       n=self.conditioning_candidates) if self.load_conditioning else (None, False)
         except:
@@ -127,6 +148,10 @@ class TextWavLoader(torch.utils.data.Dataset):
             if self.debug_failures:
                 print(f"error loading {self.audiopaths_and_text[index][0]} {sys.exc_info()}")
             return self[(index+1) % len(self)]
+
+        if self.load_aligned_codes:
+            aligned_codes = self.audiopaths_and_text[index][2]
+
         actually_skipped_items = self.skipped_items
         self.skipped_items = 0
         if wav is None or \
@@ -142,6 +167,9 @@ class TextWavLoader(torch.utils.data.Dataset):
         orig_text_len = tseq.shape[0]
         if wav.shape[-1] != self.max_wav_len:
             wav = F.pad(wav, (0, self.max_wav_len - wav.shape[-1]))
+            if self.load_aligned_codes:
+                # These codes are aligned to audio inputs, so make sure to pad them as well.
+                aligned_codes = F.pad(aligned_codes, (0, self.max_aligned_codes-aligned_codes.shape[0]))
         if tseq.shape[0] != self.max_text_len:
             tseq = F.pad(tseq, (0, self.max_text_len - tseq.shape[0]))
         res = {
@@ -156,6 +184,8 @@ class TextWavLoader(torch.utils.data.Dataset):
         if self.load_conditioning:
             res['conditioning'] = cond
             res['conditioning_contains_self'] = cond_is_self
+        if self.load_aligned_codes:
+            res['aligned_codes'] = aligned_codes
         return res
 
     def __len__(self):
@@ -197,8 +227,8 @@ if __name__ == '__main__':
     batch_sz = 8
     params = {
         'mode': 'paired_voice_audio',
-        'path': ['Y:\\bigasr_dataset\\hifi_tts\\test.txt'],
-        'fetcher_mode': ['libritts'],
+        'path': ['Y:\\clips\\books1\\transcribed-w2v.tsv'],
+        'fetcher_mode': ['tsv'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
@@ -209,6 +239,7 @@ if __name__ == '__main__':
         'num_conditioning_candidates': 2,
         'conditioning_length': 44000,
         'use_bpe_tokenizer': True,
+        'load_aligned_codes': False,
     }
     from data import create_dataset, create_dataloader
 
