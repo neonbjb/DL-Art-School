@@ -31,13 +31,14 @@ if __name__ == '__main__':
     # Pre-process truth values
     truths = load_truths(libri_base)
 
+    niltok = VoiceBpeTokenizer(None)
     ground_truths = []
     hypotheses = []
     with open(inference_tsv, 'r') as tsv_file:
         tsv = tsv_file.read().splitlines()
         for line in tqdm(tsv):
             sentence_pred, wav = line.split('\t')
-            hypotheses.append(sentence_pred)
+            hypotheses.append(niltok.preprocess_text(sentence_pred))
             ground_truths.append(truths[wav])
     wer = wer(ground_truths, hypotheses)*100
     print(f"WER: {wer}")
