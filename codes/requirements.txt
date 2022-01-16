@@ -33,6 +33,7 @@ audio2numpy
 # For text stuff
 transformers
 tokenizers
+jiwer  # calculating WER
 
 # lucidrains stuff
 vector_quantize_pytorch
