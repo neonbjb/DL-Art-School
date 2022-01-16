@@ -106,7 +106,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         random.shuffle(self.audiopaths_and_text)
         self.max_wav_len = opt_get(hparams, ['max_wav_length'], None)
         if self.max_wav_len is not None:
-            self.max_aligned_codes = self.max_wav_len / self.aligned_codes_to_audio_ratio
+            self.max_aligned_codes = self.max_wav_len // self.aligned_codes_to_audio_ratio
         self.max_text_len = opt_get(hparams, ['max_text_length'], None)
         assert self.max_wav_len is not None and self.max_text_len is not None
         self.use_bpe_tokenizer = opt_get(hparams, ['use_bpe_tokenizer'], True)
@@ -239,7 +239,7 @@ if __name__ == '__main__':
         'num_conditioning_candidates': 2,
         'conditioning_length': 44000,
         'use_bpe_tokenizer': True,
-        'load_aligned_codes': False,
+        'load_aligned_codes': True,
     }
     from data import create_dataset, create_dataloader
 

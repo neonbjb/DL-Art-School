@@ -46,8 +46,7 @@ class DiffusionTts(nn.Module):
             model_channels,
             in_channels=1,
             num_tokens=30,
-            out_channels=2,  # mean and variance
-            discrete_codes=512,
+            out_channels=2,  # mean and variancexs
             dropout=0,
             # res           1, 2, 4, 8,16,32,64,128,256,512, 1K, 2K
             channel_mult=  (1,1.5,2, 3, 4, 6, 8, 12, 16, 24, 32, 48),
@@ -68,7 +67,6 @@ class DiffusionTts(nn.Module):
             kernel_size=3,
             scale_factor=2,
             conditioning_inputs_provided=True,
-            conditioning_input_dim=80,
             time_embed_dim_multiplier=4,
             only_train_dvae_connection_layers=False,
     ):
