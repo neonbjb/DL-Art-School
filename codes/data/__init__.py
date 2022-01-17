@@ -75,6 +75,12 @@ def create_dataset(dataset_opt, return_collate=False):
         default_params = create_hparams()
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
+    elif mode == 'fast_paired_voice_audio':
+        from data.audio.fast_paired_dataset import FastPairedVoiceDataset as D
+        from models.tacotron2.hparams import create_hparams
+        default_params = create_hparams()
+        default_params.update(dataset_opt)
+        dataset_opt = munchify(default_params)
     elif mode == 'gpt_tts':
         from data.audio.gpt_tts_dataset import GptTtsDataset as D
         from data.audio.gpt_tts_dataset import GptTtsCollater as C
@@ -100,7 +106,7 @@ def create_dataset(dataset_opt, return_collate=False):
 
 def get_dataset_debugger(dataset_opt):
     mode = dataset_opt['mode']
-    if mode == 'paired_voice_audio':
+    if mode == 'paired_voice_audio' or mode == 'fast_paired_voice_audio':
         from data.audio.paired_voice_audio_dataset import PairedVoiceDebugger
         return PairedVoiceDebugger()
     return None
