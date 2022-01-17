@@ -37,6 +37,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
 
     In practice, this means two things:
     1) Index {i} of this dataset means nothing: fetching from the same index will almost always return different data.
+       As a result, this dataset should not be used for validation or test runs.
     2) This dataset has a slight bias for items with longer text or longer filenames.
 
     The upshot is that this dataset loads extremely quickly and consumes almost no system memory.
@@ -172,7 +173,7 @@ if __name__ == '__main__':
     batch_sz = 16
     params = {
         'mode': 'fast_paired_voice_audio',
-        'path': ['Y:\\clips\\books1\\transcribed-w2v.tsv'],
+        'path': ['Y:\\libritts\\train-clean-360\\transcribed-w2v.tsv', 'Y:\\clips\\books1\\transcribed-w2v.tsv'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
@@ -200,7 +201,7 @@ if __name__ == '__main__':
     for i, b in tqdm(enumerate(dl)):
         for ib in range(batch_sz):
             print(f'{i} {ib} {b["real_text"][ib]}')
-            #save(b, i, ib, 'wav')
-        #if i > 5:
-        #    break
+            save(b, i, ib, 'wav')
+        if i > 5:
+            break
 
