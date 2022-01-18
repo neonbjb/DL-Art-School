@@ -91,7 +91,7 @@ class Upsample(nn.Module):
                  upsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None):
+    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=3, pad=1):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -105,8 +105,6 @@ class Upsample(nn.Module):
         else:
             self.factor = factor
         if use_conv:
-            ksize = 3
-            pad = 1
             if dims == 1:
                 ksize = 5
                 pad = 2
@@ -134,18 +132,22 @@ class Downsample(nn.Module):
                  downsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None):
+    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=None, pad=None):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.dims = dims
-        ksize = 3
-        pad = 1
+
+        if ksize is None:
+            ksize = 3
+            pad = 1
+            if dims == 1:
+                ksize = 5
+                pad = 2
+
         if dims == 1:
             stride = 4
-            ksize = 5
-            pad = 2
         elif dims == 2:
             stride = 2
         else:
@@ -201,7 +203,7 @@ class ResBlock(TimestepBlock):
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.use_scale_shift_norm = use_scale_shift_norm
-        padding = 1 if kernel_size == 3 else 2
+        padding = 1 if kernel_size == 3 else (2 if kernel_size == 5 else 0)
 
         self.in_layers = nn.Sequential(
             normalization(channels),

@@ -2,8 +2,8 @@ import operator
 from collections import OrderedDict
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import AttentionPool2d, AttentionBlock, ResBlock, TimestepEmbedSequential, \
-    Downsample, Upsample
+from models.diffusion.unet_diffusion import AttentionPool2d, AttentionBlock, TimestepEmbedSequential, \
+    Downsample, Upsample, TimestepBlock
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,6 +11,73 @@ import torch.nn.functional as F
 from models.gpt_voice.mini_encoder import AudioMiniEncoder, EmbeddingCombiner
 from trainer.networks import register_model
 from utils.util import get_mask_from_lengths
+from utils.util import checkpoint
+
+
+class ResBlock(TimestepBlock):
+    def __init__(
+        self,
+        channels,
+        emb_channels,
+        dropout,
+        out_channels=None,
+        dims=2,
+        kernel_size=3,
+    ):
+        super().__init__()
+        self.channels = channels
+        self.emb_channels = emb_channels
+        self.dropout = dropout
+        self.out_channels = out_channels or channels
+        padding = 1 if kernel_size == 3 else 2
+
+        self.in_layers = nn.Sequential(
+            normalization(channels),
+            nn.SiLU(),
+            conv_nd(dims, channels, self.out_channels, 1, padding=0),
+        )
+
+        self.emb_layers = nn.Sequential(
+            nn.SiLU(),
+            linear(
+                emb_channels,
+                self.out_channels,
+            ),
+        )
+        self.out_layers = nn.Sequential(
+            normalization(self.out_channels),
+            nn.SiLU(),
+            nn.Dropout(p=dropout),
+            zero_module(
+                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
+            ),
+        )
+
+        if self.out_channels == channels:
+            self.skip_connection = nn.Identity()
+        else:
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+
+    def forward(self, x, emb):
+        """
+        Apply the block to a Tensor, conditioned on a timestep embedding.
+
+        :param x: an [N x C x ...] Tensor of features.
+        :param emb: an [N x emb_channels] Tensor of timestep embeddings.
+        :return: an [N x C x ...] Tensor of outputs.
+        """
+        return checkpoint(
+            self._forward, x, emb
+        )
+
+    def _forward(self, x, emb):
+        h = self.in_layers(x)
+        emb_out = self.emb_layers(emb).type(h.dtype)
+        while len(emb_out.shape) < len(h.shape):
+            emb_out = emb_out[..., None]
+        h = h + emb_out
+        h = self.out_layers(h)
+        return self.skip_connection(x) + h
 
 
 class DiffusionTts(nn.Module):
@@ -49,7 +116,7 @@ class DiffusionTts(nn.Module):
             model_channels,
             in_channels=1,
             num_tokens=30,
-            out_channels=2,  # mean and variancexs
+            out_channels=2,  # mean and variance
             dropout=0,
             # res           1, 2, 4, 8,16,32,64,128,256,512, 1K, 2K
             channel_mult=  (1,1.5,2, 3, 4, 6, 8, 12, 16, 24, 32, 48),
@@ -64,14 +131,10 @@ class DiffusionTts(nn.Module):
             num_heads=1,
             num_head_channels=-1,
             num_heads_upsample=-1,
-            use_scale_shift_norm=False,
-            resblock_updown=False,
-            use_new_attention_order=False,
             kernel_size=3,
             scale_factor=2,
             conditioning_inputs_provided=True,
             time_embed_dim_multiplier=4,
-            only_train_dvae_connection_layers=False,
     ):
         super().__init__()
 
@@ -133,7 +196,6 @@ class DiffusionTts(nn.Module):
                         dropout,
                         out_channels=int(mult * model_channels),
                         dims=dims,
-                        use_scale_shift_norm=use_scale_shift_norm,
                         kernel_size=kernel_size,
                     )
                 ]
@@ -144,7 +206,6 @@ class DiffusionTts(nn.Module):
                             ch,
                             num_heads=num_heads,
                             num_head_channels=num_head_channels,
-                            use_new_attention_order=use_new_attention_order,
                         )
                     )
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
@@ -154,19 +215,8 @@ class DiffusionTts(nn.Module):
                 out_ch = ch
                 self.input_blocks.append(
                     TimestepEmbedSequential(
-                        ResBlock(
-                            ch,
-                            time_embed_dim,
-                            dropout,
-                            out_channels=out_ch,
-                            dims=dims,
-                            use_scale_shift_norm=use_scale_shift_norm,
-                            down=True,
-                            kernel_size=kernel_size,
-                        )
-                        if resblock_updown
-                        else Downsample(
-                            ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor
+                        Downsample(
+                            ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor, ksize=1, pad=0
                         )
                     )
                 )
@@ -181,21 +231,18 @@ class DiffusionTts(nn.Module):
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_scale_shift_norm=use_scale_shift_norm,
                 kernel_size=kernel_size,
             ),
             AttentionBlock(
                 ch,
                 num_heads=num_heads,
                 num_head_channels=num_head_channels,
-                use_new_attention_order=use_new_attention_order,
             ),
             ResBlock(
                 ch,
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_scale_shift_norm=use_scale_shift_norm,
                 kernel_size=kernel_size,
             ),
         )
@@ -212,7 +259,6 @@ class DiffusionTts(nn.Module):
                         dropout,
                         out_channels=int(model_channels * mult),
                         dims=dims,
-                        use_scale_shift_norm=use_scale_shift_norm,
                         kernel_size=kernel_size,
                     )
                 ]
@@ -223,24 +269,12 @@ class DiffusionTts(nn.Module):
                             ch,
                             num_heads=num_heads_upsample,
                             num_head_channels=num_head_channels,
-                            use_new_attention_order=use_new_attention_order,
                         )
                     )
                 if level and i == num_blocks:
                     out_ch = ch
                     layers.append(
-                        ResBlock(
-                            ch,
-                            time_embed_dim,
-                            dropout,
-                            out_channels=out_ch,
-                            dims=dims,
-                            use_scale_shift_norm=use_scale_shift_norm,
-                            up=True,
-                            kernel_size=kernel_size,
-                        )
-                        if resblock_updown
-                        else Upsample(ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor)
+                        Upsample(ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor)
                     )
                     ds //= 2
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
@@ -251,15 +285,6 @@ class DiffusionTts(nn.Module):
             nn.SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
-
-        if only_train_dvae_connection_layers:
-            for p in self.parameters():
-                p.DO_NOT_TRAIN = True
-                p.requires_grad = False
-            for sb in token_conditioning_blocks:
-                for p in sb.parameters():
-                    del p.DO_NOT_TRAIN
-                    p.requires_grad = True
 
     def forward(self, x, timesteps, tokens, conditioning_input=None):
         """
@@ -299,10 +324,12 @@ class DiffusionTts(nn.Module):
 
     def benchmark(self, x, timesteps, tokens, conditioning_input):
         profile = OrderedDict()
+        params = OrderedDict()
         hs = []
         emb1 = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         from torchprofile import profile_macs
         profile['contextual_embedder'] = profile_macs(self.contextual_embedder, args=(conditioning_input,))
+        params['contextual_embedder'] = sum(p.numel() for p in self.contextual_embedder.parameters())
         emb2 = self.contextual_embedder(conditioning_input)
         emb = emb1 + emb2
 
@@ -313,21 +340,25 @@ class DiffusionTts(nn.Module):
                 h = h + h_tok
             else:
                 profile[f'in_{k}'] = profile_macs(module, args=(h,emb))
+                params[f'in_{k}'] = sum(p.numel() for p in module.parameters())
                 h = module(h, emb)
                 hs.append(h)
         profile['middle'] = profile_macs(self.middle_block, args=(h,emb))
+        params['middle'] = sum(p.numel() for p in self.middle_block.parameters())
         h = self.middle_block(h, emb)
         for k, module in enumerate(self.output_blocks):
             h = torch.cat([h, hs.pop()], dim=1)
             profile[f'out_{k}'] = profile_macs(module, args=(h,emb))
+            params[f'out_{k}'] = sum(p.numel() for p in module.parameters())
             h = module(h, emb)
         h = h.type(x.dtype)
         profile['out'] = profile_macs(self.out, args=(h,))
-        return profile
+        params['out'] = sum(p.numel() for p in self.out.parameters())
+        return profile, params
 
 
 @register_model
-def register_diffusion_tts(opt_net, opt):
+def register_diffusion_tts_experimental(opt_net, opt):
     return DiffusionTts(**opt_net['kwargs'])
 
 
@@ -337,11 +368,19 @@ if __name__ == '__main__':
     tok = torch.randint(0,30, (2,388))
     cond = torch.randn(2, 1, 44000)
     ts = torch.LongTensor([555, 556])
-    model = DiffusionTts(64, channel_mult=[1,1.5,2, 3, 4, 6, 8, 8,   8,  8 ], num_res_blocks=[2, 2, 2, 2, 2, 2, 2, 2,   1,  1 ],
+    model = DiffusionTts(64, channel_mult=[1,1.5,2, 3, 4, 6, 8, 8, 8, 8], num_res_blocks=[2, 2, 2, 2, 2, 2, 2, 4, 4, 4],
                          token_conditioning_resolutions=[1,4,16,64], attention_resolutions=[256,512], num_heads=4, kernel_size=3,
                          scale_factor=2, conditioning_inputs_provided=True, time_embed_dim_multiplier=4)
-    p = model.benchmark(clip, ts, tok, cond)
+    p, r = model.benchmark(clip, ts, tok, cond)
     p = {k: v / 1000000000 for k, v in p.items()}
     p = sorted(p.items(), key=operator.itemgetter(1))
+    print("Computational complexity:")
     print(p)
     print(sum([j[1] for j in p]))
+    print()
+    print("Memory complexity:")
+    r = {k: v / 1000000 for k, v in r.items()}
+    r = sorted(r.items(), key=operator.itemgetter(1))
+    print(r)
+    print(sum([j[1] for j in r]))
+
