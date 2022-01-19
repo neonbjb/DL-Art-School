@@ -80,13 +80,13 @@ def fix_autoregressive_output(codes, stop_token):
 
 if __name__ == '__main__':
     preselected_cond_voices = {
-        'trump': 'D:\\data\\audio\\sample_voices\\trump.wav',
-        'ryan_reynolds': 'D:\\data\\audio\\sample_voices\\ryan_reynolds.wav',
-        'ed_sheeran': 'D:\\data\\audio\\sample_voices\\ed_sheeran.wav',
-        'simmons': 'Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav',
-        'news_girl': 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav',
-        'dan_carlin': 'Y:\\clips\\books1\\5_dchha06 Shield of the West\\00476.wav',
-        'libri_test': 'Y:\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav'
+        'trump': ['D:\\data\\audio\\sample_voices\\trump.wav'],
+        'ryan_reynolds': ['D:\\data\\audio\\sample_voices\\ryan_reynolds.wav'],
+        'ed_sheeran': ['D:\\data\\audio\\sample_voices\\ed_sheeran.wav'],
+        'simmons': ['Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav'],
+        'news_girl': ['Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav', 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00016.wav'],
+        'dan_carlin': ['Y:\\clips\\books1\\5_dchha06 Shield of the West\\00476.wav'],
+        'libri_test': ['Y:\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav']
     }
 
     parser = argparse.ArgumentParser()
@@ -94,17 +94,16 @@ if __name__ == '__main__':
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
     parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae_full\\models\\6100_generator_ema.pth')
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
-    parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts_unified\\train_gpt_tts_unified.yml')
+    parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts_unified.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_unified\\models\\60000_gpt_ema.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_unified_large\\models\\40000_gpt_ema.pth')
     parser.add_argument('-opt_clip', type=str, help='Path to options YAML file used to train the CLIP model', default='X:\\dlas\\experiments\\train_clip_text_to_voice.yml')
     parser.add_argument('-clip_model_name', type=str, help='Name of the CLIP model in opt.', default='clip')
     parser.add_argument('-clip_model_path', type=str, help='CLIP model checkpoint to load.', default='X:\\dlas\\experiments\\train_clip_text_to_voice_masking_bigger_batch\\models\\23500_clip_ema.pth')
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
-    parser.add_argument('-cond_path', type=str, help='Path to condioning sample.', default='')
     parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
     parser.add_argument('-num_samples', type=int, help='How many total outputs the autoregressive transformer should produce.', default=128)
-    parser.add_argument('-num_batches', type=int, help='How many batches those samples should be produced over.', default=2)
+    parser.add_argument('-num_batches', type=int, help='How many batches those samples should be produced over.', default=8)
     parser.add_argument('-num_outputs', type=int, help='Number of outputs to produce.', default=2)
     parser.add_argument('-output_path', type=str, help='Where to store outputs.', default='../results/use_gpt_tts')
     args = parser.parse_args()
@@ -115,7 +114,7 @@ if __name__ == '__main__':
     with open(args.opt_gpt_tts, mode='r') as f:
         gpt_opt = yaml.load(f, Loader=Loader)
     gpt_opt['networks'][args.gpt_tts_model_name]['kwargs']['checkpointing'] = False  # Required for beam search
-    gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path, strict_load=False).eval()
+    gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path).eval()
     stop_mel_token = gpt.stop_mel_token
 
     print("Loading data..")
@@ -123,8 +122,12 @@ if __name__ == '__main__':
     text = torch.IntTensor(tokenizer.encode(args.text)).unsqueeze(0).cuda()
     text = F.pad(text, (0,1))  # This may not be necessary.
 
-    cond_path = args.cond_path if args.cond_preset is None else preselected_cond_voices[args.cond_preset]
-    conds, cond_wav = load_conditioning(cond_path, cond_length=88000)
+    cond_paths = preselected_cond_voices[args.cond_preset]
+    conds = []
+    for cond_path in cond_paths:
+        c, cond_wav = load_conditioning(cond_path, cond_length=132300)
+        conds.append(c)
+    conds = torch.stack(conds, dim=1)  # And just use the last cond_wav for the diffusion model.
 
     with torch.no_grad():
         print("Performing GPT inference..")
