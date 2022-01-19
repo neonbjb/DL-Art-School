@@ -183,11 +183,35 @@ class ExtensibleTrainer(BaseModel):
             o.zero_grad()
         torch.cuda.empty_cache()
 
+        sort_key = opt_get(self.opt, ['train', 'sort_key'], None)
+        if sort_key is not None:
+            sort_indices = torch.sort(data[sort_key]).indices
+        else:
+            sort_indices = None
+
         batch_factor = self.batch_factor if perform_micro_batching else 1
         self.dstate = {}
         for k, v in data.items():
+            if sort_indices is not None:
+                if isinstance(v, list):
+                    v = [v[i] for i in sort_indices]
+                else:
+                    v = v[sort_indices]
             if isinstance(v, torch.Tensor):
                 self.dstate[k] = [t.to(self.device) for t in torch.chunk(v, chunks=batch_factor, dim=0)]
+
+        if opt_get(self.opt, ['train', 'auto_collate'], False):
+            for k, v in self.dstate.items():
+                if f'{k}_lengths' in self.dstate.keys():
+                    for c in range(len(v)):
+                        maxlen = self.dstate[f'{k}_lengths'][c].max()
+                        if len(v[c].shape) == 2:
+                            self.dstate[k][c] = self.dstate[k][c][:, :maxlen]
+                        elif len(v[c].shape) == 3:
+                            self.dstate[k][c] = self.dstate[k][c][:, :, :maxlen]
+                        elif len(v[c].shape) == 4:
+                            self.dstate[k][c] = self.dstate[k][c][:, :, :, :maxlen]
+
 
     def optimize_parameters(self, step, optimize=True):
         # Some models need to make parametric adjustments per-step. Do that here.

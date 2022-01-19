@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.gpt_voice.mini_encoder import AudioMiniEncoder, EmbeddingCombiner
+from scripts.audio.gen.use_diffuse_tts import ceil_multiple
 from trainer.networks import register_model
 from utils.util import get_mask_from_lengths
 from utils.util import checkpoint
@@ -295,7 +296,12 @@ class DiffusionTts(nn.Module):
         :param tokens: an aligned text input.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
+        orig_x_shape = x.shape[-1]
+        cm = ceil_multiple(x.shape[-1], 4096)
+        if cm != 0:
+            pc = (cm-x.shape[-1])/x.shape[-1]
+            x = F.pad(x, (0,cm-x.shape[-1]))
+            tokens = F.pad(tokens, (0,int(pc*tokens.shape[-1])))
         if self.conditioning_enabled:
             assert conditioning_input is not None
 
@@ -320,7 +326,8 @@ class DiffusionTts(nn.Module):
             h = torch.cat([h, hs.pop()], dim=1)
             h = module(h, emb)
         h = h.type(x.dtype)
-        return self.out(h)
+        out = self.out(h)
+        return out[:, :, :orig_x_shape]
 
     def benchmark(self, x, timesteps, tokens, conditioning_input):
         profile = OrderedDict()

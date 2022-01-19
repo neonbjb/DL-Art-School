@@ -144,6 +144,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             return self[rv]
         orig_output = wav.shape[-1]
         orig_text_len = tseq.shape[0]
+        orig_aligned_code_length = aligned_codes.shape[0]
         if wav.shape[-1] != self.max_wav_len:
             wav = F.pad(wav, (0, self.max_wav_len - wav.shape[-1]))
             # These codes are aligned to audio inputs, so make sure to pad them as well.
@@ -154,6 +155,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             'real_text': text,
             'padded_text': tseq,
             'aligned_codes': aligned_codes,
+            'aligned_code_lengths': orig_aligned_code_length,
             'text_lengths': torch.tensor(orig_text_len, dtype=torch.long),
             'wav': wav,
             'wav_lengths': torch.tensor(orig_output, dtype=torch.long),
