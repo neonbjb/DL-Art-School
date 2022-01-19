@@ -151,13 +151,6 @@ class UnifiedGptVoice(nn.Module):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def load_state_dict(self, state_dict: 'OrderedDict[str, Tensor]', strict: bool = True):
-        # Remove the attention biases. I don't know why these are called biases because they are really just fixed attention masks forced into nn.Parameters, which are
-        # easily regenerated and do not need to be saved. This is a hack to allow length modifications and should be removed in the future.
-        filtered = dict(filter(lambda i: not i[0].endswith('.attn.bias'), state_dict.items()))
-        assert len(filtered) == len(state_dict) - len(self.gpt.h)
-        return super().load_state_dict(filtered, strict)
-
     def build_aligned_inputs_and_targets(self, input, start_token, stop_token):
         inp = F.pad(input, (1,0), value=start_token)
         tar = F.pad(input, (0,1), value=stop_token)
