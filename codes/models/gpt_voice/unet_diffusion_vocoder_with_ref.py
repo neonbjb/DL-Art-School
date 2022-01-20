@@ -310,7 +310,7 @@ class DiffusionVocoderWithRef(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
+        assert x.shape[-1] % 2048 == 0  # This model operates at base//2048 at it's bottom levels, thus this requirement.
         if self.conditioning_enabled:
             assert conditioning_input is not None
 

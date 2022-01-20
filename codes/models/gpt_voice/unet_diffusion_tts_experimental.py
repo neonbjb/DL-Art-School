@@ -297,7 +297,7 @@ class DiffusionTts(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         orig_x_shape = x.shape[-1]
-        cm = ceil_multiple(x.shape[-1], 4096)
+        cm = ceil_multiple(x.shape[-1], 2048)
         if cm != 0:
             pc = (cm-x.shape[-1])/x.shape[-1]
             x = F.pad(x, (0,cm-x.shape[-1]))

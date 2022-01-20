@@ -65,9 +65,9 @@ def do_spectrogram_diffusion(diffusion_model, dvae_model, diffuser, mel_codes, c
         if plt_spec:
             plot_spectrogram(mel[0].cpu())
 
-        # Pad MEL to multiples of 4096//spectrogram_compression_factor
+        # Pad MEL to multiples of 2048//spectrogram_compression_factor
         msl = mel.shape[-1]
-        dsl = 4096 // spectrogram_compression_factor
+        dsl = 2048 // spectrogram_compression_factor
         gap = dsl - (msl % dsl)
         if gap > 0:
             mel = torch.nn.functional.pad(mel, (0, gap))
