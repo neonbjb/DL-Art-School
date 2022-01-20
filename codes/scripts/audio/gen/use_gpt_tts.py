@@ -6,17 +6,13 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 import yaml
-from tokenizers import Tokenizer
 from tqdm import tqdm
 
-from data.audio.paired_voice_audio_dataset import CharacterTokenizer
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.audio.voice_tokenizer import VoiceBpeTokenizer
 from data.util import is_audio_file, find_files_of_type
-from models.tacotron2.text import text_to_sequence
 from scripts.audio.gen.speech_synthesis_utils import do_spectrogram_diffusion, \
     load_discrete_vocoder_diffuser, wav_to_mel
-from trainer.injectors.base_injectors import TorchMelSpectrogramInjector
 from utils.options import Loader
 from utils.util import load_model_from_config
 
@@ -81,22 +77,24 @@ def fix_autoregressive_output(codes, stop_token):
 if __name__ == '__main__':
     preselected_cond_voices = {
         'trump': ['D:\\data\\audio\\sample_voices\\trump.wav'],
+        'obama': ['D:\\data\\audio\\sample_voices\\obama1.mp3', 'D:\\data\\audio\\sample_voices\\obama2.wav'],
         'ryan_reynolds': ['D:\\data\\audio\\sample_voices\\ryan_reynolds.wav'],
         'ed_sheeran': ['D:\\data\\audio\\sample_voices\\ed_sheeran.wav'],
         'simmons': ['Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav'],
         'news_girl': ['Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav', 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00016.wav'],
         'dan_carlin': ['Y:\\clips\\books1\\5_dchha06 Shield of the West\\00476.wav'],
-        'libri_test': ['Y:\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav']
+        'libri_test': ['Y:\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav'],
+        'myself': ['D:\\data\\audio\\sample_voices\\myself1.wav', 'D:\\data\\audio\\sample_voices\\myself2.wav'],
     }
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt_diffuse', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae.yml')
+    parser.add_argument('-opt_diffuse', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
-    parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae_full\\models\\6100_generator_ema.pth')
+    parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level\\models\\12000_generator_ema.pth')
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts_unified.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
-    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_unified_large\\models\\40000_gpt_ema.pth')
+    parser.add_argument('-gpt_tts_model_path', type=str, help='GPT TTS model checkpoint to load.', default='X:\\dlas\\experiments\\train_gpt_tts_unified_large\\models\\45000_gpt_ema.pth')
     parser.add_argument('-opt_clip', type=str, help='Path to options YAML file used to train the CLIP model', default='X:\\dlas\\experiments\\train_clip_text_to_voice.yml')
     parser.add_argument('-clip_model_name', type=str, help='Name of the CLIP model in opt.', default='clip')
     parser.add_argument('-clip_model_path', type=str, help='CLIP model checkpoint to load.', default='X:\\dlas\\experiments\\train_clip_text_to_voice_masking_bigger_batch\\models\\23500_clip_ema.pth')
@@ -156,15 +154,15 @@ if __name__ == '__main__':
         del samples, clip
 
         print("Loading DVAE..")
-        dvae = load_model_from_config(args.opt_diffuse, args.dvae_model_name).eval()
+        dvae = load_model_from_config(args.opt_diffuse, args.dvae_model_name)
         print("Loading Diffusion Model..")
-        diffusion = load_model_from_config(args.opt_diffuse, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path).eval()
-        diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=50)
+        diffusion = load_model_from_config(args.opt_diffuse, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path)
+        diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=150)
 
         print("Performing vocoding..")
         # Perform vocoding on each batch element separately: Vocoding is very memory intensive.
         for b in range(best_results.shape[0]):
             code = best_results[b].unsqueeze(0)
             wav = do_spectrogram_diffusion(diffusion, dvae, diffuser, code, cond_wav,
-                                           spectrogram_compression_factor=128, plt_spec=False)
-            torchaudio.save(os.path.join(args.output_path, f'gpt_tts_output_{b}.wav'), wav.squeeze(0).cpu(), 11025)
+                                           spectrogram_compression_factor=256, plt_spec=False)
+            torchaudio.save(os.path.join(args.output_path, f'gpt_tts_output_{b}.wav'), wav.squeeze(0).cpu(), 22050)
