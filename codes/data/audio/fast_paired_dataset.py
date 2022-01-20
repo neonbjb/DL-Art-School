@@ -155,7 +155,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             'real_text': text,
             'padded_text': tseq,
             'aligned_codes': aligned_codes,
-            'aligned_code_lengths': orig_aligned_code_length,
+            'aligned_codes_lengths': orig_aligned_code_length,
             'text_lengths': torch.tensor(orig_text_len, dtype=torch.long),
             'wav': wav,
             'wav_lengths': torch.tensor(orig_output, dtype=torch.long),
