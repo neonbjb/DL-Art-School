@@ -106,7 +106,10 @@ def create_dataset(dataset_opt, return_collate=False):
 
 def get_dataset_debugger(dataset_opt):
     mode = dataset_opt['mode']
-    if mode == 'paired_voice_audio' or mode == 'fast_paired_voice_audio':
+    if mode == 'paired_voice_audio':
         from data.audio.paired_voice_audio_dataset import PairedVoiceDebugger
         return PairedVoiceDebugger()
+    elif mode == 'fast_paired_voice_audio':
+        from data.audio.fast_paired_dataset import FastPairedVoiceDebugger
+        return FastPairedVoiceDebugger()
     return None
