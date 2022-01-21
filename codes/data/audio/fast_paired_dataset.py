@@ -182,8 +182,7 @@ class FastPairedVoiceDebugger:
     def get_state(self):
         return {'total_items': self.total_items,
                 'loaded_items': self.loaded_items,
-                'self_conditioning_items': self.self_conditioning_items,
-                'unique_files_loaded': self.unique_files}
+                'self_conditioning_items': self.self_conditioning_items}
 
     def load_state(self, state):
         if isinstance(state, dict):
