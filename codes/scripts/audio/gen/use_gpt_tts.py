@@ -82,7 +82,7 @@ if __name__ == '__main__':
         'ed_sheeran': ['D:\\data\\audio\\sample_voices\\ed_sheeran.wav'],
         'simmons': ['Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav'],
         'news_girl': ['Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00022.wav', 'Y:\\clips\\podcasts-0\\8288_20210113-Is More Violence Coming_\\00016.wav'],
-        'dan_carlin': ['Y:\\clips\\books1\\5_dchha06 Shield of the West\\00476.wav'],
+        'dan_carlin': ['Y:\\clips\\books1\\5_dchha06 Shield of the West\\00476.wav', 'Y:\\clips\\books1\\15_dchha16 Nazi Tidbits\\00036.wav'],
         'libri_test': ['Y:\\libritts\\test-clean\\672\\122797\\672_122797_000057_000002.wav'],
         'myself': ['D:\\data\\audio\\sample_voices\\myself1.wav', 'D:\\data\\audio\\sample_voices\\myself2.wav'],
     }
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt_diffuse', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
-    parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level\\models\\12000_generator_ema.pth')
+    parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level\\models\\15000_generator_ema.pth')
     parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
     parser.add_argument('-opt_gpt_tts', type=str, help='Path to options YAML file used to train the GPT-TTS model', default='X:\\dlas\\experiments\\train_gpt_tts_unified.yml')
     parser.add_argument('-gpt_tts_model_name', type=str, help='Name of the GPT TTS model in opt.', default='gpt')
@@ -131,8 +131,8 @@ if __name__ == '__main__':
         print("Performing GPT inference..")
         samples = []
         for b in tqdm(range(args.num_batches)):
-            codes = gpt.inference_speech(conds, text, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=20, top_p=.95,
-                                  num_return_sequences=args.num_samples//args.num_batches, length_penalty=1)
+            codes = gpt.inference_speech(conds, text, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=50, top_p=.95,
+                                         temperature=.9, num_return_sequences=args.num_samples//args.num_batches, length_penalty=1)
             padding_needed = 250 - codes.shape[1]
             codes = F.pad(codes, (0, padding_needed), value=stop_mel_token)
             samples.append(codes)

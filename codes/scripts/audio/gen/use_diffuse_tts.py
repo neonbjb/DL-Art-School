@@ -20,9 +20,9 @@ def ceil_multiple(base, multiple):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='../options/train_diffusion_tts.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='../options/train_diffusion_tts_medium.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
-    parser.add_argument('-diffusion_model_path', type=str, help='Path to saved model weights', default='../experiments/train_diffusion_tts_experimental_fp16\\models\\17800_generator_ema.pth')
+    parser.add_argument('-diffusion_model_path', type=str, help='Path to saved model weights', default='X:\\dlas\\experiments\\train_diffusion_tts_medium\\models\\5200_generator.pth')
     parser.add_argument('-aligned_codes', type=str, help='Comma-delimited list of integer codes that defines text & prosody. Get this by apply W2V to an existing audio clip or from a bespoke generator.',
                         default='0,0,0,0,10,10,0,4,0,7,0,17,4,4,0,25,5,0,13,13,0,22,4,4,0,21,15,15,7,0,0,14,4,4,6,8,4,4,0,0,12,5,0,0,5,0,4,4,22,22,8,16,16,0,4,4,4,0,0,0,0,0,0,0')  # Default: 'i am very glad to see you', libritts/train-clean-100/103/1241/103_1241_000017_000001.wav.
     parser.add_argument('-cond', type=str, help='Path to the conditioning input audio file.', default='Y:\\clips\\books1\\754_Dan Simmons - The Rise Of Endymion 356 of 450\\00026.wav')

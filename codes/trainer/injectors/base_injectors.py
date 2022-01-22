@@ -78,6 +78,7 @@ class GeneratorInjector(Injector):
         self.grad = opt['grad'] if 'grad' in opt.keys() else True
         self.method = opt_get(opt, ['method'], None)  # If specified, this method is called instead of __call__()
         self.args = opt_get(opt, ['args'], {})
+        self.fp16_override = opt_get(opt, ['fp16'], True)
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
@@ -86,7 +87,7 @@ class GeneratorInjector(Injector):
             gen = gen.module  # Dereference DDP wrapper.
         method = gen if self.method is None else getattr(gen, self.method)
 
-        with autocast(enabled=self.env['opt']['fp16']):
+        with autocast(enabled=self.env['opt']['fp16'] and self.fp16_override):
             if isinstance(self.input, list):
                 params = extract_params_from_state(self.input, state)
             else:

@@ -11,7 +11,6 @@ import torch.nn.functional as F
 from models.gpt_voice.mini_encoder import AudioMiniEncoder, EmbeddingCombiner
 from scripts.audio.gen.use_diffuse_tts import ceil_multiple
 from trainer.networks import register_model
-from utils.util import get_mask_from_lengths
 from utils.util import checkpoint
 
 
