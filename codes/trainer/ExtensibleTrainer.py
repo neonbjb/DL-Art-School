@@ -161,7 +161,7 @@ class ExtensibleTrainer(BaseModel):
         # Load experiments
         self.experiments = []
         if 'experiments' in opt.keys():
-            self.experiments = [get_experiment_for_name(e) for e in op['experiments']]
+            self.experiments = [get_experiment_for_name(e) for e in opt['experiments']]
 
         # Setting this to false triggers SRGAN to call the models update_model() function on the first iteration.
         self.updated = True
