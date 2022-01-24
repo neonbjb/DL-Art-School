@@ -488,3 +488,11 @@ def load_model_from_config(cfg_file=None, model_name=None, dev='cuda', also_load
         print(f"Loading from {load_path}")
         model.load_state_dict(torch.load(load_path), strict=strict_load)
     return model
+
+
+# Mapper for torch.load() that maps cuda devices to the correct CUDA device, but leaves CPU devices alone.
+def map_cuda_to_correct_device(storage, loc):
+    if str(loc).startswith('cuda'):
+        return storage.cuda(torch.cuda.current_device())
+    else:
+        return storage.cpu()

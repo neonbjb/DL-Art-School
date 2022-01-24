@@ -17,7 +17,7 @@ from trainer.ExtensibleTrainer import ExtensibleTrainer
 from time import time
 from datetime import datetime
 
-from utils.util import opt_get
+from utils.util import opt_get, map_cuda_to_correct_device
 
 
 def init_dist(backend, **kwargs):
@@ -43,9 +43,7 @@ class Trainer:
         #### loading resume state if exists
         if opt['path'].get('resume_state', None):
             # distributed resuming: all load into default GPU
-            device_id = torch.cuda.current_device()
-            resume_state = torch.load(opt['path']['resume_state'],
-                                      map_location=lambda storage, loc: storage.cuda(device_id))
+            resume_state = torch.load(opt['path']['resume_state'], map_location=map_cuda_to_correct_device)
         else:
             resume_state = None
 

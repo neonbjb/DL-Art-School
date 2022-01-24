@@ -106,8 +106,7 @@ class BaseModel():
         # Sometimes networks are passed in as DDP modules, we want the raw parameters.
         if hasattr(network, 'module'):
             network = network.module
-        load_net = torch.load(load_path,
-                              map_location=lambda storage, loc: storage.cuda(self.rank if self.rank != -1 else 0))
+        load_net = torch.load(load_path, map_location=utils.util.map_cuda_to_correct_device)
 
         # Support loading torch.save()s for whole models as well as just state_dicts.
         if 'state_dict' in load_net:
