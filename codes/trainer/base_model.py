@@ -2,6 +2,7 @@ import os
 from collections import OrderedDict
 import torch
 import torch.nn as nn
+from torch.distributed.optim import ZeroRedundancyOptimizer
 from torch.nn.parallel.distributed import DistributedDataParallel
 
 import utils.util
@@ -126,6 +127,13 @@ class BaseModel():
             else:
                 load_net_clean[k] = v
         network.load_state_dict(load_net_clean, strict=strict)
+
+
+    def consolidate_state(self, state):
+        for o in self.optimizers:
+            if isinstance(o, ZeroRedundancyOptimizer):
+                state['optimizers'].append(o.consolidate_state_dict(to=0))
+
 
     def save_training_state(self, state):
         """Save training state during training, which will be used for resuming"""
