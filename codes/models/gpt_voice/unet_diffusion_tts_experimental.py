@@ -334,7 +334,7 @@ class DiffusionTts(nn.Module):
             emb = emb1
 
         # Mask out guidance tokens for un-guided diffusion.
-        if self.nil_guidance_fwd_proportion > 0:
+        if self.training and self.nil_guidance_fwd_proportion > 0:
             token_mask = torch.rand(tokens.shape, device=tokens.device) < self.nil_guidance_fwd_proportion
             tokens = torch.where(token_mask, self.mask_token_id, tokens)
 

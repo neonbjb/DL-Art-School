@@ -54,9 +54,9 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
         self.conditioning_candidates = opt_get(hparams, ['num_conditioning_candidates'], 1)
         self.conditioning_length = opt_get(hparams, ['conditioning_length'], 44100)
         self.debug_failures = opt_get(hparams, ['debug_loading_failures'], False)
-        self.aligned_codes_to_audio_ratio = opt_get(hparams, ['aligned_codes_ratio'], 443)
         self.text_cleaners = hparams.text_cleaners
         self.sample_rate = hparams.sample_rate
+        self.aligned_codes_to_audio_ratio = 443 * self.sample_rate // 22050
         self.max_wav_len = opt_get(hparams, ['max_wav_length'], None)
         if self.max_wav_len is not None:
             self.max_aligned_codes = self.max_wav_len // self.aligned_codes_to_audio_ratio
