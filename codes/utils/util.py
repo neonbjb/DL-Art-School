@@ -467,7 +467,8 @@ def clip_grad_norm(parameters: list, parameter_names: list, max_norm: float, nor
 
 
 Loader, Dumper = OrderedYaml()
-def load_model_from_config(cfg_file=None, model_name=None, dev='cuda', also_load_savepoint=True, load_path=None, preloaded_options=None, strict_load=True):
+def load_model_from_config(cfg_file=None, model_name=None, also_load_savepoint=True, load_path=None,
+                           preloaded_options=None, strict_load=True, device=None):
     if preloaded_options is not None:
         opt = preloaded_options
     else:
@@ -480,13 +481,14 @@ def load_model_from_config(cfg_file=None, model_name=None, dev='cuda', also_load
         model_cfg = opt['networks'][model_name]
     if 'which_model_G' in model_cfg.keys() and 'which_model' not in model_cfg.keys():
         model_cfg['which_model'] = model_cfg['which_model_G']
-    model = networks.create_model(opt, model_cfg).to(dev)
+    model = networks.create_model(opt, model_cfg).to(device)
     if also_load_savepoint and f'pretrain_model_{model_name}' in opt['path'].keys():
         assert load_path is None
         load_path = opt['path'][f'pretrain_model_{model_name}']
     if load_path is not None:
         print(f"Loading from {load_path}")
-        model.load_state_dict(torch.load(load_path), strict=strict_load)
+        sd = torch.load(load_path, map_location=device)
+        model.load_state_dict(sd, strict=strict_load)
     return model
 
 

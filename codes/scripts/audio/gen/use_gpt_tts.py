@@ -98,6 +98,11 @@ if __name__ == '__main__':
     parser.add_argument('-opt_clip', type=str, help='Path to options YAML file used to train the CLIP model', default='X:\\dlas\\experiments\\train_clip_text_to_voice.yml')
     parser.add_argument('-clip_model_name', type=str, help='Name of the CLIP model in opt.', default='clip')
     parser.add_argument('-clip_model_path', type=str, help='CLIP model checkpoint to load.', default='X:\\dlas\\experiments\\train_clip_text_to_voice_masking_bigger_batch\\models\\23500_clip_ema.pth')
+    parser.add_argument('-opt_cond_clip', type=str, help='Path to options YAML file used to train the Conditioning CLIP model', default='D:\\dlas\\options\\train_clip_cond_to_voice.yml')
+    parser.add_argument('-cond_clip_model_name', type=str, help='Name of the CLIP model in opt.', default='clip')
+    parser.add_argument('-cond_clip_model_path', type=str, help='CLIP model checkpoint to load.', default='D:\\dlas\\experiments\\train_clip_cond_to_voice\\models\\42000_clip_ema.pth')
+    parser.add_argument('-cond_clip_weight', type=float, help='How much to weight the conditioning CLIP to the text CLIP. Lower means the sample sounds more like the text, higher means it sounds more like the conditioning.',
+                        default=.3)
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
     parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
     parser.add_argument('-num_samples', type=int, help='How many total outputs the autoregressive transformer should produce.', default=128)
@@ -141,6 +146,7 @@ if __name__ == '__main__':
 
         print("Loading CLIP..")
         clip = load_model_from_config(args.opt_clip, model_name=args.clip_model_name, also_load_savepoint=False, load_path=args.clip_model_path).eval()
+        cond_clip = load_model_from_config(args.opt_cond_clip, model_name=args.cond_clip_model_name, also_load_savepoint=False, load_path=args.cond_clip_model_path).eval()
         print("Performing CLIP filtering..")
         for i in range(samples.shape[0]):
             samples[i] = fix_autoregressive_output(samples[i], stop_mel_token)
@@ -148,6 +154,9 @@ if __name__ == '__main__':
                             torch.full((samples.shape[0],), fill_value=text.shape[1]-1, dtype=torch.long, device='cuda'),
                             samples, torch.full((samples.shape[0],), fill_value=samples.shape[1]*1024, dtype=torch.long, device='cuda'),
                             return_loss=False)
+        cond_clip_results = cond_clip(conds[:, -1], samples, torch.full((samples.shape[0],), fill_value=samples.shape[1]*1024,
+                                                                        dtype=torch.long, device='cuda'), return_loss=False)
+        clip_results = clip_results * (1-args.cond_clip_weight) + cond_clip_results * args.cond_clip_weight
         best_results = samples[torch.topk(clip_results, k=args.num_outputs).indices]
 
         # Delete the GPT TTS model to free up GPU memory
