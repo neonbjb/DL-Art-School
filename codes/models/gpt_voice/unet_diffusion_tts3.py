@@ -166,9 +166,11 @@ class DiffusionTts(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
+        embedding_dim = model_channels * 4
+        self.code_embedding = nn.Embedding(num_tokens+1, embedding_dim)
         self.conditioning_enabled = conditioning_inputs_provided
         if conditioning_inputs_provided:
-            self.contextual_embedder = AudioMiniEncoder(in_channels, time_embed_dim, base_channels=32, depth=6, resnet_blocks=1,
+            self.contextual_embedder = AudioMiniEncoder(in_channels, embedding_dim, base_channels=32, depth=6, resnet_blocks=1,
                              attn_blocks=2, num_attn_heads=2, dropout=dropout, downsample_factor=4, kernel_size=5)
 
         self.input_blocks = nn.ModuleList(
@@ -186,8 +188,8 @@ class DiffusionTts(nn.Module):
 
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
             if ds in token_conditioning_resolutions:
-                token_conditioning_block = nn.Embedding(num_tokens+1, ch)
-                token_conditioning_block.weight.data.normal_(mean=0.0, std=.02)
+                token_conditioning_block = nn.Conv1d(embedding_dim, ch, 1)
+                token_conditioning_block.weight.data *= .02
                 self.input_blocks.append(token_conditioning_block)
                 token_conditioning_blocks.append(token_conditioning_block)
 
@@ -326,71 +328,36 @@ class DiffusionTts(nn.Module):
             assert conditioning_input is not None
 
         hs = []
-        emb1 = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-        if self.conditioning_enabled:
-            actual_cond = self.contextual_embedder(conditioning_input)
-            emb = emb1 + actual_cond
-        else:
-            emb = emb1
+        time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
         # Mask out guidance tokens for un-guided diffusion.
         if self.training and self.nil_guidance_fwd_proportion > 0:
             token_mask = torch.rand(tokens.shape, device=tokens.device) < self.nil_guidance_fwd_proportion
             tokens = torch.where(token_mask, self.mask_token_id, tokens)
+        code_emb = self.code_embedding(tokens).permute(0,2,1)
+        if self.conditioning_enabled:
+            cond_emb = self.contextual_embedder(conditioning_input)
+            code_emb = cond_emb.unsqueeze(-1) * code_emb
 
         h = x.type(self.dtype)
         for k, module in enumerate(self.input_blocks):
-            if isinstance(module, nn.Embedding):
-                h_tok = F.interpolate(module(tokens).permute(0,2,1), size=(h.shape[-1]), mode='nearest')
+            if isinstance(module, nn.Conv1d):
+                h_tok = F.interpolate(module(code_emb), size=(h.shape[-1]), mode='nearest')
                 h = h + h_tok
             else:
-                h = module(h, emb)
+                h = module(h, time_emb)
                 hs.append(h)
-        h = self.middle_block(h, emb)
+        h = self.middle_block(h, time_emb)
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
-            h = module(h, emb)
+            h = module(h, time_emb)
         h = h.type(x.dtype)
         out = self.out(h)
         return out[:, :, :orig_x_shape]
 
-    def benchmark(self, x, timesteps, tokens, conditioning_input):
-        profile = OrderedDict()
-        params = OrderedDict()
-        hs = []
-        emb1 = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-        from torchprofile import profile_macs
-        profile['contextual_embedder'] = profile_macs(self.contextual_embedder, args=(conditioning_input,))
-        params['contextual_embedder'] = sum(p.numel() for p in self.contextual_embedder.parameters())
-        emb2 = self.contextual_embedder(conditioning_input)
-        emb = emb1 + emb2
-
-        h = x.type(self.dtype)
-        for k, module in enumerate(self.input_blocks):
-            if isinstance(module, nn.Embedding):
-                h_tok = F.interpolate(module(tokens).permute(0,2,1), size=(h.shape[-1]), mode='nearest')
-                h = h + h_tok
-            else:
-                profile[f'in_{k}'] = profile_macs(module, args=(h,emb))
-                params[f'in_{k}'] = sum(p.numel() for p in module.parameters())
-                h = module(h, emb)
-                hs.append(h)
-        profile['middle'] = profile_macs(self.middle_block, args=(h,emb))
-        params['middle'] = sum(p.numel() for p in self.middle_block.parameters())
-        h = self.middle_block(h, emb)
-        for k, module in enumerate(self.output_blocks):
-            h = torch.cat([h, hs.pop()], dim=1)
-            profile[f'out_{k}'] = profile_macs(module, args=(h,emb))
-            params[f'out_{k}'] = sum(p.numel() for p in module.parameters())
-            h = module(h, emb)
-        h = h.type(x.dtype)
-        profile['out'] = profile_macs(self.out, args=(h,))
-        params['out'] = sum(p.numel() for p in self.out.parameters())
-        return profile, params
-
 
 @register_model
-def register_diffusion_tts_experimental(opt_net, opt):
+def register_diffusion_tts3(opt_net, opt):
     return DiffusionTts(**opt_net['kwargs'])
 
 
@@ -404,17 +371,4 @@ if __name__ == '__main__':
                          token_conditioning_resolutions=[1,4,16,64], attention_resolutions=[256,512], num_heads=4, kernel_size=3,
                          scale_factor=2, conditioning_inputs_provided=True, time_embed_dim_multiplier=4)
     model(clip, ts, tok, cond)
-
-    p, r = model.benchmark(clip, ts, tok, cond)
-    p = {k: v / 1000000000 for k, v in p.items()}
-    p = sorted(p.items(), key=operator.itemgetter(1))
-    print("Computational complexity:")
-    print(p)
-    print(sum([j[1] for j in p]))
-    print()
-    print("Memory complexity:")
-    r = {k: v / 1000000 for k, v in r.items()}
-    r = sorted(r.items(), key=operator.itemgetter(1))
-    print(r)
-    print(sum([j[1] for j in r]))
 
