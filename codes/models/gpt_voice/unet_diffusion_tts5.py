@@ -38,6 +38,25 @@ class CheckpointedLayer(nn.Module):
         return torch.utils.checkpoint.checkpoint(partial, x, **kw_requires_grad)
 
 
+class CheckpointedXTransformerEncoder(nn.Module):
+    """
+    Wraps a ContinuousTransformerWrapper and applies CheckpointedLayer to each layer and permutes from channels-mid
+    to channels-last that XTransformer expects.
+    """
+    def __init__(self, **xtransformer_kwargs):
+        super().__init__()
+        self.transformer = ContinuousTransformerWrapper(**xtransformer_kwargs)
+
+        for i in range(len(self.transformer.attn_layers.layers)):
+            n, b, r = self.transformer.attn_layers.layers[i]
+            self.transformer.attn_layers.layers[i] = nn.ModuleList([n, CheckpointedLayer(b), r])
+
+    def forward(self, x):
+        x = x.permute(0,2,1)
+        h = self.transformer(x)
+        return h.permute(0,2,1)
+
+
 class ResBlock(TimestepBlock):
     def __init__(
         self,
@@ -190,12 +209,26 @@ class DiffusionTts(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        embedding_dim = model_channels * 4
+        embedding_dim = model_channels * 8
         self.code_embedding = nn.Embedding(num_tokens+1, embedding_dim)
         self.conditioning_enabled = conditioning_inputs_provided
         if conditioning_inputs_provided:
             self.contextual_embedder = AudioMiniEncoder(in_channels, embedding_dim, base_channels=32, depth=6, resnet_blocks=1,
                              attn_blocks=2, num_attn_heads=2, dropout=dropout, downsample_factor=4, kernel_size=5)
+        self.conditioning_encoder = CheckpointedXTransformerEncoder(
+                max_seq_len=-1,  # Should be unused
+                use_pos_emb=False,
+                attn_layers=Encoder(
+                    dim=embedding_dim,
+                    depth=8,
+                    heads=num_heads,
+                    ff_dropout=dropout,
+                    attn_dropout=dropout,
+                    use_rmsnorm=True,
+                    ff_glu=True,
+                    rotary_pos_emb=True,
+                )
+        )
 
         self.input_blocks = nn.ModuleList(
             [
@@ -209,12 +242,6 @@ class DiffusionTts(nn.Module):
         input_block_chans = [model_channels]
         ch = model_channels
         ds = 1
-
-        class Permute(nn.Module):
-            def __init__(self):
-                super().__init__()
-            def forward(self, x):
-                return x.permute(0,2,1)
 
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
             if ds in token_conditioning_resolutions:
@@ -260,7 +287,7 @@ class DiffusionTts(nn.Module):
                 ds *= 2
                 self._feature_size += ch
 
-        mid_transformer = ContinuousTransformerWrapper(
+        mid_transformer = CheckpointedXTransformerEncoder(
                 max_seq_len=-1,  # Should be unused
                 use_pos_emb=False,
                 attn_layers=Encoder(
@@ -275,10 +302,6 @@ class DiffusionTts(nn.Module):
                 )
             )
 
-        for i in range(len(mid_transformer.attn_layers.layers)):
-            n, b, r = mid_transformer.attn_layers.layers[i]
-            mid_transformer.attn_layers.layers[i] = nn.ModuleList([n, CheckpointedLayer(b), r])
-
 
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
@@ -288,9 +311,7 @@ class DiffusionTts(nn.Module):
                 dims=dims,
                 kernel_size=kernel_size,
             ),
-            Permute(),
             mid_transformer,
-            Permute(),
             ResBlock(
                 ch,
                 time_embed_dim,
@@ -387,43 +408,53 @@ class DiffusionTts(nn.Module):
             if self.conditioning_enabled:
                 cond_emb = self.contextual_embedder(conditioning_input)
                 code_emb = cond_emb.unsqueeze(-1) * code_emb
+            code_emb = self.conditioning_encoder(code_emb)
 
-        first = False  # First block has autocast disabled.
-        time_emb = time_emb.float()
-        h = x
-        for k, module in enumerate(self.input_blocks):
-            with autocast(x.device.type, enabled=not first):
+            first = True
+            time_emb = time_emb.float()
+            h = x
+            for k, module in enumerate(self.input_blocks):
                 if isinstance(module, nn.Conv1d):
                     h_tok = F.interpolate(module(code_emb), size=(h.shape[-1]), mode='nearest')
                     h = h + h_tok
                 else:
-                    h = module(h, time_emb)
+                    with autocast(x.device.type, enabled=not first):
+                        # First block has autocast disabled to allow a high precision signal to be properly vectorized.
+                        h = module(h, time_emb)
                     hs.append(h)
-                first = True
-        with autocast(x.device.type):
+                first = False
             h = self.middle_block(h, time_emb)
             for module in self.output_blocks:
                 h = torch.cat([h, hs.pop()], dim=1)
                 h = module(h, time_emb)
-            h = h.type(x.dtype)
+
+        # Last block also has autocast disabled for high-precision outputs.
         h = h.float()
-        out = self.out(h)  # Last block also has autocast disabled.
+        out = self.out(h)
         return out[:, :, :orig_x_shape]
 
 
 @register_model
-def register_diffusion_tts3(opt_net, opt):
+def register_diffusion_tts5(opt_net, opt):
     return DiffusionTts(**opt_net['kwargs'])
 
 
 # Test for ~4 second audio clip at 22050Hz
 if __name__ == '__main__':
-    clip = torch.randn(4, 1, 86016)
-    tok = torch.randint(0,30, (4,388))
-    cond = torch.randn(4, 1, 44000)
-    ts = torch.LongTensor([555, 556, 600, 600])
-    model = DiffusionTts(64, channel_mult=[1,1.5,2, 3, 4, 6, 8, 8, 8, 8], num_res_blocks=[2, 2, 2, 2, 2, 2, 2, 4, 4, 4],
-                         token_conditioning_resolutions=[1,4,16,64], attention_resolutions=[256,512], num_heads=4, kernel_size=3,
-                         scale_factor=2, conditioning_inputs_provided=True, time_embed_dim_multiplier=4)
+    clip = torch.randn(2, 1, 32768)
+    tok = torch.randint(0,30, (2,388))
+    cond = torch.randn(2, 1, 44000)
+    ts = torch.LongTensor([600, 600])
+    model = DiffusionTts(128,
+                         channel_mult=[1,1.5,2, 3, 4, 6, 8],
+                         num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
+                         token_conditioning_resolutions=[1,4,16,64],
+                         attention_resolutions=[],
+                         num_heads=8,
+                         kernel_size=3,
+                         scale_factor=2,
+                         conditioning_inputs_provided=True,
+                         time_embed_dim_multiplier=4)
     model(clip, ts, tok, cond)
+    torch.save(model.state_dict(), 'test_out.pth')
 

@@ -146,6 +146,7 @@ class Transformer(nn.Module):
         ff_dropout = 0.,
         attn_types = None,
         image_fmap_size = None,
+        oned_fmap_size = None,
         sparse_attn = False,
         stable = False,
         sandwich_norm = False,
@@ -204,7 +205,7 @@ class Transformer(nn.Module):
             assert 'mlp' not in attn_types, 'you cannot use gMLPs if rotary embedding is turned on'
 
             rot_dim = dim_head // 3
-            img_seq_len = (image_fmap_size ** 2)
+            img_seq_len = (image_fmap_size ** 2) if image_fmap_size is not None else oned_fmap_size
             text_len = seq_len - img_seq_len + 1
 
             text_pos_emb = RotaryEmbedding(dim = rot_dim)
@@ -214,7 +215,7 @@ class Transformer(nn.Module):
             img_to_text_freqs = text_pos_emb(torch.full((img_seq_len,), 8192)) # image is given a position far away from text
             text_freqs = torch.cat((text_freqs, img_to_text_freqs), dim = 0)
 
-            img_freqs_axial = img_axial_pos_emb(torch.linspace(-1, 1, steps = image_fmap_size))
+            img_freqs_axial = img_axial_pos_emb(torch.linspace(-1, 1, steps = image_fmap_size if image_fmap_size is not None else oned_fmap_size))
             img_freqs = broadcat((rearrange(img_freqs_axial, 'i d -> i () d'), rearrange(img_freqs_axial, 'j d -> () j d')), dim = -1)
             img_freqs = rearrange(img_freqs, 'h w d -> (h w) d')
 

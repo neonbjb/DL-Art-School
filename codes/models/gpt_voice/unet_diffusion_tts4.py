@@ -260,26 +260,6 @@ class DiffusionTts(nn.Module):
                 ds *= 2
                 self._feature_size += ch
 
-        mid_transformer = ContinuousTransformerWrapper(
-                max_seq_len=-1,  # Should be unused
-                use_pos_emb=False,
-                attn_layers=Encoder(
-                    dim=ch,
-                    depth=8,
-                    heads=num_heads,
-                    ff_dropout=dropout,
-                    attn_dropout=dropout,
-                    use_rmsnorm=True,
-                    ff_glu=True,
-                    rotary_pos_emb=True,
-                )
-            )
-
-        for i in range(len(mid_transformer.attn_layers.layers)):
-            n, b, r = mid_transformer.attn_layers.layers[i]
-            mid_transformer.attn_layers.layers[i] = nn.ModuleList([n, CheckpointedLayer(b), r])
-
-
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,
@@ -288,9 +268,6 @@ class DiffusionTts(nn.Module):
                 dims=dims,
                 kernel_size=kernel_size,
             ),
-            Permute(),
-            mid_transformer,
-            Permute(),
             ResBlock(
                 ch,
                 time_embed_dim,
@@ -412,7 +389,7 @@ class DiffusionTts(nn.Module):
 
 
 @register_model
-def register_diffusion_tts3(opt_net, opt):
+def register_diffusion_tts4(opt_net, opt):
     return DiffusionTts(**opt_net['kwargs'])
 
 
