@@ -178,6 +178,7 @@ class DiffusionTts(nn.Module):
             scale_factor=2,
             conditioning_inputs_provided=True,
             time_embed_dim_multiplier=4,
+            transformer_depths=8,
             nil_guidance_fwd_proportion=.3,
     ):
         super().__init__()
@@ -220,7 +221,7 @@ class DiffusionTts(nn.Module):
                 use_pos_emb=False,
                 attn_layers=Encoder(
                     dim=embedding_dim,
-                    depth=8,
+                    depth=transformer_depths,
                     heads=num_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
@@ -292,7 +293,7 @@ class DiffusionTts(nn.Module):
                 use_pos_emb=False,
                 attn_layers=Encoder(
                     dim=ch,
-                    depth=8,
+                    depth=transformer_depths,
                     heads=num_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
@@ -301,8 +302,6 @@ class DiffusionTts(nn.Module):
                     rotary_pos_emb=True,
                 )
             )
-
-
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,

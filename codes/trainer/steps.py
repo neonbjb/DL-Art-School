@@ -145,6 +145,7 @@ class ConfigurableStep(Module):
                 opt = ZeroRedundancyOptimizer(params_weights, optimizer_class=torch.optim.AdamW, lr=opt_config['lr'],
                                        weight_decay=opt_get(opt_config, ['weight_decay'], 1e-2),
                                        betas=(opt_get(opt_config, ['beta1'], .9), opt_get(opt_config, ['beta2'], .999)))
+                opt.param_groups[0]['initial_lr'] = opt_config['lr']
                 opt._group_names = []
             elif self.step_opt['optimizer'] == 'lars':
                 from trainer.optimizers.larc import LARC
