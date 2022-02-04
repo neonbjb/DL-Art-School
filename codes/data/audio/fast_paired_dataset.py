@@ -118,7 +118,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
         codes, repeats, pads = [], [], [0]
         for val, group in grouped:
             if val == 0:
-                pads[-1] = len(list(group))
+                pads[-1] = len(list(group))  # This is a very important distinction! It means the padding belongs to the character proceeding it.
             else:
                 codes.append(val)
                 repeats.append(len(list(group)))
