@@ -7,7 +7,7 @@ from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import find_files_of_type, is_audio_file
 from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.respace import SpacedDiffusion, space_timesteps
-from trainer.injectors.base_injectors import TorchMelSpectrogramInjector
+from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector
 from utils.audio import plot_spectrogram
 
 
