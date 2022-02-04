@@ -54,7 +54,7 @@ def load_discrete_vocoder_diffuser(trained_diffusion_steps=4000, desired_diffusi
                            model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule(schedule, trained_diffusion_steps))
 
 
-def do_spectrogram_diffusion(diffusion_model, dvae_model, diffuser, mel_codes, conditioning_input, spectrogram_compression_factor=128, plt_spec=False):
+def do_spectrogram_diffusion(diffusion_model, dvae_model, diffuser, mel_codes, conditioning_input, spectrogram_compression_factor=128, plt_spec=False, mean=False):
     """
     Uses the specified diffusion model and DVAE model to convert the provided MEL & conditioning inputs into an audio clip.
     """
@@ -73,5 +73,9 @@ def do_spectrogram_diffusion(diffusion_model, dvae_model, diffuser, mel_codes, c
             mel = torch.nn.functional.pad(mel, (0, gap))
 
         output_shape = (mel.shape[0], 1, mel.shape[-1] * spectrogram_compression_factor)
-        return diffuser.p_sample_loop(diffusion_model, output_shape, model_kwargs={'spectrogram': mel, 'conditioning_input': conditioning_input})
+        if mean:
+            return diffuser.p_sample_loop(diffusion_model, output_shape, noise=torch.zeros(output_shape, device=mel_codes.device),
+                                          model_kwargs={'spectrogram': mel, 'conditioning_input': conditioning_input})
+        else:
+            return diffuser.p_sample_loop(diffusion_model, output_shape, model_kwargs={'spectrogram': mel, 'conditioning_input': conditioning_input})
 

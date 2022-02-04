@@ -104,10 +104,10 @@ if __name__ == '__main__':
     parser.add_argument('-cond_clip_weight', type=float, help='How much to weight the conditioning CLIP to the text CLIP. Lower means the sample sounds more like the text, higher means it sounds more like the conditioning.',
                         default=.3)
     parser.add_argument('-text', type=str, help='Text to speak.', default="I am a language model that has learned to speak.")
-    parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='libri_test')
-    parser.add_argument('-num_samples', type=int, help='How many total outputs the autoregressive transformer should produce.', default=128)
-    parser.add_argument('-num_batches', type=int, help='How many batches those samples should be produced over.', default=8)
-    parser.add_argument('-num_outputs', type=int, help='Number of outputs to produce.', default=2)
+    parser.add_argument('-cond_preset', type=str, help='Use a preset conditioning voice (defined above). Overrides cond_path.', default='simmons')
+    parser.add_argument('-num_samples', type=int, help='How many total outputs the autoregressive transformer should produce.', default=256)
+    parser.add_argument('-num_batches', type=int, help='How many batches those samples should be produced over.', default=16)
+    parser.add_argument('-num_outputs', type=int, help='Number of outputs to produce.', default=5)
     parser.add_argument('-output_path', type=str, help='Where to store outputs.', default='../results/use_gpt_tts')
     args = parser.parse_args()
     os.makedirs(args.output_path, exist_ok=True)
@@ -117,7 +117,7 @@ if __name__ == '__main__':
     with open(args.opt_gpt_tts, mode='r') as f:
         gpt_opt = yaml.load(f, Loader=Loader)
     gpt_opt['networks'][args.gpt_tts_model_name]['kwargs']['checkpointing'] = False  # Required for beam search
-    gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path).eval()
+    gpt = load_model_from_config(preloaded_options=gpt_opt, model_name=args.gpt_tts_model_name, also_load_savepoint=False, load_path=args.gpt_tts_model_path).cuda().eval()
     stop_mel_token = gpt.stop_mel_token
 
     print("Loading data..")
@@ -145,8 +145,8 @@ if __name__ == '__main__':
         del gpt
 
         print("Loading CLIP..")
-        clip = load_model_from_config(args.opt_clip, model_name=args.clip_model_name, also_load_savepoint=False, load_path=args.clip_model_path).eval()
-        cond_clip = load_model_from_config(args.opt_cond_clip, model_name=args.cond_clip_model_name, also_load_savepoint=False, load_path=args.cond_clip_model_path).eval()
+        clip = load_model_from_config(args.opt_clip, model_name=args.clip_model_name, also_load_savepoint=False, load_path=args.clip_model_path).cuda().eval()
+        cond_clip = load_model_from_config(args.opt_cond_clip, model_name=args.cond_clip_model_name, also_load_savepoint=False, load_path=args.cond_clip_model_path).cuda().eval()
         print("Performing CLIP filtering..")
         for i in range(samples.shape[0]):
             samples[i] = fix_autoregressive_output(samples[i], stop_mel_token)
@@ -163,10 +163,10 @@ if __name__ == '__main__':
         del samples, clip
 
         print("Loading DVAE..")
-        dvae = load_model_from_config(args.opt_diffuse, args.dvae_model_name)
+        dvae = load_model_from_config(args.opt_diffuse, args.dvae_model_name).cuda()
         print("Loading Diffusion Model..")
-        diffusion = load_model_from_config(args.opt_diffuse, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path)
-        diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=150)
+        diffusion = load_model_from_config(args.opt_diffuse, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path).cuda()
+        diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=100)
 
         print("Performing vocoding..")
         # Perform vocoding on each batch element separately: Vocoding is very memory intensive.
