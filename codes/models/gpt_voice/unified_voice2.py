@@ -8,11 +8,28 @@ from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.utils.model_parallel_utils import get_device_map, assert_device_map
 
 from models.arch_util import AttentionBlock
-from models.gpt_voice.gpt_asr_hf2 import ResBlock
 from models.gpt_voice.transformer_builders import build_hf_gpt_transformer
 from models.tacotron2.text import symbols
 from trainer.networks import register_model
 from utils.util import opt_get
+
+
+class ResBlock(nn.Module):
+    """
+    Basic residual convolutional block that uses GroupNorm.
+    """
+    def __init__(self, chan):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(chan, chan, kernel_size=3, padding=1),
+            nn.GroupNorm(chan//8, chan),
+            nn.ReLU(),
+            nn.Conv1d(chan, chan, kernel_size=3, padding=1),
+            nn.GroupNorm(chan//8, chan)
+        )
+
+    def forward(self, x):
+        return F.relu(self.net(x) + x)
 
 
 class GPT2InferenceModel(GPT2PreTrainedModel):
