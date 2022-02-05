@@ -115,34 +115,34 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
 
     def get_ctc_metadata(self, codes):
         grouped = groupby(codes.tolist())
-        codes, repeats, pads = [], [], [0]
+        rcodes, repeats, seps = [], [], [0]
         for val, group in grouped:
             if val == 0:
-                pads[-1] = len(list(group))  # This is a very important distinction! It means the padding belongs to the character proceeding it.
+                seps[-1] = len(list(group))  # This is a very important distinction! It means the padding belongs to the character proceeding it.
             else:
-                codes.append(val)
+                rcodes.append(val)
                 repeats.append(len(list(group)))
-                pads.append(0)
+                seps.append(0)
 
-        codes = torch.tensor(codes)
+        rcodes = torch.tensor(rcodes)
         # These clip values are sane maximum values which I did not see in the datasets I have access to.
-        repeats = torch.clip(torch.tensor(repeats), max=30)
-        pads = torch.clip(torch.tensor(pads[:-1]), max=120)
+        repeats = torch.clip(torch.tensor(repeats), min=1, max=30)
+        seps = torch.clip(torch.tensor(seps[:-1]), max=120)
 
         # Pad or clip the codes to get them to exactly self.max_text_len
-        orig_lens = codes.shape[0]
-        if codes.shape[0] < self.max_text_len:
-            gap = self.max_text_len - codes.shape[0]
-            codes = F.pad(codes, (0, gap))
-            repeats = F.pad(repeats, (0, gap))
-            pads = F.pad(pads, (0, gap))
-        elif codes.shape[0] > self.max_text_len:
-            codes = codes[:self.max_text_len]
-            repeats = codes[:self.max_text_len]
-            pads = pads[:self.max_text_len]
+        orig_lens = rcodes.shape[0]
+        if rcodes.shape[0] < self.max_text_len:
+            gap = self.max_text_len - rcodes.shape[0]
+            rcodes = F.pad(rcodes, (0, gap))
+            repeats = F.pad(repeats, (0, gap), value=1)  # The minimum value for repeats is 1, hence this is the pad value too.
+            seps = F.pad(seps, (0, gap))
+        elif rcodes.shape[0] > self.max_text_len:
+            rcodes = rcodes[:self.max_text_len]
+            repeats = rcodes[:self.max_text_len]
+            seps = seps[:self.max_text_len]
         return {
-            'ctc_raw_codes': codes,
-            'ctc_pads': pads,
+            'ctc_raw_codes': rcodes,
+            'ctc_separators': seps,
             'ctc_repeats': repeats,
             'ctc_raw_lengths': orig_lens,
         }
