@@ -381,7 +381,7 @@ class DiffusionTts(nn.Module):
             assert lr_input is not None
             if self.super_sampling_max_noising_factor > 0:
                 noising_factor = random.uniform(0,self.super_sampling_max_noising_factor)
-                lr_input = torch.rand_like(lr_input) * noising_factor + lr_input
+                lr_input = torch.randn_like(lr_input) * noising_factor + lr_input
             lr_input = F.interpolate(lr_input, size=(x.shape[-1],), mode='nearest')
             x = torch.cat([x, lr_input], dim=1)
 
