@@ -112,13 +112,17 @@ if __name__ == '__main__':
     ]
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-text', type=str, help='Text to speak.', default='This is the real secret of life: to be completely engaged in what you are doing in the here and now. To realize that instead of work, it is play.')
+    parser.add_argument('-opt_code_gen', type=str, help='Path to options YAML file used to train the code_gen model', default='D:\\dlas\\options\\train_encoder_build_ctc_alignments.yml')
+    parser.add_argument('-code_gen_model_name', type=str, help='Name of the code_gen model in opt.', default='generator')
+    parser.add_argument('-code_gen_model_path', type=str, help='Path to saved code_gen model weights', default='D:\\dlas\\experiments\\train_encoder_build_ctc_alignments\\models\\31000_generator_ema.pth')
     parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
     parser.add_argument('-diffusion_model_path', type=str, help='Path to saved model weights', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium\\models\\73000_generator_ema.pth')
     parser.add_argument('-sr_opt', type=str, help='Path to options YAML file used to train the SR diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample.yml')
     parser.add_argument('-sr_diffusion_model_name', type=str, help='Name of the SR diffusion model in opt.', default='generator')
-    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample\\models\\7000_generator_ema.pth')
-    parser.add_argument('-cond', type=str, help='Type of conditioning voice', default='carlin')
+    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample\\models\\31000_generator_ema.pth')
+    parser.add_argument('-cond', type=str, help='Type of conditioning voice', default='simmons')
     parser.add_argument('-diffusion_steps', type=int, help='Number of diffusion steps to perform to create the generate. Lower steps reduces quality, but >40 is generally pretty good.', default=100)
     parser.add_argument('-output_path', type=str, help='Where to store outputs.', default='../results/use_diffuse_tts')
     parser.add_argument('-device', type=str, help='Device to run on', default='cuda')
@@ -129,6 +133,21 @@ if __name__ == '__main__':
     base_sample_rate = 5500
     sr_sample_rate = 22050
 
+    print("Loading provided conditional audio..")
+    sr_cond = load_audio(conditioning_clips[args.cond], sr_sample_rate).to(args.device)
+    if sr_cond.shape[-1] > 88000:
+        sr_cond = sr_cond[:,:88000]
+    cond_mel = wav_to_mel(sr_cond)
+    cond = torchaudio.functional.resample(sr_cond, sr_sample_rate, base_sample_rate)
+    torchaudio.save(os.path.join(args.output_path, 'cond_base.wav'), cond.cpu(), base_sample_rate)
+    torchaudio.save(os.path.join(args.output_path, 'cond_sr.wav'), sr_cond.cpu(), sr_sample_rate)
+
+    print("Generating codes for text..")
+    codegen = load_model_from_config(args.opt_code_gen, args.code_gen_model_name, also_load_savepoint=False,
+                                       load_path=args.code_gen_model_path, device='cuda').eval()
+    codes = codegen.generate(cond_mel, [args.text])
+    del codegen
+
     print("Loading Diffusion Models..")
     diffusion = load_model_from_config(args.opt, args.diffusion_model_name, also_load_savepoint=False,
                                        load_path=args.diffusion_model_path, device='cpu').eval()
@@ -137,23 +156,17 @@ if __name__ == '__main__':
     sr_diffusion = load_model_from_config(args.sr_opt, args.sr_diffusion_model_name, also_load_savepoint=False,
                                           load_path=args.sr_diffusion_model_path, device='cpu').eval()
     sr_diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=args.diffusion_steps, schedule='linear')
-    sr_cond = load_audio(conditioning_clips[args.cond], sr_sample_rate).to(args.device)
-    if sr_cond.shape[-1] > 88000:
-        sr_cond = sr_cond[:,:88000]
-    cond = audio = torchaudio.functional.resample(sr_cond, sr_sample_rate, base_sample_rate)
-    torchaudio.save(os.path.join(args.output_path, 'cond_base.wav'), cond.cpu(), base_sample_rate)
-    torchaudio.save(os.path.join(args.output_path, 'cond_sr.wav'), sr_cond.cpu(), sr_sample_rate)
 
     with torch.no_grad():
-        for p, code in enumerate(provided_codes):
+        for p, code in enumerate([codes]):
             print("Loading data..")
-            aligned_codes = torch.tensor(code).to(args.device)
+            aligned_codes = code.to(args.device)
 
             print("Performing initial diffusion..")
             output_shape = (1, 1, ceil_multiple(aligned_codes.shape[-1]*aligned_codes_compression_factor, 2048))
             diffusion = diffusion.cuda()
             output_base = diffuser.p_sample_loop(diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
-                                            model_kwargs={'tokens': aligned_codes.unsqueeze(0),
+                                            model_kwargs={'tokens': aligned_codes,
                                             'conditioning_input': cond.unsqueeze(0)})
             diffusion = diffusion.cpu()
             torchaudio.save(os.path.join(args.output_path, f'{p}_output_mean_base.wav'), output_base.cpu().squeeze(0), base_sample_rate)
@@ -161,8 +174,8 @@ if __name__ == '__main__':
             print("Performing SR diffusion..")
             output_shape = (1, 1, output_base.shape[-1] * (sr_sample_rate // base_sample_rate))
             sr_diffusion = sr_diffusion.cuda()
-            output = diffuser.p_sample_loop(sr_diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
-                                            model_kwargs={'tokens': aligned_codes.unsqueeze(0),
+            output = sr_diffuser.p_sample_loop(sr_diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
+                                            model_kwargs={'tokens': torch.zeros_like(aligned_codes),
                                             'conditioning_input': sr_cond.unsqueeze(0),
                                             'lr_input': output_base})
             sr_diffusion = sr_diffusion.cpu()
