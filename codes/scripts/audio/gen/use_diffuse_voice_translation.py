@@ -5,6 +5,7 @@ import torch
 import torchaudio
 
 from data.audio.unsupervised_audio_dataset import load_audio
+from data.util import find_files_of_type, is_audio_file
 from scripts.audio.gen.speech_synthesis_utils import do_spectrogram_diffusion, \
     load_discrete_vocoder_diffuser, wav_to_mel, convert_mel_to_codes
 from utils.audio import plot_spectrogram
@@ -47,14 +48,14 @@ if __name__ == '__main__':
     }
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-src_clip', type=str, help='Path to the audio file to translate', default='D:\\tortoise-tts\\voices\\dotrice\\1.wav')
+    parser.add_argument('-src_clip', type=str, help='Path to the audio files to translate', default='D:\\tortoise-tts\\voices')
     parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
     parser.add_argument('-diffusion_model_path', type=str, help='Path to saved model weights', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium\\models\\73000_generator_ema.pth')
     parser.add_argument('-sr_opt', type=str, help='Path to options YAML file used to train the SR diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample.yml')
     parser.add_argument('-sr_diffusion_model_name', type=str, help='Name of the SR diffusion model in opt.', default='generator')
-    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample_continued\\models\\41000_generator_ema.pth')
-    parser.add_argument('-voice', type=str, help='Type of conditioning voice', default='puppy')
+    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample_continued\\models\\45000_generator_ema.pth')
+    parser.add_argument('-voice', type=str, help='Type of conditioning voice', default='simmons')
     parser.add_argument('-diffusion_steps', type=int, help='Number of diffusion steps to perform to create the generate. Lower steps reduces quality, but >40 is generally pretty good.', default=100)
     parser.add_argument('-output_path', type=str, help='Where to store outputs.', default='../results/use_diffuse_voice_translation')
     parser.add_argument('-device', type=str, help='Device to run on', default='cuda')
@@ -79,25 +80,30 @@ if __name__ == '__main__':
     torchaudio.save(os.path.join(args.output_path, 'cond_sr.wav'), sr_cond.cpu(), sr_sample_rate)
 
     with torch.no_grad():
-        print("Extracting CTC codes from source clip..")
-        aligned_codes, src_clip = get_ctc_codes_for(args.src_clip)
-        torchaudio.save(os.path.join(args.output_path, f'source_clip.wav'), src_clip.unsqueeze(0).cpu(), 16000)
+        if os.path.isdir(args.src_clip):
+            files = find_files_of_type('img', args.src_clip, qualifier=is_audio_file)[0]
+        else:
+            files = [args.src_clip]
+        for e, file in enumerate(files):
+            print("Extracting CTC codes from source clip..")
+            aligned_codes, src_clip = get_ctc_codes_for(file)
+            torchaudio.save(os.path.join(args.output_path, f'{e}_source_clip.wav'), src_clip.unsqueeze(0).cpu(), 16000)
 
-        print("Performing initial diffusion..")
-        output_shape = (1, 1, ceil_multiple(aligned_codes.shape[-1]*aligned_codes_compression_factor, 2048))
-        diffusion = diffusion.cuda()
-        output_base = diffuser.p_sample_loop(diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
-                                        model_kwargs={'tokens': aligned_codes,
-                                        'conditioning_input': cond.unsqueeze(0)})
-        diffusion = diffusion.cpu()
-        torchaudio.save(os.path.join(args.output_path, f'output_mean_base.wav'), output_base.cpu().squeeze(0), base_sample_rate)
+            print("Performing initial diffusion..")
+            output_shape = (1, 1, ceil_multiple(aligned_codes.shape[-1]*aligned_codes_compression_factor, 2048))
+            diffusion = diffusion.cuda()
+            output_base = diffuser.p_sample_loop(diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
+                                            model_kwargs={'tokens': aligned_codes,
+                                            'conditioning_input': cond.unsqueeze(0)})
+            diffusion = diffusion.cpu()
+            torchaudio.save(os.path.join(args.output_path, f'{e}_output_mean_base.wav'), output_base.cpu().squeeze(0), base_sample_rate)
 
-        print("Performing SR diffusion..")
-        output_shape = (1, 1, output_base.shape[-1] * (sr_sample_rate // base_sample_rate))
-        sr_diffusion = sr_diffusion.cuda()
-        output = sr_diffuser.p_sample_loop(sr_diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
-                                        model_kwargs={'tokens': aligned_codes,
-                                        'conditioning_input': sr_cond.unsqueeze(0),
-                                        'lr_input': output_base})
-        sr_diffusion = sr_diffusion.cpu()
-        torchaudio.save(os.path.join(args.output_path, f'output_mean_sr.wav'), output.cpu().squeeze(0), sr_sample_rate)
+            print("Performing SR diffusion..")
+            output_shape = (1, 1, output_base.shape[-1] * (sr_sample_rate // base_sample_rate))
+            sr_diffusion = sr_diffusion.cuda()
+            output = sr_diffuser.p_sample_loop(sr_diffusion, output_shape, #noise=torch.zeros(output_shape, device=args.device),
+                                            model_kwargs={'tokens': aligned_codes,
+                                            'conditioning_input': sr_cond.unsqueeze(0),
+                                            'lr_input': output_base})
+            sr_diffusion = sr_diffusion.cpu()
+            torchaudio.save(os.path.join(args.output_path, f'{e}_output_mean_sr.wav'), output.cpu().squeeze(0), sr_sample_rate)
