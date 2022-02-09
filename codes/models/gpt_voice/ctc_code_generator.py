@@ -132,20 +132,17 @@ def register_ctc_code_generator(opt_net, opt):
 
 
 def inf():
-    sd = torch.load('D:\\dlas\\experiments\\train_encoder_build_ctc_alignments\\models\\11000_generator.pth', map_location='cpu')
-    model = CtcCodeGenerator(layers=10).eval()
+    sd = torch.load('D:\\dlas\\experiments\\train_encoder_build_ctc_alignments_medium\\models\\24000_generator.pth', map_location='cpu')
+    model = CtcCodeGenerator(model_dim=1024,layers=32).eval()
     model.load_state_dict(sd)
-    #raw_batch = torch.load('raw_batch.pth')
     with torch.no_grad():
         from data.audio.unsupervised_audio_dataset import load_audio
         from scripts.audio.gen.speech_synthesis_utils import wav_to_mel
-        #loss = model(wav_to_mel(raw_batch['conditioning'][0]),
-        #             raw_batch['ctc_raw_codes'][0].unsqueeze(0),
-        #             raw_batch['ctc_pads'][0].unsqueeze(0),
-        #             raw_batch['ctc_repeats'][0].unsqueeze(0),
-        #             raw_batch['ctc_raw_lengths'][0].unsqueeze(0),)
-        ref_mel = wav_to_mel(load_audio("D:\\tortoise-tts\\voices\\atkins\\1.wav", 22050))
-        ctc = model.generate(ref_mel, ["i suppose though it's too early for them"])
+        ref_mel = torch.cat([wav_to_mel(load_audio("D:\\tortoise-tts\\voices\\atkins\\1.wav", 22050))[:,:,:450],
+                             wav_to_mel(load_audio("D:\\tortoise-tts\\voices\\kennard\\1.wav", 22050))[:,:,:450],
+                             wav_to_mel(load_audio("D:\\tortoise-tts\\voices\\grace\\1.wav", 22050))[:,:,:450],
+                             wav_to_mel(load_audio("D:\\tortoise-tts\\voices\\atkins\\1.wav", 22050))[:,:,:450]], dim=0)
+        ctc = model.generate(ref_mel, (["i suppose though it's too early for them"] * 3) + ["i suppose though it's too early for them, dear"])
     print("Break")
 
 
