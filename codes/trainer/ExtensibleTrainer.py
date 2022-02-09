@@ -279,7 +279,7 @@ class ExtensibleTrainer(BaseModel):
 
             # Now do a forward and backward pass for each gradient accumulation step.
             new_states = {}
-            self.batch_size_optimizer.focus(step.get_optimizers()[-1])
+            self.batch_size_optimizer.focus(net)
             for m in range(self.batch_factor):
                 ns = step.do_forward_backward(state, m, step_num, train=train_step, no_ddp_sync=(m+1 < self.batch_factor))
                 for k, v in ns.items():
