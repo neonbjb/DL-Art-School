@@ -34,7 +34,7 @@ class CtcCodeGenerator(nn.Module):
         super().__init__()
         self.max_pad = max_pad
         self.max_repeat = max_repeat
-        self.conditioning_encoder = ConditioningEncoder(80, model_dim, num_attn_heads=num_heads)
+        self.conditioning_encoder = ConditioningEncoder(80, model_dim, num_attn_heads=num_heads, mean=True)
         self.initial_embedding = nn.Embedding(ctc_codes, model_dim)
         self.combiner = nn.Linear(model_dim*2, model_dim)
         self.transformer = TransformerWrapper(

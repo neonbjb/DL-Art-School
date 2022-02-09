@@ -192,7 +192,8 @@ class ConditioningEncoder(nn.Module):
                  embedding_dim,
                  attn_blocks=6,
                  num_attn_heads=4,
-                 do_checkpointing=False):
+                 do_checkpointing=False,
+                 mean=False):
         super().__init__()
         attn = []
         self.init = nn.Conv1d(spec_dim, embedding_dim, kernel_size=1)
@@ -201,11 +202,15 @@ class ConditioningEncoder(nn.Module):
         self.attn = nn.Sequential(*attn)
         self.dim = embedding_dim
         self.do_checkpointing = do_checkpointing
+        self.mean = mean
 
     def forward(self, x):
         h = self.init(x)
         h = self.attn(h)
-        return h[:, :, 0]
+        if self.mean:
+            return h.mean(dim=2)
+        else:
+            return h[:, :, 0]
 
 
 class MelEncoder(nn.Module):
