@@ -15,6 +15,7 @@ import trainer.eval.evaluator as evaluator
 from data.audio.paired_voice_audio_dataset import load_tsv_aligned_codes
 from data.audio.unsupervised_audio_dataset import load_audio
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser
+from utils.util import opt_get
 
 
 class AudioDiffusionFid(evaluator.Evaluator):
