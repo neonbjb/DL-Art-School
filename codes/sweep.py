@@ -48,5 +48,11 @@ if __name__ == '__main__':
                 nd['path'][k] = p.replace(base_path, f'{base_path}\\{mod}')
         all_opts.append(nd)
 
-    with ThreadPool(len(modifications)) as pool:
-        list(pool.imap(functools.partial(launch_trainer, opt_path=base_opt), all_opts))
+    for i in range(1,len(modifications)):
+        pid = os.fork()
+        if pid == 0:
+            rank = i
+            break
+        else:
+            rank = 0
+    launch_trainer(all_opts[i], base_opt)
