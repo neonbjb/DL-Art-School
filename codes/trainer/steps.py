@@ -320,7 +320,7 @@ class ConfigurableStep(Module):
                 else:
                     self.nan_counter = 0
 
-            if self.clip_grad_eps is not None:
+            if self.clip_grad_eps is not None and self.clip_grad_eps != 0:
                 for pgn, pg in zip(opt._group_names, opt.param_groups):
                     grad_norm = clip_grad_norm(pg['params'], pgn, self.clip_grad_eps)
                     if torch.isnan(grad_norm):
