@@ -15,7 +15,7 @@ import trainer.eval.evaluator as evaluator
 from data.audio.paired_voice_audio_dataset import load_tsv_aligned_codes
 from data.audio.unsupervised_audio_dataset import load_audio
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser
-from utils.util import opt_get
+from utils.util import ceil_multiple, opt_get
 
 
 class AudioDiffusionFid(evaluator.Evaluator):
@@ -109,11 +109,11 @@ class AudioDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    from utils.util import load_model_from_config, ceil_multiple, opt_get
+    from utils.util import load_model_from_config
 
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts5_medium.yml', 'generator',
                                        also_load_savepoint=False, load_path='X:\\dlas\\experiments\\train_diffusion_tts5_medium\\models\\73000_generator_ema.pth').cuda()
     opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 50}
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 500, 'device': 'cuda'}
-    eval = StyleTransferEvaluator(diffusion, opt_eval, env)
+    eval = AudioDiffusionFid(diffusion, opt_eval, env)
     eval.perform_eval()
