@@ -55,7 +55,7 @@ if __name__ == '__main__':
         base_path = nd['path']['log']
         for k, p in nd['path'].items():
             if isinstance(p, str) and base_path in p:
-                nd['path'][k] = p.replace(base_path, f'{base_path}\\{mod}')
+                nd['path'][k] = p.replace(base_path, f'{base_path}/{mod}')
         all_opts.append(nd)
 
     for i in range(1,len(modifications)):
@@ -65,4 +65,4 @@ if __name__ == '__main__':
             break
         else:
             rank = 0
-    launch_trainer(all_opts[i], base_opt, rank)
+    launch_trainer(all_opts[rank], base_opt, rank)
