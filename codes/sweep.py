@@ -32,7 +32,7 @@ if __name__ == '__main__':
         'less_resblocks': {'networks': {'generator': {'kwargs': {'num_res_blocks': [1, 1, 1, 1, 1, 1, 1]}}}},
         'wider': {'networks': {'generator': {'kwargs': {'channel_mult': [1,2,4,6,8,8,8]}}}},
         'inject_every_layer': {'networks': {'generator': {'kwargs': {'token_conditioning_resolutions': [1,2,4,8,16,32,64]}}}},
-        'deep_conditioning': {'networks': {'generator': {'kwargs': {'cond_transformer_depth': 12}}}},
+        'cosine_diffusion': {'steps': {'generator': {'injectors': {'diffusion': {'beta_schedule': {'schedule_name': 'cosine'}}}}}},
     }
     opt = option.parse(base_opt, is_train=True)
     all_opts = []

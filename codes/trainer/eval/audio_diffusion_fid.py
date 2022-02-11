@@ -17,7 +17,7 @@ from data.audio.unsupervised_audio_dataset import load_audio
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser
 
 
-class StyleTransferEvaluator(evaluator.Evaluator):
+class AudioDiffusionFid(evaluator.Evaluator):
     """
     Evaluator produces generate from a diffusion model, then uses a pretrained wav2vec model to compute a frechet
     distance between real and fake samples.
@@ -31,7 +31,10 @@ class StyleTransferEvaluator(evaluator.Evaluator):
         else:
             self.skip = 1
         diffusion_steps = opt_get(opt_eval, ['diffusion_steps'], 50)
-        diffusion_schedule = opt_get(opt_eval, ['diffusion_schedule'], 'cosine')
+        diffusion_schedule = opt_get(env['opt'], ['steps', 'generator', 'injectors', 'diffusion', 'beta_schedule', 'schedule_name'], None)
+        if diffusion_schedule is None:
+            print("Unable to infer diffusion schedule from master options. Getting it from eval (or guessing).")
+            diffusion_schedule = opt_get(opt_eval, ['diffusion_schedule'], 'cosine')
         self.diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=diffusion_steps, schedule=diffusion_schedule)
         self.dev = self.env['device']
 
