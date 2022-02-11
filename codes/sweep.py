@@ -9,8 +9,8 @@ from utils import options as option
 
 def launch_trainer(opt, opt_path=''):
     rank = opt['gpu_ids'][0]
-    os.environ['CUDA_VISIBLE_DEVICES'] = [rank]
-    print('export CUDA_VISIBLE_DEVICES=' + rank)
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
+    print('export CUDA_VISIBLE_DEVICES=' + str(rank))
     trainer = Trainer()
     opt['dist'] = False
     trainer.rank = -1
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     Ad-hoc script (hard coded; no command-line parameters) that spawns multiple separate trainers from a single options
     file, with a hard-coded set of modifications.
     """
-    base_opt = '../options/train_diffusion_tts.yml'
+    base_opt = '../experiments/train_diffusion_tts6.yml'
     modifications = {
         'baseline': {},
         'only_conv': {'networks': {'generator': {'kwargs': {'cond_transformer_depth': 4, 'mid_transformer_depth': 1}}}},
