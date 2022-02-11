@@ -498,3 +498,13 @@ def map_cuda_to_correct_device(storage, loc):
         return storage.cuda(torch.cuda.current_device())
     else:
         return storage.cpu()
+
+
+def ceil_multiple(base, multiple):
+    """
+    Returns the next closest multiple >= base.
+    """
+    res = base % multiple
+    if res == 0:
+        return base
+    return base + (multiple - res)

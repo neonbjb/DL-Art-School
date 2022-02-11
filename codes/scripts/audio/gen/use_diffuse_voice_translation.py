@@ -9,14 +9,8 @@ from data.util import find_files_of_type, is_audio_file
 from scripts.audio.gen.speech_synthesis_utils import do_spectrogram_diffusion, \
     load_discrete_vocoder_diffuser, wav_to_mel, convert_mel_to_codes
 from utils.audio import plot_spectrogram
-from utils.util import load_model_from_config
-
-
-def ceil_multiple(base, multiple):
-    res = base % multiple
-    if res == 0:
-        return base
-    return base + (multiple - res)
+from utils.util import load_model_from_config, ceil_multiple
+import torch.nn.functional as F
 
 
 def get_ctc_codes_for(src_clip_path):
@@ -32,6 +26,18 @@ def get_ctc_codes_for(src_clip_path):
     clip_inp = processor(clip.numpy(), return_tensors='pt', sampling_rate=16000).input_values.cuda()
     logits = model(clip_inp).logits
     return torch.argmax(logits, dim=-1), clip
+
+
+def determine_output_size(codes, base_sample_rate)
+    aligned_codes_compression_factor = base_sample_rate * 221 // 11025
+    output_size = codes.shape[-1]*aligned_codes_compression_factor
+    padded_size = ceil_multiple(output_size, 2048)
+    padding_added = padded_size - output_size
+    padding_needed_for_codes = padding_added // aligned_codes_compression_factor
+    if padding_needed_for_codes > 0:
+        codes = F.pad(codes, (0, padding_needed_for_codes))
+    output_shape = (1, 1, padded_size)
+    return output_shape, codes
 
 
 if __name__ == '__main__':
@@ -70,7 +76,6 @@ if __name__ == '__main__':
     diffusion = load_model_from_config(args.opt, args.diffusion_model_name, also_load_savepoint=False,
                                        load_path=args.diffusion_model_path, device='cpu').eval()
     diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=args.diffusion_steps, schedule='cosine')
-    aligned_codes_compression_factor = base_sample_rate * 221 // 11025
     sr_diffusion = load_model_from_config(args.sr_opt, args.sr_diffusion_model_name, also_load_savepoint=False,
                                           load_path=args.sr_diffusion_model_path, device='cpu').eval()
     sr_diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=args.diffusion_steps, schedule='linear')
@@ -90,7 +95,7 @@ if __name__ == '__main__':
             torchaudio.save(os.path.join(args.output_path, f'{e}_source_clip.wav'), src_clip.unsqueeze(0).cpu(), 16000)
 
             print("Performing initial diffusion..")
-            output_shape = (1, 1, ceil_multiple(aligned_codes.shape[-1]*aligned_codes_compression_factor, 2048))
+            output_shape, aligned_codes = determine_output_size(aligned_codes, base_sample_rate)
             diffusion = diffusion.cuda()
             output_base = diffuser.p_sample_loop(diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
                                             model_kwargs={'tokens': aligned_codes,
