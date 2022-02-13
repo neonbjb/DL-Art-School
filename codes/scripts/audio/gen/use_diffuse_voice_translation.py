@@ -28,7 +28,7 @@ def get_ctc_codes_for(src_clip_path):
     return torch.argmax(logits, dim=-1), clip
 
 
-def determine_output_size(codes, base_sample_rate)
+def determine_output_size(codes, base_sample_rate):
     aligned_codes_compression_factor = base_sample_rate * 221 // 11025
     output_size = codes.shape[-1]*aligned_codes_compression_factor
     padded_size = ceil_multiple(output_size, 2048)
@@ -47,6 +47,7 @@ if __name__ == '__main__':
         'carlin': 'Y:\\clips\\books1\\12_dchha13 Bubonic Nukes\\00097.wav',
         'entangled': 'Y:\\clips\\books1\\3857_25_The_Entangled_Bank__000000000\\00123.wav',
         'snowden': 'Y:\\clips\\books1\\7658_Edward_Snowden_-_Permanent_Record__000000004\\00027.wav',
+        'plants': 'Y:\\clips\\books1\\12028_The_Secret_Life_of_Plants_-_18__000000000\\00399.wav',
         # Female
         'the_doctor': 'Y:\\clips\\books2\\37062___The_Doctor__000000003\\00206.wav',
         'puppy': 'Y:\\clips\\books2\\17830___3_Puppy_Kisses__000000002\\00046.wav',
@@ -55,13 +56,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-src_clip', type=str, help='Path to the audio files to translate', default='D:\\tortoise-tts\\voices')
-    parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium.yml')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium\\train_diffusion_tts5_medium.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
     parser.add_argument('-diffusion_model_path', type=str, help='Path to saved model weights', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium\\models\\73000_generator_ema.pth')
     parser.add_argument('-sr_opt', type=str, help='Path to options YAML file used to train the SR diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample.yml')
     parser.add_argument('-sr_diffusion_model_name', type=str, help='Name of the SR diffusion model in opt.', default='generator')
-    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample_continued\\models\\45000_generator_ema.pth')
-    parser.add_argument('-voice', type=str, help='Type of conditioning voice', default='simmons')
+    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample_continued\\models\\53500_generator_ema.pth')
+    parser.add_argument('-voice', type=str, help='Type of conditioning voice', default='plants')
     parser.add_argument('-diffusion_steps', type=int, help='Number of diffusion steps to perform to create the generate. Lower steps reduces quality, but >40 is generally pretty good.', default=100)
     parser.add_argument('-output_path', type=str, help='Where to store outputs.', default='../results/use_diffuse_voice_translation')
     parser.add_argument('-device', type=str, help='Device to run on', default='cuda')

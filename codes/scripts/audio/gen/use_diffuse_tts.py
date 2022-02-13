@@ -9,6 +9,7 @@ from scripts.audio.gen.speech_synthesis_utils import do_spectrogram_diffusion, \
     load_discrete_vocoder_diffuser, wav_to_mel, convert_mel_to_codes
 from utils.audio import plot_spectrogram
 from utils.util import load_model_from_config
+import torch.nn.functional as F
 
 
 def ceil_multiple(base, multiple):
@@ -18,6 +19,18 @@ def ceil_multiple(base, multiple):
     return base + (multiple - res)
 
 
+def determine_output_size(codes, base_sample_rate):
+    aligned_codes_compression_factor = base_sample_rate * 221 // 11025
+    output_size = codes.shape[-1]*aligned_codes_compression_factor
+    padded_size = ceil_multiple(output_size, 2048)
+    padding_added = padded_size - output_size
+    padding_needed_for_codes = padding_added // aligned_codes_compression_factor
+    if padding_needed_for_codes > 0:
+        codes = F.pad(codes, (0, padding_needed_for_codes))
+    output_shape = (1, 1, padded_size)
+    return output_shape, codes
+
+
 if __name__ == '__main__':
     conditioning_clips = {
         # Male
@@ -25,6 +38,7 @@ if __name__ == '__main__':
         'carlin': 'Y:\\clips\\books1\\12_dchha13 Bubonic Nukes\\00097.wav',
         'entangled': 'Y:\\clips\\books1\\3857_25_The_Entangled_Bank__000000000\\00123.wav',
         'snowden': 'Y:\\clips\\books1\\7658_Edward_Snowden_-_Permanent_Record__000000004\\00027.wav',
+        'plants': 'Y:\\clips\\books1\\12028_The_Secret_Life_of_Plants_-_18__000000000\\00399.wav',
         # Female
         'the_doctor': 'Y:\\clips\\books2\\37062___The_Doctor__000000003\\00206.wav',
         'puppy': 'Y:\\clips\\books2\\17830___3_Puppy_Kisses__000000002\\00046.wav',
@@ -112,17 +126,17 @@ if __name__ == '__main__':
     ]
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-text', type=str, help='Text to speak.', default='instead of molten iron, jupiter and brown dwarfs have hydrogen, which is under so much pressure that it develops metallic properties.')
-    parser.add_argument('-opt_code_gen', type=str, help='Path to options YAML file used to train the code_gen model', default='D:\\dlas\\experiments\\train_encoder_build_ctc_alignments_medium\\train_encoder_build_ctc_alignments.yml')
+    parser.add_argument('-text', type=str, help='Text to speak.', default='my father worked at the airport. he was air traffic control. he always knew when the president was flying in but was not allowed to tell anyone.')
+    parser.add_argument('-opt_code_gen', type=str, help='Path to options YAML file used to train the code_gen model', default='D:\\dlas\\options\\train_encoder_build_ctc_alignments.yml')
     parser.add_argument('-code_gen_model_name', type=str, help='Name of the code_gen model in opt.', default='generator')
-    parser.add_argument('-code_gen_model_path', type=str, help='Path to saved code_gen model weights', default='D:\\dlas\\experiments\\train_encoder_build_ctc_alignments_medium\\models\\32000_generator_ema.pth')
-    parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium.yml')
+    parser.add_argument('-code_gen_model_path', type=str, help='Path to saved code_gen model weights', default='D:\\dlas\\experiments\\train_encoder_build_ctc_alignments_medium\\models\\50000_generator_ema.pth')
+    parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium\\train_diffusion_tts5_medium.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
     parser.add_argument('-diffusion_model_path', type=str, help='Path to saved model weights', default='X:\\dlas\\experiments\\train_diffusion_tts5_medium\\models\\73000_generator_ema.pth')
     parser.add_argument('-sr_opt', type=str, help='Path to options YAML file used to train the SR diffusion model', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample.yml')
     parser.add_argument('-sr_diffusion_model_name', type=str, help='Name of the SR diffusion model in opt.', default='generator')
-    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample_continued\\models\\45000_generator_ema.pth')
-    parser.add_argument('-cond', type=str, help='Type of conditioning voice', default='the_doctor')
+    parser.add_argument('-sr_diffusion_model_path', type=str, help='Path to saved model weights for the SR diffuser', default='X:\\dlas\\experiments\\train_diffusion_tts6_upsample_continued\\models\\53500_generator_ema.pth')
+    parser.add_argument('-cond', type=str, help='Type of conditioning voice', default='plants')
     parser.add_argument('-diffusion_steps', type=int, help='Number of diffusion steps to perform to create the generate. Lower steps reduces quality, but >40 is generally pretty good.', default=100)
     parser.add_argument('-output_path', type=str, help='Where to store outputs.', default='../results/use_diffuse_tts')
     parser.add_argument('-device', type=str, help='Device to run on', default='cuda')
@@ -135,8 +149,6 @@ if __name__ == '__main__':
 
     print("Loading provided conditional audio..")
     sr_cond = load_audio(conditioning_clips[args.cond], sr_sample_rate).to(args.device)
-    if sr_cond.shape[-1] > 88000:
-        sr_cond = sr_cond[:,:88000]
     cond_mel = wav_to_mel(sr_cond)
     cond = torchaudio.functional.resample(sr_cond, sr_sample_rate, base_sample_rate)
     torchaudio.save(os.path.join(args.output_path, 'cond_base.wav'), cond.cpu(), base_sample_rate)
@@ -163,7 +175,7 @@ if __name__ == '__main__':
             aligned_codes = code.to(args.device)
 
             print("Performing initial diffusion..")
-            output_shape = (1, 1, ceil_multiple(aligned_codes.shape[-1]*aligned_codes_compression_factor, 2048))
+            output_shape, aligned_codes = determine_output_size(aligned_codes, base_sample_rate)
             diffusion = diffusion.cuda()
             output_base = diffuser.p_sample_loop(diffusion, output_shape, noise=torch.zeros(output_shape, device=args.device),
                                             model_kwargs={'tokens': aligned_codes,
