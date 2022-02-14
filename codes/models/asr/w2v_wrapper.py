@@ -11,6 +11,11 @@ from trainer.networks import register_model
 from utils.util import opt_get
 
 
+def only_letters(string):
+    allowlist = set(' ABCDEFGHIJKLMNOPQRSTUVWXYZ\'')
+    return ''.join(filter(allowlist.__contains__, string.upper()))
+
+
 class Wav2VecWrapper(nn.Module):
     """
     Basic wrapper class that makes Wav2Vec2 usable by DLAS.
@@ -77,8 +82,8 @@ class Wav2VecWrapper(nn.Module):
             pred_strings = []
             for last_labels, last_pred in zip(self.last_labels, self.last_pred):
                 last_labels[last_labels == -100] = 0
-                label_strings.extend([sequence_to_text(lbl) for lbl in last_labels])
-                pred_strings.extend([sequence_to_text(self.decode_ctc(pred)) for pred in last_pred])
+                label_strings.extend([only_letters(sequence_to_text(lbl)) for lbl in last_labels])
+                pred_strings.extend([only_letters(sequence_to_text(self.decode_ctc(pred))) for pred in last_pred])
             wer = wer_metric.compute(predictions=pred_strings, references=label_strings)
             res['wer'] = wer
             print(f"Sample prediction: {pred_strings[0]} <=> {label_strings[0]}")
@@ -88,7 +93,7 @@ class Wav2VecWrapper(nn.Module):
         audio_norm = (audio - audio.mean()) / torch.sqrt(audio.var() + 1e-7)
         logits = self.w2v(input_values=audio_norm.squeeze(1)).logits
         pred = logits.argmax(dim=-1)
-        return self.decode_ctc(pred)
+        return [self.decode_ctc(p) for p in pred]
 
 
 @register_model
@@ -97,6 +102,7 @@ def register_wav2vec2_finetune(opt_net, opt):
 
 
 if __name__ == '__main__':
+    print(only_letters("Hello, world!"))
     w2v = Wav2VecWrapper(basis_model='facebook/wav2vec2-large-960h', freeze_transformer=True)
     loss = w2v(torch.randn(2,1,50000), torch.randint(0,40,(2,70)), torch.tensor([20000, 30000]), torch.tensor([35, 50]))
     w2v.get_debug_values(0,"")
