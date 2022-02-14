@@ -451,7 +451,7 @@ class UnifiedVoice(nn.Module):
         loss_mel = F.cross_entropy(mel_logits, mel_targets.long())
         return loss_mel.mean()
 
-    def inference_speech(self, speech_conditioning_input, text_inputs, **hf_generate_kwargs):
+    def inference_speech(self, speech_conditioning_input, text_inputs, return_attentions=False, **hf_generate_kwargs):
         seq_length = self.max_mel_tokens + self.max_text_tokens + 2
         if not hasattr(self, 'inference_model'):
             # TODO: Decouple gpt_config from this inference model.
@@ -483,8 +483,27 @@ class UnifiedVoice(nn.Module):
         fake_inputs[:,-1] = self.start_mel_token
 
         gen = self.inference_model.generate(fake_inputs, bos_token_id=self.start_mel_token, pad_token_id=self.stop_mel_token, eos_token_id=self.stop_mel_token,
-                                            max_length=seq_length, **hf_generate_kwargs)
-        return gen[:, fake_inputs.shape[1]:]
+                                            max_length=seq_length, output_attentions=return_attentions, return_dict_in_generate=True, **hf_generate_kwargs)
+        if return_attentions:
+            return gen.sequences[:, fake_inputs.shape[1]:], gen.attentions
+        else:
+            return gen.sequences[:, fake_inputs.shape[1]:]
+
+    def convert_attentions_to_aligned_codes(self, text, attentions, codes, num_conds):
+        text_padding = num_conds+1
+        num_text = text.shape[-1]
+        results = torch.empty_like(codes)
+        for t, att_tok in enumerate(attentions):
+            combined_attention_weights = torch.zeros((codes.shape[0], num_text), device=codes.device)
+            for lyr in att_tok:
+                token_to_text_attentions = lyr[:, :, -1, text_padding:(text_padding + num_text)].sum(dim=1)
+                combined_attention_weights = combined_attention_weights + token_to_text_attentions
+                break
+            most_attended_text_token = combined_attention_weights.argmax(dim=-1)
+            results[:, t] = most_attended_text_token
+        eos_token_mask = (codes != self.stop_mel_token)
+        return results * eos_token_mask
+
 
 
 @register_model
@@ -493,6 +512,10 @@ def register_unified_voice2(opt_net, opt):
 
 
 if __name__ == '__main__':
+    ld = torch.load('attentions.pth')
+    gpt = UnifiedVoice(model_dim=256, heads=4, train_solo_embeddings=True, use_mel_codes_as_input=True, max_conditioning_inputs=4)
+    gpt.convert_attentions_to_aligned_codes(*ld)
+    '''
     gpt = UnifiedVoice(model_dim=256, heads=4, train_solo_embeddings=True, use_mel_codes_as_input=True, max_conditioning_inputs=4)
     l = gpt(torch.randn(2, 3, 80, 800),
             torch.randint(high=len(symbols), size=(2,120)),
@@ -500,3 +523,4 @@ if __name__ == '__main__':
             torch.randint(high=8192, size=(2,250)),
             torch.tensor([250*256,195*256]))
     gpt.text_forward(torch.randn(2,80,800), torch.randint(high=50, size=(2,80)), torch.tensor([32, 80]))
+    '''

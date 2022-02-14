@@ -341,26 +341,6 @@ class ExtensibleTrainer(BaseModel):
         [e.before_optimize(state) for e in self.experiments]
         step.do_step(it)
 
-        if step.nan_counter > 10:
-            if self.auto_recover is None:
-                print("Detected NaN grads more than 10 steps in a row. Saving model weights and aborting.")
-                self.save(it)
-                self.save_training_state({'iter': it})
-                raise ArithmeticError
-            else:
-                print(f"!!!!!!!!Detected NaN grads more than 10 steps in a row. Restoring to a state {self.auto_recover} saves ago.")
-                for k, ps in self.save_history.keys():
-                    if len(ps) < self.auto_recover:
-                        print("Belay that - not enough saves were recorded. Failing instead.")
-                        raise ArithmeticError
-                    if k == '__state__':
-                        self.resume_training(torch.load(ps[-self.auto_recover]))
-                    else:
-                        if k in self.networks.keys():  # This isn't always the case, for example for EMAs.
-                            self.load_network(ps[-self.auto_recover], self.networks[k], strict=True)
-                            if self.do_emas:
-                                self.load_network(self.save_history[f'{k}_ema'][-self.auto_recover], self.emas[k], strict=True)
-
         # Call into custom step hooks as well as update EMA params.
         for name, net in self.networks.items():
             if hasattr(net, "custom_optimizer_step"):

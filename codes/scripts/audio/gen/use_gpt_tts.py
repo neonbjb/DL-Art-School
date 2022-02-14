@@ -135,14 +135,17 @@ if __name__ == '__main__':
     with torch.no_grad():
         print("Performing GPT inference..")
         samples = []
+        ctc_codes = []
+        samples_per_batch = args.num_samples//args.num_batches
         for b in tqdm(range(args.num_batches)):
-            codes = gpt.inference_speech(conds, text, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=50, top_p=.95,
-                                         temperature=.9, num_return_sequences=args.num_samples//args.num_batches, length_penalty=1)
+            codes, attentions = gpt.inference_speech(conds, text, num_beams=1, repetition_penalty=1.0, do_sample=True, top_k=50, top_p=.95,
+                                                     temperature=.9, num_return_sequences=samples_per_batch, length_penalty=1,
+                                                     return_attentions=True)
             padding_needed = 250 - codes.shape[1]
             codes = F.pad(codes, (0, padding_needed), value=stop_mel_token)
             samples.append(codes)
+            ctc_codes.extend(gpt.convert_attentions_to_aligned_codes(text, attentions, codes, conds.shape[1]))
         samples = torch.cat(samples, dim=0)
-        del gpt
 
         print("Loading CLIP..")
         clip = load_model_from_config(args.opt_clip, model_name=args.clip_model_name, also_load_savepoint=False, load_path=args.clip_model_path).cuda().eval()
@@ -157,10 +160,12 @@ if __name__ == '__main__':
         cond_clip_results = cond_clip(conds[:, -1], samples, torch.full((samples.shape[0],), fill_value=samples.shape[1]*1024,
                                                                         dtype=torch.long, device='cuda'), return_loss=False)
         clip_results = clip_results * (1-args.cond_clip_weight) + cond_clip_results * args.cond_clip_weight
-        best_results = samples[torch.topk(clip_results, k=args.num_outputs).indices]
+        best_indices = torch.topk(clip_results, k=args.num_outputs).indices
+        best_results = samples[best_indices]
+        best_codes = [ctc_codes[i] for i in best_indices]
 
-        # Delete the GPT TTS model to free up GPU memory
-        del samples, clip
+        # Delete the GPT TTS and associated models to free up GPU memory before diffusion.
+        del samples, clip, gpt
 
         print("Loading DVAE..")
         dvae = load_model_from_config(args.opt_diffuse, args.dvae_model_name).cuda()
