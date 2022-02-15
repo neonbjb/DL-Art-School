@@ -20,11 +20,11 @@ class Wav2VecWrapper(nn.Module):
     """
     Basic wrapper class that makes Wav2Vec2 usable by DLAS.
     """
-    def __init__(self, vocab_size=148, basis_model='facebook/wav2vec2-large', freeze_transformer=False, output_wer=True):
+    def __init__(self, vocab_size=148, basis_model='facebook/wav2vec2-large', freeze_transformer=False, output_wer=True, checkpointing_enabled=True):
         super().__init__()
         self.w2v = Wav2Vec2ForCTC.from_pretrained(basis_model)
         # Perform some surgery to get the model we actually want.
-        self.w2v.wav2vec2.encoder.gradient_checkpointing = True
+        self.w2v.wav2vec2.encoder.gradient_checkpointing = checkpointing_enabled
         self.w2v.lm_head = nn.Linear(self.w2v.config.hidden_size, vocab_size)
         self.w2v.config.vocab_size = vocab_size
         self.w2v.config.pad_token_id = 0

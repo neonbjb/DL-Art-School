@@ -130,9 +130,9 @@ class ExtensibleTrainer(BaseModel):
                     dnet = DistributedDataParallel(anet, delay_allreduce=True)
                 else:
                     from torch.nn.parallel.distributed import DistributedDataParallel
-                    # Do NOT be tempted to put find_unused_parameters=True here. It will not work in the current incarnation of this trainer.
-                    # Use all of your parameters in training, or delete them!
-                    dnet = DistributedDataParallel(anet, device_ids=[torch.cuda.current_device()])
+                    # Do NOT be tempted to put find_unused_parameters=True here. It will not work when checkpointing is
+                    # used and in a few other cases. But you can try it if you really want.
+                    dnet = DistributedDataParallel(anet, device_ids=[torch.cuda.current_device()], find_unused_parameters=opt_get(opt, ['ddp_find_unused_parameters'], False))
                     # DDP graphs cannot be used with gradient checkpointing unless you use find_unused_parameters=True,
                     # which does not work with this trainer (as stated above). However, if the graph is not subject
                     # to control flow alterations, you can set this option to allow gradient checkpointing. Beware that

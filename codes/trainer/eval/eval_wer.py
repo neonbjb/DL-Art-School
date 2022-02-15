@@ -8,6 +8,7 @@ from data import create_dataset, create_dataloader
 from models.asr.w2v_wrapper import only_letters
 from models.tacotron2.text import sequence_to_text
 
+# Fine-tuned target for w2v-large: 4.487% WER.
 
 class WerEvaluator(evaluator.Evaluator):
     """
