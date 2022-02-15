@@ -154,6 +154,18 @@ class ConfigurableStep(Module):
                                            weight_decay=opt_config['weight_decay'])
                 opt = LARC(optSGD, trust_coefficient=opt_config['lars_coefficient'])
                 opt._group_names = sorted(list(all_param_names))
+            elif self.step_opt['optimizer'] == 'lamb':
+                from trainer.optimizers.lamb import Lamb
+                opt_unweighted = torch.optim.AdamW(params_notweights, lr=opt_config['lr'], weight_decay=0,
+                                       betas=(opt_get(opt_config, ['beta1'], .9), opt_get(opt_config, ['beta2'], .999)))
+                opt_unweighted._config = opt_config
+                opt_unweighted._config['network'] = net_name
+                self.optimizers.append(opt_unweighted)
+
+                opt = Lamb(params_weights, lr=opt_config['lr'],
+                                   weight_decay=opt_get(opt_config, ['weight_decay'], 1e-2),
+                                   betas=(opt_get(opt_config, ['beta1'], .9), opt_get(opt_config, ['beta2'], .999)))
+                opt._group_names = [params_names_weights, params_names_notweights]
             elif self.step_opt['optimizer'] == 'sgd':
                 from torch.optim import SGD
                 opt = SGD(list(optim_params.values()), lr=opt_config['lr'], momentum=opt_config['momentum'], weight_decay=opt_config['weight_decay'])
