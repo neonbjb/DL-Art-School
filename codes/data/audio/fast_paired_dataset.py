@@ -58,6 +58,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
         self.sample_rate = hparams.sample_rate
         self.aligned_codes_to_audio_ratio = 443 * self.sample_rate // 22050
         self.max_wav_len = opt_get(hparams, ['max_wav_length'], None)
+        self.load_aligned_codes = opt_get(hparams, ['load_aligned_codes'], False)
         if self.max_wav_len is not None:
             self.max_aligned_codes = self.max_wav_len // self.aligned_codes_to_audio_ratio
         self.max_text_len = opt_get(hparams, ['max_text_length'], None)
@@ -198,8 +199,6 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
         res = {
             'real_text': text,
             'padded_text': tseq,
-            'aligned_codes': aligned_codes,
-            'aligned_codes_lengths': orig_aligned_code_length,
             'text_lengths': torch.tensor(orig_text_len, dtype=torch.long),
             'wav': wav,
             'wav_lengths': torch.tensor(orig_output, dtype=torch.long),
@@ -210,6 +209,9 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
         if self.load_conditioning:
             res['conditioning'] = cond
             res['conditioning_contains_self'] = cond_is_self
+        if self.load_aligned_codes:
+            res['aligned_codes']: aligned_codes
+            res['aligned_codes_lengths']: orig_aligned_code_length
         if self.produce_ctc_metadata:
             res.update(self.get_ctc_metadata(raw_codes))
 

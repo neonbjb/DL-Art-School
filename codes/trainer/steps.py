@@ -117,12 +117,7 @@ class ConfigurableStep(Module):
             params_names_weights = sorted(list(all_param_names ^ param_names_notweights))
             params_weights = [param_map[k] for k in params_names_weights]
 
-            if 'optimizer' not in self.step_opt.keys() or self.step_opt['optimizer'] == 'adam':
-                opt = torch.optim.Adam(list(optim_params.values()), lr=opt_config['lr'],
-                                       weight_decay=opt_config['weight_decay'],
-                                       betas=(opt_config['beta1'], opt_config['beta2']))
-                opt._group_names = sorted(list(all_param_names))
-            elif self.step_opt['optimizer'] == 'adamw':
+            if 'optimizer' not in self.step_opt.keys() or self.step_opt['optimizer'] == 'adamw':
                 groups = [
                     { 'params': params_weights, 'weight_decay': opt_get(opt_config, ['weight_decay'], 0) },
                     { 'params': params_notweights, 'weight_decay': 0 }
