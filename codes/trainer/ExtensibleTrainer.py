@@ -145,7 +145,7 @@ class ExtensibleTrainer(BaseModel):
                     if opt_get(opt, ['ddp_static_graph'], False):
                         dnet._set_static_graph()
             else:
-                dnet = DataParallel(anet, device_ids=opt['gpu_ids'])
+                dnet = DataParallel(anet, device_ids=[torch.cuda.current_device()])
             if self.is_train:
                 dnet.train()
             else:
