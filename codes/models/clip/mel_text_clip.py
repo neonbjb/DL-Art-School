@@ -62,6 +62,26 @@ class MelTextCLIP(nn.Module):
         self.voice_mask_percentage = voice_mask_percentage
         self.mel_compression = mel_compression
 
+    def get_text_projections(self, text, text_mask=None):
+        if text_mask is None:
+            text_mask = torch.ones_like(text.float()).bool()
+        text_emb = self.text_emb(text)
+        text_emb += self.text_pos_emb(torch.arange(text.shape[1], device=text.device))
+        with torch.autocast(text.device.type):
+            enc_text = self.text_transformer(text_emb, mask=text_mask)
+            text_latents = masked_mean(enc_text, text_mask, dim=1)
+        return self.to_text_latent(text_latents).float()
+
+    def get_speech_projection(self, mel, voice_mask=None):
+        if voice_mask is None:
+            voice_mask = torch.ones_like(mel[:,0,:].float()).bool()
+        speech_emb = self.speech_enc(mel).permute(0,2,1)
+        speech_emb += self.speech_pos_emb(torch.arange(speech_emb.shape[1], device=mel.device))
+        with torch.autocast(speech_emb.device.type):
+            enc_speech = self.speech_transformer(speech_emb, mask=voice_mask)
+            speech_latents = masked_mean(enc_speech, voice_mask, dim=1)
+        return self.to_speech_latent(speech_latents).float()
+
     def forward(
             self,
             text,
@@ -82,25 +102,11 @@ class MelTextCLIP(nn.Module):
             text_mask = torch.rand_like(text.float()) > self.text_mask_percentage
             voice_mask = torch.rand_like(mel[:,0,:].float()) > self.voice_mask_percentage
         else:
-            text_mask = torch.ones_like(text.float()).bool()
-            voice_mask = torch.ones_like(mel[:,0,:].float()).bool()
+            text_mask = None
+            voice_mask = None
 
-        text_emb = self.text_emb(text)
-        text_emb += self.text_pos_emb(torch.arange(text.shape[1], device=device))
-
-        speech_emb = self.speech_enc(mel).permute(0,2,1)
-        speech_emb += self.speech_pos_emb(torch.arange(speech_emb.shape[1], device=device))
-
-        # Only autocast the transformer part. The MEL encoder loses accuracy if you autcast it.
-        with torch.autocast(speech_emb.device.type):
-            enc_text = self.text_transformer(text_emb, mask=text_mask)
-            enc_speech = self.speech_transformer(speech_emb, mask=voice_mask)
-
-            text_latents = masked_mean(enc_text, text_mask, dim=1)
-            speech_latents = masked_mean(enc_speech, voice_mask, dim=1)
-
-        text_latents = self.to_text_latent(text_latents).float()
-        speech_latents = self.to_speech_latent(speech_latents).float()
+        text_latents = self.get_text_projections(text, text_mask)
+        speech_latents = self.get_speech_projection(mel, voice_mask)
 
         text_latents, speech_latents = map(lambda t: F.normalize(t, p=2, dim=-1), (text_latents, speech_latents))
 
@@ -114,6 +120,7 @@ class MelTextCLIP(nn.Module):
         labels = torch.arange(b, device=device)
         loss = (F.cross_entropy(sim, labels) + F.cross_entropy(sim.t(), labels)) / 2
         return loss
+
 
 
 @register_model
