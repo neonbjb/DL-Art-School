@@ -129,6 +129,11 @@ class Wav2VecWrapper(nn.Module):
         pred = logits.argmax(dim=-1)
         return [self.decode_ctc(p) for p in pred]
 
+    def inference_logits(self, audio):
+        audio_norm = (audio - audio.mean()) / torch.sqrt(audio.var() + 1e-7)
+        logits = self.w2v(input_values=audio_norm.squeeze(1)).logits
+        return logits
+
 
 @register_model
 def register_wav2vec_feature_extractor(opt_net, opt):
