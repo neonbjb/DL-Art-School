@@ -140,6 +140,9 @@ class TextWavLoader(torch.utils.data.Dataset):
             tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
             if text is None or len(text.strip()) == 0:
                 raise ValueError
+            if wav is None or wav.shape[-1] < (.1 * self.sample_rate):
+                # Ultra short clips are also useless (and can cause problems within some models).
+                raise ValueError
             cond, cond_is_self = load_similar_clips(self.audiopaths_and_text[index][0], self.conditioning_length, self.sample_rate,
                                       n=self.conditioning_candidates) if self.load_conditioning else (None, False)
         except:
