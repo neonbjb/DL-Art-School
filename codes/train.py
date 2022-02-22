@@ -165,6 +165,7 @@ class Trainer:
             self.model.resume_training(resume_state, 'amp_opt_level' in opt.keys())  # handle optimizers and schedulers
         else:
             self.current_step = -1 if 'start_step' not in opt.keys() else opt['start_step']
+            self.total_training_data_encountered = 0 if 'training_data_encountered' not in opt.keys() else opt['training_data_encountered']
             self.start_epoch = 0
         if 'force_start_step' in opt.keys():
             self.current_step = opt['force_start_step']
@@ -316,7 +317,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_clip_text_to_voice.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../experiments/train_wav2vec_mass_large_/train_wav2vec_mass.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
