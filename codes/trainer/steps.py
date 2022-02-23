@@ -332,6 +332,7 @@ class ConfigurableStep(Module):
                 for pgn, pg in zip(opt._group_names, opt.param_groups):
                     grad_norm = clip_grad_norm(pg['params'], pgn, self.clip_grad_eps)
                     if torch.isnan(grad_norm):
+                        print("NaN found in clip_grad; zeroing grad and trying again.")
                         nan_found = True
                         self.nan_counter += 1
 
