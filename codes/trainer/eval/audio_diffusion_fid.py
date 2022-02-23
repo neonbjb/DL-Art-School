@@ -15,14 +15,15 @@ import trainer.eval.evaluator as evaluator
 from data.audio.paired_voice_audio_dataset import load_tsv_aligned_codes
 from data.audio.unsupervised_audio_dataset import load_audio
 from models.clip.mel_text_clip import MelTextCLIP
-from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel
+from models.tacotron2.text import sequence_to_text
+from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel, load_speech_dvae, \
+    convert_mel_to_codes
 from utils.util import ceil_multiple, opt_get
 
 
 class AudioDiffusionFid(evaluator.Evaluator):
     """
-    Evaluator produces generate from a diffusion model, then uses a pretrained wav2vec model to compute a frechet
-    distance between real and fake samples.
+    Evaluator produces generate from a diffusion model, then uses a CLIP model to judge the similarity between text & speech.
     """
     def __init__(self, model, opt_eval, env):
         super().__init__(model, opt_eval, env, uses_all_ddp=True)
@@ -39,8 +40,14 @@ class AudioDiffusionFid(evaluator.Evaluator):
             diffusion_schedule = opt_get(opt_eval, ['diffusion_schedule'], 'cosine')
         self.diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=diffusion_steps, schedule=diffusion_schedule)
         self.dev = self.env['device']
+        mode = opt_get(opt_eval, ['diffusion_type'], 'tts')
+        if mode == 'tts':
+            self.diffusion_fn = self.perform_diffusion_tts
+        elif mode == 'vocoder':
+            self.dvae = load_speech_dvae()
+            self.diffusion_fn = self.perform_diffusion_vocoder
 
-    def perform_diffusion(self, audio, codes, sample_rate=5500):
+    def perform_diffusion_tts(self, audio, codes, text, sample_rate=5500):
         real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
         aligned_codes_compression_factor = sample_rate * 221 // 11025
         output_size = codes.shape[-1]*aligned_codes_compression_factor
@@ -53,6 +60,23 @@ class AudioDiffusionFid(evaluator.Evaluator):
         gen = self.diffuser.p_sample_loop(self.model, output_shape,
                                     model_kwargs={'tokens': codes.unsqueeze(0),
                                                   'conditioning_input': real_resampled})
+        return gen, real_resampled, sample_rate
+
+    def perform_dvae_diffusion(self, audio, codes, text, sample_rate=5500):
+        mel = wav_to_mel(audio)
+        mel_codes = convert_mel_to_codes(self.dvae, mel)
+
+        text_codes = sequence_to_text(text)
+
+        real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
+        aligned_codes_compression_factor = sample_rate * 221 // 11025
+        output_size = codes.shape[-1]*aligned_codes_compression_factor
+        padded_size = ceil_multiple(output_size, 2048)
+        output_shape = (1, 1, padded_size)
+        gen = self.diffuser.p_sample_loop(self.model, output_shape,
+                                    model_kwargs={'tokens': mel_codes.unsqueeze(0),
+                                                  'conditioning_input': real_resampled,
+                                                  'unaligned_input': text_codes})
         return gen, real_resampled, sample_rate
 
     def load_projector(self):
@@ -101,7 +125,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
                 path, text, codes = self.data[i + self.env['rank']]
                 audio = load_audio(path, 22050).to(self.dev)
                 codes = codes.to(self.dev)
-                sample, ref, sample_rate = self.perform_diffusion(audio, codes)
+                sample, ref, sample_rate = self.perform_diffusion_fn(audio, codes, text)
 
                 gen_projections.append(self.project(projector, sample).cpu(), sample_rate)  # Store on CPU to avoid wasting GPU memory.
                 real_projections.append(self.project(projector, ref).cpu(), sample_rate)
@@ -124,9 +148,10 @@ class AudioDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     from utils.util import load_model_from_config
 
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\sweep_diffusion_tts6\\baseline\\train_diffusion_tts6.yml', 'generator',
-                                       also_load_savepoint=False, load_path='X:\\dlas\\experiments\\sweep_diffusion_tts6\\baseline\\models\\102000_generator_ema.pth').cuda()
-    opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 50, 'diffusion_schedule': 'linear'}
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts7_dvae_thin_with_text.yml', 'generator',
+                                       also_load_savepoint=False, load_path='X:\\dlas\\experiments\\train_diffusion_tts7_dvae_thin_with_text\\models\\12500_generator_ema.pth').cuda()
+    opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 50,
+                'diffusion_schedule': 'linear', 'diffusion_type': 'vocoder'}
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 500, 'device': 'cuda', 'opt': {}}
     eval = AudioDiffusionFid(diffusion, opt_eval, env)
     eval.perform_eval()

@@ -9,6 +9,12 @@ from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.respace import SpacedDiffusion, space_timesteps
 from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector
 from utils.audio import plot_spectrogram
+from utils.util import load_model_from_config
+
+
+def load_speech_dvae():
+    return load_model_from_config("X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level.yml",
+                                  "dvae").cuda()
 
 
 def wav_to_mel(wav, mel_norms_file='../experiments/clips_mel_norms.pth'):
