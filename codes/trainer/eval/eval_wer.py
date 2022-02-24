@@ -128,10 +128,10 @@ if __name__ == '__main__':
         'clip_lengths_key': 'wav_lengths',
         'text_seq_key': 'padded_text',
         'text_seq_lengths_key': 'text_lengths',
-        'kenlm_path': 'Y:\\bookscorpus-5gram\\5gram.bin'
+        #'kenlm_path': 'Y:\\bookscorpus-5gram\\5gram.bin',
     }
     model = Wav2VecWrapper(vocab_size=148, basis_model='facebook/wav2vec2-large-robust-ft-libri-960h', freeze_transformer=True, checkpointing_enabled=False)
-    weights = torch.load('X:\\dlas\\experiments/train_wav2vec_mass_large/models/13250_wav2vec.pth')
+    weights = torch.load('D:\\dlas\\experiments\\train_wav2vec_mass_large2\\models\\17000_wav2vec.pth')
     model.load_state_dict(weights)
     model = model.cuda()
     eval = WerEvaluator(model, opt_eval, env)
