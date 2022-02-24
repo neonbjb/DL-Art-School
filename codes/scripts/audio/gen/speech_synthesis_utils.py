@@ -14,7 +14,7 @@ from utils.util import load_model_from_config
 
 def load_speech_dvae():
     return load_model_from_config("../experiments/train_diffusion_vocoder_22k_level.yml",
-                                  "dvae").cuda()
+                                  "dvae").cpu()
 
 
 def wav_to_mel(wav, mel_norms_file='../experiments/clips_mel_norms.pth'):
