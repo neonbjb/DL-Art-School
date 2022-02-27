@@ -52,12 +52,13 @@ def load_gpt_conditioning_inputs_from_directory(path, num_candidates=3, sample_r
     return torch.stack(related_mels, dim=0)
 
 
-def load_discrete_vocoder_diffuser(trained_diffusion_steps=4000, desired_diffusion_steps=200, schedule='linear'):
+def load_discrete_vocoder_diffuser(trained_diffusion_steps=4000, desired_diffusion_steps=200, schedule='linear', enable_conditioning_free_guidance=False, conditioning_free_k=1):
     """
     Helper function to load a GaussianDiffusion instance configured for use as a vocoder.
     """
     return SpacedDiffusion(use_timesteps=space_timesteps(trained_diffusion_steps, [desired_diffusion_steps]), model_mean_type='epsilon',
-                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule(schedule, trained_diffusion_steps))
+                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule(schedule, trained_diffusion_steps),
+                           conditioning_free=enable_conditioning_free_guidance, conditioning_free_k=conditioning_free_k)
 
 
 def do_spectrogram_diffusion(diffusion_model, dvae_model, diffuser, mel_codes, conditioning_input, spectrogram_compression_factor=128, plt_spec=False, mean=False):

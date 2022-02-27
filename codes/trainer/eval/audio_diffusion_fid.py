@@ -38,7 +38,11 @@ class AudioDiffusionFid(evaluator.Evaluator):
         if diffusion_schedule is None:
             print("Unable to infer diffusion schedule from master options. Getting it from eval (or guessing).")
             diffusion_schedule = opt_get(opt_eval, ['diffusion_schedule'], 'cosine')
-        self.diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=diffusion_steps, schedule=diffusion_schedule)
+        conditioning_free_diffusion_enabled = opt_get(opt_eval, ['conditioning_free'], False)
+        conditioning_free_k = opt_get(opt_eval, ['conditioning_free_k'], 1)
+        self.diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=diffusion_steps, schedule=diffusion_schedule,
+                                                       conditioning_free_diffusion_enabled=conditioning_free_diffusion_enabled,
+                                                       conditioning_free_k=conditioning_free_k)
         self.dev = self.env['device']
         mode = opt_get(opt_eval, ['diffusion_type'], 'tts')
         if mode == 'tts':
