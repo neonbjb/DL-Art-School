@@ -62,6 +62,10 @@ def tacotron_symbols():
   return list(_symbol_to_id.keys())
 
 
+def tacotron_symbol_mapping():
+  return _symbol_to_id.copy()
+
+
 def _clean_text(text, cleaner_names):
   for name in cleaner_names:
     cleaner = getattr(cleaners, name)
