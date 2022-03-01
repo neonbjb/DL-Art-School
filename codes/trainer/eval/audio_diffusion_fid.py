@@ -41,7 +41,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
         conditioning_free_diffusion_enabled = opt_get(opt_eval, ['conditioning_free'], False)
         conditioning_free_k = opt_get(opt_eval, ['conditioning_free_k'], 1)
         self.diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=diffusion_steps, schedule=diffusion_schedule,
-                                                       conditioning_free_diffusion_enabled=conditioning_free_diffusion_enabled,
+                                                       enable_conditioning_free_guidance=conditioning_free_diffusion_enabled,
                                                        conditioning_free_k=conditioning_free_k)
         self.dev = self.env['device']
         mode = opt_get(opt_eval, ['diffusion_type'], 'tts')
@@ -162,9 +162,10 @@ if __name__ == '__main__':
     from utils.util import load_model_from_config
 
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts7_dvae_thin_with_text.yml', 'generator',
-                                       also_load_savepoint=False, load_path='X:\\dlas\\experiments\\train_diffusion_tts7_dvae_thin_with_text\\models\\5500_generator_ema.pth').cuda()
-    opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 50,
+                                       also_load_savepoint=False, load_path='X:\\dlas\\experiments\\train_diffusion_tts7_dvae_thin_with_text\\models\\39500_generator_ema.pth').cuda()
+    opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 100,
+                'conditioning_free': True, 'conditioning_free_k': 2,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'vocoder'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 500, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 202, 'device': 'cuda', 'opt': {}}
     eval = AudioDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())

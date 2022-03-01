@@ -92,8 +92,12 @@ class GeneratorInjector(Injector):
             if self.grad:
                 results = method(*params, **self.args)
             else:
+                was_training = gen.training
+                gen.eval()
                 with torch.no_grad():
                     results = method(*params, **self.args)
+                if was_training:
+                    gen.train()
         new_state = {}
         if isinstance(self.output, list):
             # Only dereference tuples or lists, not tensors. IF YOU REACH THIS ERROR, REMOVE THE BRACES AROUND YOUR OUTPUTS IN THE YAML CONFIG

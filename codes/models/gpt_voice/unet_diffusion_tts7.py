@@ -408,7 +408,7 @@ class DiffusionTts(nn.Module):
         )
 
 
-    def forward(self, x, timesteps, tokens=None, conditioning_input=None, lr_input=None, unaligned_input=None):
+    def forward(self, x, timesteps, tokens=None, conditioning_input=None, lr_input=None, unaligned_input=None, conditioning_free=False):
         """
         Apply the model to an input batch.
 
@@ -419,6 +419,7 @@ class DiffusionTts(nn.Module):
         :param lr_input: for super-sampling models, a guidance audio clip at a lower sampling rate.
         :param unaligned_input: A structural input that is not properly aligned with the output of the diffusion model.
                                 Can be combined with a conditioning input to produce more robust conditioning.
+        :param conditioning_free: When set, all conditioning inputs (including tokens, conditioning_input and unaligned_input) will not be considered.
         :return: an [N x C x ...] Tensor of outputs.
         """
         assert conditioning_input is not None
@@ -429,11 +430,6 @@ class DiffusionTts(nn.Module):
                 lr_input = torch.randn_like(lr_input) * noising_factor + lr_input
             lr_input = F.interpolate(lr_input, size=(x.shape[-1],), mode='nearest')
             x = torch.cat([x, lr_input], dim=1)
-
-        if self.enable_unaligned_inputs:
-            assert unaligned_input is not None
-            unaligned_h = self.unaligned_embedder(unaligned_input).permute(0,2,1)
-            unaligned_h = self.unaligned_encoder(unaligned_h).permute(0,2,1)
 
         with autocast(x.device.type):
             orig_x_shape = x.shape[-1]
@@ -447,28 +443,36 @@ class DiffusionTts(nn.Module):
             hs = []
             time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
-            cond_emb = self.contextual_embedder(conditioning_input)
-            if tokens is not None:
-                # Mask out guidance tokens for un-guided diffusion.
-                if self.training and self.nil_guidance_fwd_proportion > 0:
-                    token_mask = clustered_mask(self.nil_guidance_fwd_proportion, tokens.shape, tokens.device, inverted=True)
-                    tokens = torch.where(token_mask, self.mask_token_id, tokens)
-                code_emb = self.code_embedding(tokens).permute(0,2,1)
-                cond_emb = cond_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
-                cond_time_emb = timestep_embedding(torch.zeros_like(timesteps), code_emb.shape[1])  # This was something I was doing (adding timesteps into this computation), but removed on second thought. TODO: completely remove.
-                cond_time_emb = cond_time_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
-                code_emb = self.conditioning_conv(torch.cat([cond_emb, code_emb, cond_time_emb], dim=1))
+            if conditioning_free:
+                code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, 1)
             else:
-                code_emb = cond_emb.unsqueeze(-1)
-            if self.enable_unaligned_inputs:
-                code_emb = self.conditioning_encoder(code_emb, context=unaligned_h)
-            else:
-                code_emb = self.conditioning_encoder(code_emb)
+                if self.enable_unaligned_inputs:
+                    assert unaligned_input is not None
+                    unaligned_h = self.unaligned_embedder(unaligned_input).permute(0,2,1)
+                    unaligned_h = self.unaligned_encoder(unaligned_h).permute(0,2,1)
+
+                cond_emb = self.contextual_embedder(conditioning_input)
+                if tokens is not None:
+                    # Mask out guidance tokens for un-guided diffusion.
+                    if self.training and self.nil_guidance_fwd_proportion > 0:
+                        token_mask = clustered_mask(self.nil_guidance_fwd_proportion, tokens.shape, tokens.device, inverted=True)
+                        tokens = torch.where(token_mask, self.mask_token_id, tokens)
+                    code_emb = self.code_embedding(tokens).permute(0,2,1)
+                    cond_emb = cond_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
+                    cond_time_emb = timestep_embedding(torch.zeros_like(timesteps), code_emb.shape[1])  # This was something I was doing (adding timesteps into this computation), but removed on second thought. TODO: completely remove.
+                    cond_time_emb = cond_time_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
+                    code_emb = self.conditioning_conv(torch.cat([cond_emb, code_emb, cond_time_emb], dim=1))
+                else:
+                    code_emb = cond_emb.unsqueeze(-1)
+                if self.enable_unaligned_inputs:
+                    code_emb = self.conditioning_encoder(code_emb, context=unaligned_h)
+                else:
+                    code_emb = self.conditioning_encoder(code_emb)
 
             # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
-            if self.unconditioned_percentage > 0:
+            if self.training and self.unconditioned_percentage > 0:
                 unconditioned_batches = torch.rand((code_emb.shape[0],1,1), device=code_emb.device) < self.unconditioned_percentage
-                code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(code_emb.shape[0], 1, code_emb.shape[2]), code_emb)
+                code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(x.shape[0], 1, 1), code_emb)
 
             first = True
             time_emb = time_emb.float()

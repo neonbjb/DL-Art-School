@@ -263,19 +263,25 @@ if __name__ == '__main__':
     batch_sz = 256
     params = {
         'mode': 'fast_paired_voice_audio',
-        'path': ['Y:\\libritts\\train-clean-360\\transcribed-w2v.tsv', 'Y:\\clips\\books1\\transcribed-w2v.tsv'],
+        'path': ['y:/libritts/train-other-500/transcribed-oco.tsv',
+           'y:/libritts/train-clean-100/transcribed-oco.tsv',
+           'y:/libritts/train-clean-360/transcribed-oco.tsv',
+           'y:/clips/books1/transcribed-w2v.tsv',
+           'y:/clips/books2/transcribed-w2v.tsv',
+	       'y:/bigasr_dataset/hifi_tts/transcribed-w2v.tsv'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
-        'max_wav_length': 255995,
+        'max_wav_length': 163840,
         'max_text_length': 200,
         'sample_rate': 22050,
         'load_conditioning': True,
         'num_conditioning_candidates': 1,
         'conditioning_length': 66000,
-        'use_bpe_tokenizer': True,
-        'load_aligned_codes': True,
-        'produce_ctc_metadata': True,
+        'use_bpe_tokenizer': False,
+        'load_aligned_codes': False,
+        'needs_collate': False,
+        'produce_ctc_metadata': False,
     }
     from data import create_dataset, create_dataloader
 
@@ -294,10 +300,10 @@ if __name__ == '__main__':
         for ib in range(batch_sz):
             #max_pads = max(max_pads, b['ctc_pads'].max())
             #max_repeats = max(max_repeats, b['ctc_repeats'].max())
-            #print(f'{i} {ib} {b["real_text"][ib]}')
-            #save(b, i, ib, 'wav')
+            print(f'{i} {ib} {b["real_text"][ib]}')
+            save(b, i, ib, 'wav')
             pass
-        #if i > 5:
-        #    break
+        if i > 15:
+            break
     print(max_pads, max_repeats)
 

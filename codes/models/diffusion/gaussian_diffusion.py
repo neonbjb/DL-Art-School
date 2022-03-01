@@ -125,6 +125,7 @@ class GaussianDiffusion:
         rescale_timesteps=False,
         conditioning_free=False,
         conditioning_free_k=1,
+        ramp_conditioning_free=True,
     ):
         self.model_mean_type = ModelMeanType(model_mean_type)
         self.model_var_type = ModelVarType(model_var_type)
@@ -132,6 +133,7 @@ class GaussianDiffusion:
         self.rescale_timesteps = rescale_timesteps
         self.conditioning_free = conditioning_free
         self.conditioning_free_k = conditioning_free_k
+        self.ramp_conditioning_free = ramp_conditioning_free
 
         # Use float64 for accuracy.
         betas = np.array(betas, dtype=np.float64)
@@ -299,7 +301,12 @@ class GaussianDiffusion:
             model_log_variance = _extract_into_tensor(model_log_variance, t, x.shape)
 
         if self.conditioning_free:
-            model_output = (1 + self.conditioning_free_k) * model_output - self.conditioning_free_k * model_output_no_conditioning
+            if self.ramp_conditioning_free:
+                assert t.shape[0] == 1  # This should only be used in inference.
+                cfk = self.conditioning_free_k * (1 - self._scale_timesteps(t)[0].item() / self.num_timesteps)
+            else:
+                cfk = self.conditioning_free_k
+            model_output = (1 + cfk) * model_output - cfk * model_output_no_conditioning
 
         def process_xstart(x):
             if denoised_fn is not None:
