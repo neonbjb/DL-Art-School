@@ -417,6 +417,7 @@ class DiffusionTts(nn.Module):
         }
         if self.enable_unaligned_inputs:
             groups['unaligned_encoder'] = list(self.unaligned_encoder.parameters())
+        return groups
 
 
     def forward(self, x, timesteps, tokens=None, conditioning_input=None, lr_input=None, unaligned_input=None, conditioning_free=False):
