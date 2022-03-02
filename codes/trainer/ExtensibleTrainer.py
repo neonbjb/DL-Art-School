@@ -1,6 +1,7 @@
 import copy
 import logging
 import os
+from time import time
 
 import torch
 from torch.nn.parallel import DataParallel
@@ -232,7 +233,9 @@ class ExtensibleTrainer(BaseModel):
                             self.dstate[k][c] = self.dstate[k][c][:, :, :, :maxlen]
 
 
-    def optimize_parameters(self, it, optimize=True):
+    def optimize_parameters(self, it, optimize=True, return_grad_norms=False):
+        grad_norms = {}
+
         # Some models need to make parametric adjustments per-step. Do that here.
         for net in self.networks.values():
             if hasattr(net.module, "update_for_step"):
@@ -300,6 +303,17 @@ class ExtensibleTrainer(BaseModel):
                     raise OverwrittenStateError(k, list(state.keys()))
                 state[k] = v
 
+            if return_grad_norms and train_step:
+                for name in nets_to_train:
+                    model = self.networks[name]
+                    if hasattr(model.module, 'get_grad_norm_parameter_groups'):
+                        pgroups = {f'{name}_{k}': v for k, v in model.module.get_grad_norm_parameter_groups().items()}
+                    else:
+                        pgroups = {f'{name}_all_parameters': list(model.parameters())}
+                for name in pgroups.keys():
+                    grad_norms[name] = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2) for p in pgroups[name]]), 2)
+
+
             # (Maybe) perform a step.
             if train_step and optimize and self.batch_size_optimizer.should_step(it):
                 self.consume_gradients(state, step, it)
@@ -340,6 +354,8 @@ class ExtensibleTrainer(BaseModel):
                     model_vdbg_dir = os.path.join(sample_save_path, net_name)
                     os.makedirs(model_vdbg_dir, exist_ok=True)
                     net.module.visual_dbg(it, model_vdbg_dir)
+
+        return grad_norms
 
 
     def consume_gradients(self, state, step, it):

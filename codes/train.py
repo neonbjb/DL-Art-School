@@ -181,6 +181,7 @@ class Trainer:
                                                                   # because train_data is process-local while the opt variant represents all of the data fed across all GPUs.
         self.current_step += 1
         self.total_training_data_encountered += batch_size
+        will_log = self.current_step % opt['logger']['print_freq'] == 0
 
         #### update learning rate
         self.model.update_learning_rate(self.current_step, warmup_iter=opt['train']['warmup_iter'])
@@ -190,7 +191,7 @@ class Trainer:
             print("Update LR: %f" % (time() - _t))
             _t = time()
         self.model.feed_data(train_data, self.current_step)
-        self.model.optimize_parameters(self.current_step)
+        gradient_norms_dict = self.model.optimize_parameters(self.current_step, return_grad_norms=will_log)
         if self._profile:
             print("Model feed + step: %f" % (time() - _t))
             _t = time()
@@ -198,13 +199,14 @@ class Trainer:
         #### log
         if self.dataset_debugger is not None:
             self.dataset_debugger.update(train_data)
-        if self.current_step % opt['logger']['print_freq'] == 0 and self.rank <= 0:
+        if will_log and self.rank <= 0:
             logs = {'step': self.current_step,
                     'samples': self.total_training_data_encountered,
                     'megasamples': self.total_training_data_encountered / 1000000}
             logs.update(self.model.get_current_log(self.current_step))
             if self.dataset_debugger is not None:
                 logs.update(self.dataset_debugger.get_debugging_map())
+            logs.update(gradient_norms_dict)
             message = '[epoch:{:3d}, iter:{:8,d}, lr:('.format(self.epoch, self.current_step)
             for v in self.model.get_current_learning_rate():
                 message += '{:.3e},'.format(v)

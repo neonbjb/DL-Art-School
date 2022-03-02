@@ -407,6 +407,17 @@ class DiffusionTts(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
 
+    def get_grad_norm_parameter_groups(self):
+        groups = {
+            'minicoder': list(self.contextual_embedder.parameters()),
+            'input_blocks': list(self.input_blocks.parameters()),
+            'output_blocks': list(self.output_blocks.parameters()),
+            'middle_transformer': list(self.middle_block.parameters()),
+            'conditioning_encoder': list(self.conditioning_encoder.parameters())
+        }
+        if self.enable_unaligned_inputs:
+            groups['unaligned_encoder'] = list(self.unaligned_encoder.parameters())
+
 
     def forward(self, x, timesteps, tokens=None, conditioning_input=None, lr_input=None, unaligned_input=None, conditioning_free=False):
         """
