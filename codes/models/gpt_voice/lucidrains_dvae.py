@@ -28,46 +28,6 @@ def eval_decorator(fn):
     return inner
 
 
-# Fits a soft-discretized input to a normal-PDF across the specified dimension.
-# In other words, attempts to force the discretization function to have a mean equal utilization across all discrete
-#  values with the specified expected variance.
-class DiscretizationLoss(nn.Module):
-    def __init__(self, discrete_bins, dim, expected_variance, store_past=0):
-        super().__init__()
-        self.discrete_bins = discrete_bins
-        self.dim = dim
-        self.dist = torch.distributions.Normal(0, scale=expected_variance)
-        if store_past > 0:
-            self.record_past = True
-            self.register_buffer("accumulator_index", torch.zeros(1, dtype=torch.long, device='cpu'))
-            self.register_buffer("accumulator_filled", torch.zeros(1, dtype=torch.long, device='cpu'))
-            self.register_buffer("accumulator", torch.zeros(store_past, discrete_bins))
-        else:
-            self.record_past = False
-
-    def forward(self, x):
-        other_dims = set(range(len(x.shape)))-set([self.dim])
-        averaged = x.sum(dim=tuple(other_dims)) / x.sum()
-        averaged = averaged - averaged.mean()
-
-        if self.record_past:
-            acc_count = self.accumulator.shape[0]
-            avg = averaged.detach().clone()
-            if self.accumulator_filled > 0:
-                averaged = torch.mean(self.accumulator, dim=0) * (acc_count-1) / acc_count + \
-                           averaged / acc_count
-
-            # Also push averaged into the accumulator.
-            self.accumulator[self.accumulator_index] = avg
-            self.accumulator_index += 1
-            if self.accumulator_index >= acc_count:
-                self.accumulator_index *= 0
-                if self.accumulator_filled <= 0:
-                    self.accumulator_filled += 1
-
-        return torch.sum(-self.dist.log_prob(averaged))
-
-
 class ResBlock(nn.Module):
     def __init__(self, chan, conv, activation):
         super().__init__()
@@ -115,7 +75,6 @@ class DiscreteVAE(nn.Module):
         straight_through = False,
         normalization = None, # ((0.5,) * 3, (0.5,) * 3),
         record_codes = False,
-        discretization_loss_averaging_steps = 100,
         use_lr_quantizer = False,
         lr_quantizer_args = {},
     ):
@@ -126,7 +85,6 @@ class DiscreteVAE(nn.Module):
         self.num_layers = num_layers
         self.straight_through = straight_through
         self.positional_dims = positional_dims
-        self.discrete_loss = DiscretizationLoss(num_tokens, 2, 1 / (num_tokens*2), discretization_loss_averaging_steps)
 
         assert positional_dims > 0 and positional_dims < 3  # This VAE only supports 1d and 2d inputs for now.
         if positional_dims == 2:
