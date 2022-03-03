@@ -29,7 +29,7 @@ from utils.util import checkpoint, opt_get
 
 
 class Quantize(nn.Module):
-    def __init__(self, dim, n_embed, decay=0.99, eps=1e-5, balancing_heuristic=False, new_return_order=False):
+    def __init__(self, dim, n_embed, decay=0.99, eps=1e-5, new_return_order=False):
         super().__init__()
 
         self.dim = dim
@@ -37,10 +37,7 @@ class Quantize(nn.Module):
         self.decay = decay
         self.eps = eps
 
-        self.balancing_heuristic = balancing_heuristic
         self.codes = None
-        self.max_codes = 64000
-        self.codes_full = False
         self.new_return_order = new_return_order
 
         embed = torch.randn(dim, n_embed)
@@ -49,20 +46,6 @@ class Quantize(nn.Module):
         self.register_buffer("embed_avg", embed.clone())
 
     def forward(self, input, return_soft_codes=False):
-        if self.balancing_heuristic and self.codes_full:
-            h = torch.histc(self.codes, bins=self.n_embed, min=0, max=self.n_embed) / len(self.codes)
-            mask = torch.logical_or(h > .9, h < .01).unsqueeze(1)
-            ep = self.embed.permute(1,0)
-            ea = self.embed_avg.permute(1,0)
-            rand_embed = torch.randn_like(ep) * mask
-            self.embed = (ep * ~mask + rand_embed).permute(1,0)
-            self.embed_avg = (ea * ~mask + rand_embed).permute(1,0)
-            self.cluster_size = self.cluster_size * ~mask.squeeze()
-            if torch.any(mask):
-                print(f"Reset {torch.sum(mask)} embedding codes.")
-                self.codes = None
-                self.codes_full = False
-
         flatten = input.reshape(-1, self.dim)
         dist = (
             flatten.pow(2).sum(1, keepdim=True)
@@ -74,15 +57,6 @@ class Quantize(nn.Module):
         embed_onehot = F.one_hot(embed_ind, self.n_embed).type(flatten.dtype)
         embed_ind = embed_ind.view(*input.shape[:-1])
         quantize = self.embed_code(embed_ind)
-
-        if self.balancing_heuristic:
-            if self.codes is None:
-                self.codes = embed_ind.flatten()
-            else:
-                self.codes = torch.cat([self.codes, embed_ind.flatten()])
-                if len(self.codes) > self.max_codes:
-                    self.codes = self.codes[-self.max_codes:]
-                    self.codes_full = True
 
         if self.training:
             embed_onehot_sum = embed_onehot.sum(0)
