@@ -453,7 +453,7 @@ class ExtensibleTrainer(BaseModel):
             for k, v in log.items():
                 if not isinstance(v, torch.Tensor):
                     continue
-                if v.len(v.shape) != 1 or v.dtype != torch.float:
+                if len(v.shape) != 1 or v.dtype != torch.float:
                     continue
                 distributed.all_reduce(v, op=distributed.ReduceOp.SUM)
                 log[k] = v / distributed.get_world_size()
