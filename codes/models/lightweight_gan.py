@@ -259,7 +259,7 @@ class EMAWrapper(nn.Module):
             new_buffer_value = self.ema_updater.update_average(ma_buffer, current_buffer)
             ma_buffer.copy_(new_buffer_value)
 
-    def custom_optimizer_step(self, step):
+    def after_step(self, step):
         if step % self.steps_per_ema == 0:
             self.update_moving_average()
         if step % self.steps_per_reset and step < self.steps_after_no_reset:
