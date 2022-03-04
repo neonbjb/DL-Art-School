@@ -67,6 +67,21 @@ class UniformSampler(ScheduleSampler):
         return self._weights
 
 
+class DeterministicSampler:
+    """
+    Returns the same equally spread-out sampling schedule every time it is called.
+    """
+    def __init__(self, diffusion):
+        super().__init__()
+        self.timesteps = diffusion.num_timesteps
+
+    def sample(self, batch_size, device):
+        rnge = th.arange(0, batch_size, device=device).float() / batch_size
+        indices = (rnge * self.timesteps).long()
+        weights = th.ones_like(indices).float()
+        return indices, weights
+
+
 class LossAwareSampler(ScheduleSampler):
     def update_with_local_losses(self, local_ts, local_losses):
         """
