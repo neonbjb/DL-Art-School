@@ -23,14 +23,10 @@ from utils.util import opt_get, map_cuda_to_correct_device
 def init_dist(backend, **kwargs):
     # These packages have globals that screw with Windows, so only import them if needed.
     import torch.distributed as dist
-    import torch.multiprocessing as mp
 
-    """initialization for distributed training"""
-    if mp.get_start_method(allow_none=True) != 'spawn':
-        mp.set_start_method('spawn')
-    rank = int(os.environ['RANK'])
-    num_gpus = torch.cuda.device_count()
-    torch.cuda.set_device(rank % num_gpus)
+    rank = int(os.environ['LOCAL_RANK'])
+    assert rank < torch.cuda.device_count()
+    torch.cuda.set_device(rank)
     dist.init_process_group(backend=backend, **kwargs)
 
 class Trainer:
@@ -321,7 +317,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_wav2vec_matcher.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
-    parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
     if args.launcher != 'none':
@@ -344,6 +339,7 @@ if __name__ == '__main__':
         init_dist('nccl')
         trainer.world_size = torch.distributed.get_world_size()
         trainer.rank = torch.distributed.get_rank()
+        torch.cuda.set_device(torch.distributed.get_rank())
 
     trainer.init(args.opt, opt, args.launcher)
     trainer.do_training()

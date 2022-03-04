@@ -16,7 +16,7 @@ class BaseModel():
             self.rank = torch.distributed.get_rank()
         else:
             self.rank = -1  # non dist training
-        self.device = torch.device('cuda' if opt['gpu_ids'] is not None else 'cpu')
+        self.device = torch.cuda.current_device() if opt['gpu_ids'] else torch.device('cpu')
         self.amp_level = 'O0' if opt['amp_opt_level'] is None else opt['amp_opt_level']
         self.is_train = opt['is_train']
         self.opt_in_cpu = opt_get(opt, ['keep_optimizer_states_on_cpu'], False)
