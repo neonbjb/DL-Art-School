@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 import torch as th
 import torch.distributed as dist
+from torch import distributed
 
 
 def create_named_schedule_sampler(name, diffusion):
@@ -69,17 +70,36 @@ class UniformSampler(ScheduleSampler):
 
 class DeterministicSampler:
     """
-    Returns the same equally spread-out sampling schedule every time it is called.
+    Returns the same equally spread-out sampling schedule every time it is called. Automatically handles distributed
+    cases by sharing the load across all entities. reset() must be called once a full batch is completed.
     """
-    def __init__(self, diffusion):
+    def __init__(self, diffusion, sampling_range, env):
         super().__init__()
         self.timesteps = diffusion.num_timesteps
+        self.rank = max(env['rank'], 0)
+        if distributed.is_initialized():
+            self.world_size = distributed.get_world_size()
+        else:
+            self.world_size = 1
+        # The sampling range gets spread out across multiple distributed entities.
+        rnge = th.arange(0, sampling_range, step=self.world_size).float() / sampling_range
+        self.indices = (rnge * self.timesteps).long()
 
     def sample(self, batch_size, device):
-        rnge = th.arange(0, batch_size, device=device).float() / batch_size
-        indices = (rnge * self.timesteps).long()
+        """
+        Iteratively samples across the deterministic range specified by the initialization params.
+        """
+        assert batch_size < self.indices.shape[0]
+        if self.counter+batch_size > self.indices.shape[0]:
+            print(f"Diffusion DeterministicSampler; Likely error. {self.counter}, {batch_size}, {self.indices.shape[0]}. Did you forget to set the sampling range to your batch size for the deterministic sampler?")
+            self.counter = 0  # Recover by setting to 0.
+        indices = self.indices[self.counter:self.counter+batch_size].to(device)
+        self.counter = self.counter + batch_size
         weights = th.ones_like(indices).float()
         return indices, weights
+
+    def reset(self):
+        self.counter = 0
 
 
 class LossAwareSampler(ScheduleSampler):

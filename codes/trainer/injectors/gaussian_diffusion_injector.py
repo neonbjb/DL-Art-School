@@ -27,6 +27,7 @@ class GaussianDiffusionInjector(Injector):
         self.model_input_keys = opt_get(opt, ['model_input_keys'], [])
         self.extra_model_output_keys = opt_get(opt, ['extra_model_output_keys'], [])
         self.deterministic_timesteps_every = opt_get(opt, ['deterministic_timesteps_every'], 0)
+        self.deterministic_sampler = DeterministicSampler(self.diffusion, opt_get(opt, ['deterministic_sampler_expected_batch_size'], 2048), env)
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
@@ -34,15 +35,15 @@ class GaussianDiffusionInjector(Injector):
 
         with autocast(enabled=self.env['opt']['fp16']):
             if not gen.training or (self.deterministic_timesteps_every != 0 and self.env['step'] % self.deterministic_timesteps_every == 0):
-                sampler = DeterministicSampler(self.diffusion)
+                sampler = self.deterministic_sampler
             else:
                 sampler = self.schedule_sampler
+                self.deterministic_sampler.reset()  # Keep this reset whenever it is not being used, so it is ready to use automatically.
             model_inputs = {k: state[v] for k, v in self.model_input_keys.items()}
             t, weights = sampler.sample(hq.shape[0], hq.device)
             diffusion_outputs = self.diffusion.training_losses(gen, hq, t, model_kwargs=model_inputs)
             if isinstance(sampler, LossAwareSampler):
                 sampler.update_with_local_losses(t, diffusion_outputs['losses'])
-
             if len(self.extra_model_output_keys) > 0:
                 assert(len(self.extra_model_output_keys) == len(diffusion_outputs['extra_outputs']))
                 out = {k: v for k, v in zip(self.extra_model_output_keys, diffusion_outputs['extra_outputs'])}
