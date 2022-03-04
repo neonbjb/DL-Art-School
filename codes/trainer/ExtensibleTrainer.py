@@ -447,6 +447,17 @@ class ExtensibleTrainer(BaseModel):
 
         # The batch size optimizer also outputs loggable data.
         log.update(self.batch_size_optimizer.get_statistics())
+
+        # In distributed mode, get agreement on all single tensors.
+        if distributed.is_available() and distributed.is_initialized():
+            for k, v in log.items():
+                if not isinstance(v, torch.Tensor):
+                    continue
+                if v.len(v.shape) != 1 or v.dtype != torch.float:
+                    continue
+                distributed.all_reduce(v, op=distributed.ReduceOp.SUM)
+                log[k] = v / distributed.get_world_size()
+
         return log
 
     def get_current_visuals(self, need_GT=True):

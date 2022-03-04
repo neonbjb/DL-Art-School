@@ -22,10 +22,6 @@ class LossAccumulator:
         if '_histogram' in name:
             buf[i] = torch.flatten(tensor.detach().cpu())
         elif isinstance(tensor, torch.Tensor):
-            if distributed.is_available() and distributed.is_initialized():
-                # Gather the metric from all devices before storing it locally.
-                distributed.all_reduce(tensor, op=distributed.ReduceOp.SUM)
-                tensor /= distributed.get_world_size()
             buf[i] = tensor.detach().cpu()
         else:
             buf[i] = tensor

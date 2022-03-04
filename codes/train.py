@@ -195,11 +195,14 @@ class Trainer:
         #### log
         if self.dataset_debugger is not None:
             self.dataset_debugger.update(train_data)
+        if will_log:
+            # Must be run by all instances to gather consensus.
+            current_model_logs = self.model.get_current_log(self.current_step)
         if will_log and self.rank <= 0:
             logs = {'step': self.current_step,
                     'samples': self.total_training_data_encountered,
                     'megasamples': self.total_training_data_encountered / 1000000}
-            logs.update(self.model.get_current_log(self.current_step))
+            logs.update(current_model_logs)
             if self.dataset_debugger is not None:
                 logs.update(self.dataset_debugger.get_debugging_map())
             logs.update(gradient_norms_dict)
