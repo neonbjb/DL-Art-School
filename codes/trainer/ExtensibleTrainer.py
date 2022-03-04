@@ -365,7 +365,9 @@ class ExtensibleTrainer(BaseModel):
 
     def consume_gradients(self, state, step, it):
         [e.before_optimize(state) for e in self.experiments]
+        self.restore_optimizers()
         step.do_step(it)
+        self.stash_optimizers()
 
         # Call into custom step hooks as well as update EMA params.
         for name, net in self.networks.items():
