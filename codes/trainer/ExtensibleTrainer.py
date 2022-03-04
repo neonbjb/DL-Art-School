@@ -4,6 +4,7 @@ import os
 from time import time
 
 import torch
+from torch import distributed
 from torch.nn.parallel import DataParallel
 import torch.nn as nn
 
@@ -320,6 +321,11 @@ class ExtensibleTrainer(BaseModel):
                             pgroups = {f'{name}_all_parameters': list(model.parameters())}
                     for name in pgroups.keys():
                         grad_norms[name] = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2) for p in pgroups[name]]), 2)
+                        if distributed.is_available() and distributed.is_initialized():
+                            # Gather the metric from all devices if in a distributed setting.
+                            distributed.all_reduce(grad_norms[name], op=distributed.ReduceOp.SUM)
+                            grad_norms[name] /= distributed.get_world_size()
+                        grad_norms[name] = grad_norms[name].cpu()
 
                 self.consume_gradients(state, step, it)
 
