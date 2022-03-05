@@ -6,7 +6,7 @@ from torch.distributed.optim import ZeroRedundancyOptimizer
 from torch.nn.parallel.distributed import DistributedDataParallel
 
 import utils.util
-from utils.util import opt_get, optimizer_to
+from utils.util import opt_get, optimizer_to, map_to_device
 
 
 class BaseModel():
@@ -148,7 +148,7 @@ class BaseModel():
             state['amp'] = amp.state_dict()
         save_filename = '{}.state'.format(utils.util.opt_get(state, ['iter'], 'no_step_provided'))
         save_path = os.path.join(self.opt['path']['training_state'], save_filename)
-        torch.save(state, save_path)
+        torch.save(map_to_device(state, 'cpu'), save_path)
         if '__state__' not in self.save_history.keys():
             self.save_history['__state__'] = []
         self.save_history['__state__'].append(save_path)

@@ -499,6 +499,22 @@ def map_cuda_to_correct_device(storage, loc):
     else:
         return storage.cpu()
 
+def list_to_device(l, dev):
+    return [anything_to_device(e, dev) for e in l]
+
+def map_to_device(m, dev):
+    return {k: anything_to_device(v, dev) for k,v in m.items()}
+    
+def anything_to_device(obj, dev):
+    if isinstance(obj, list):
+        return list_to_device(obj, dev)
+    elif isinstance(obj, map):
+        return map_to_device(obj, dev)
+    elif isinstance(obj, torch.Tensor):
+        return obj.to(dev)
+    else:
+        return obj
+
 
 def ceil_multiple(base, multiple):
     """
