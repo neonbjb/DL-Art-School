@@ -27,6 +27,7 @@ def load_tsv(filename):
                 if bad_lines > 10:
                     print(f'{filename} contains 10+ bad entries. Failing. Sample last entry: {line}')
                     raise ValueError
+                continue
             filepaths_and_text.append([os.path.join(base, f'{components[1]}'), components[0]])
     return filepaths_and_text
 
@@ -52,6 +53,7 @@ def load_tsv_aligned_codes(filename):
                 if bad_lines > 10:
                     print(f'{filename} contains 10+ bad entries. Failing. Sample last entry: {line}')
                     raise ValueError
+                continue
             filepaths_and_text.append([os.path.join(base, f'{components[1]}'), components[0], convert_string_list_to_tensor(components[2])])
     return filepaths_and_text
 
