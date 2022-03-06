@@ -17,9 +17,17 @@ from utils.util import opt_get
 
 def load_tsv(filename):
     with open(filename, encoding='utf-8') as f:
-        components = [line.strip().split('\t') for line in f]
+        filepaths_and_text = []
         base = os.path.dirname(filename)
-        filepaths_and_text = [[os.path.join(base, f'{component[1]}'), component[0]] for component in components]
+        bad_lines = 0
+        for line in f:
+            components = line.strip().split('\t')
+            if len(components) < 3:
+                bad_lines += 1
+                if bad_lines > 10:
+                    print(f'{filename} contains 10+ bad entries. Failing. Sample last entry: {line}')
+                    raise ValueError
+            filepaths_and_text.append([os.path.join(base, f'{components[1]}'), components[0]])
     return filepaths_and_text
 
 
