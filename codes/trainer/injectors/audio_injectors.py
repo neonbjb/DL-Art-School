@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torchaudio
 
 from trainer.inject import Injector
-from utils.util import opt_get
+from utils.util import opt_get, load_model_from_config
 
 
 class MelSpectrogramInjector(Injector):
@@ -110,3 +110,65 @@ class AudioResampleInjector(Injector):
     def forward(self, state):
         inp = state[self.input]
         return {self.output: torchaudio.functional.resample(inp, self.input_sr, self.output_sr)}
+
+
+class DiscreteTokenInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        cfg = opt_get(opt, ['dvae_config'], "../experiments/train_diffusion_vocoder_22k_level.yml")
+        dvae_name = opt_get(opt, ['dvae_name'], 'dvae')
+        self.dvae = load_model_from_config(cfg, dvae_name).cuda().eval()
+
+    def forward(self, state):
+        inp = state[self.input]
+        with torch.no_grad():
+            self.dvae = self.dvae.to(inp.device)
+            codes = self.dvae.get_codebook_indices(inp)
+            return {self.output: codes}
+
+
+class GptVoiceLatentInjector(Injector):
+    """
+    This injector does all the legwork to generate latents out of a UnifiedVoice model, including encoding all audio
+    inputs into a MEL spectrogram and discretizing the inputs.
+    """
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        # For discrete tokenization.
+        cfg = opt_get(opt, ['dvae_config'], "../experiments/train_diffusion_vocoder_22k_level.yml")
+        dvae_name = opt_get(opt, ['dvae_name'], 'dvae')
+        self.dvae = load_model_from_config(cfg, dvae_name).cuda().eval()
+        # The unified_voice model.
+        cfg = opt_get(opt, ['gpt_config'], "../experiments/train_gpt_tts_unified.yml")
+        model_name = opt_get(opt, ['gpt_name'], 'gpt')
+        pretrained_path = opt['gpt_path']
+        self.gpt = load_model_from_config(cfg, model_name=model_name,
+                                          also_load_savepoint=False, load_path=pretrained_path).cuda().eval()
+        # Mel converter
+        self.mel_inj = TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_norm_file': '../experiments/clips_mel_norms.pth'},{})
+        # Aux input keys.
+        self.conditioning_key = opt['conditioning_clip']
+        self.text_input_key = opt['text']
+        self.text_lengths_key = opt['text_lengths']
+        self.input_lengths_key = opt['input_lengths']
+
+    def to_mel(self, t):
+        return self.mel_inj({'wav': t})['mel']
+
+    def forward(self, state):
+        with torch.no_grad():
+            mel_inputs = self.to_mel(state[self.input])
+            mel_cond = self.to_mel(state[self.conditioning_key])
+
+            # Use the input as a conditioning input as well. This is fine because we are not actually training the GPT network so it can't learn to cheat.
+            max_mel_len = max(mel_inputs.shape[-1], mel_cond.shape[-1])
+            mel_cond = F.pad(mel_cond, (0, max_mel_len-mel_cond.shape[-1]))
+            mel_cond2 = F.pad(mel_inputs, (0, max_mel_len-mel_inputs.shape[-1]))
+            mel_cond = torch.cat([mel_cond.unsqueeze(1), mel_cond2.unsqueeze(1)], dim=1)
+            self.dvae = self.dvae.to(mel_inputs.device)
+            codes = self.dvae.get_codebook_indices(mel_inputs)
+            self.gpt = self.gpt.to(codes.device)
+            latents = self.gpt.forward(mel_cond, state[self.text_input_key],
+                                       state[self.text_lengths_key], codes, state[self.input_lengths_key],
+                                       text_first=True, raw_mels=None, return_attentions=False, return_latent=True)
+            return {self.output: latents}

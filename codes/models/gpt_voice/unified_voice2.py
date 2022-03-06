@@ -303,6 +303,13 @@ class UnifiedVoice(nn.Module):
         for module in embeddings:
             module.weight.data.normal_(mean=0.0, std=.02)
 
+    def get_grad_norm_parameter_groups(self):
+        return {
+            'conditioning_encoder': list(self.conditioning_encoder.parameters()),
+            'gpt': list(self.gpt.parameters()),
+            'heads': list(self.text_head.parameters()) + list(self.mel_head.parameters()),
+        }
+
     def build_aligned_inputs_and_targets(self, input, start_token, stop_token):
         inp = F.pad(input, (1,0), value=start_token)
         tar = F.pad(input, (0,1), value=stop_token)
@@ -322,7 +329,7 @@ class UnifiedVoice(nn.Module):
                 mel_input_tokens[b, actual_end:] = self.stop_mel_token
         return mel_input_tokens
 
-    def get_logits(self, speech_conditioning_inputs, first_inputs, first_head, second_inputs=None, second_head=None, get_attns=False):
+    def get_logits(self, speech_conditioning_inputs, first_inputs, first_head, second_inputs=None, second_head=None, get_attns=False, return_latent=False):
         if second_inputs is not None:
             emb = torch.cat([speech_conditioning_inputs, first_inputs, second_inputs], dim=1)
         else:
@@ -334,6 +341,10 @@ class UnifiedVoice(nn.Module):
 
         enc = gpt_out.last_hidden_state[:, 1:]  # The first logit is tied to the speech_conditioning_input
         enc = self.final_norm(enc)
+
+        if return_latent:
+            return enc[:, :first_inputs.shape[1]], enc[:, -second_inputs.shape[1]:]
+
         first_logits = enc[:, :first_inputs.shape[1]]
         first_logits = first_head(first_logits)
         first_logits = first_logits.permute(0,2,1)
@@ -345,7 +356,8 @@ class UnifiedVoice(nn.Module):
         else:
             return first_logits
 
-    def forward(self, speech_conditioning_input, text_inputs, text_lengths, mel_codes, wav_lengths, text_first=True, raw_mels=None, return_attentions=False):
+    def forward(self, speech_conditioning_input, text_inputs, text_lengths, mel_codes, wav_lengths, text_first=True, raw_mels=None, return_attentions=False,
+                return_latent=False):
         """
         Forward pass that uses both text and voice in either text conditioning mode or voice conditioning mode
         (actuated by `text_first`).
@@ -356,6 +368,9 @@ class UnifiedVoice(nn.Module):
         mel_inputs:  long tensor, (b,m)
         wav_lengths: long tensor, (b,)
         raw_mels: MEL float tensor (b,80,s)
+
+        If return_attentions is specified, only logits are returned.
+        If return_latent is specified, loss & logits are not computed or returned. Only the predicted latents are returned.
         """
         assert self.max_mel_tokens >= mel_codes.shape[1], f'{mel_codes.shape[1]}'
         assert self.max_text_tokens >= text_inputs.shape[1], f'{text_inputs.shape[1]}'
@@ -385,10 +400,15 @@ class UnifiedVoice(nn.Module):
             mel_inp = mel_codes
         mel_emb = self.mel_embedding(mel_inp)
         mel_emb = mel_emb + self.mel_pos_embedding(mel_codes)
+
         if text_first:
-            text_logits, mel_logits = self.get_logits(conds, text_emb, self.text_head, mel_emb, self.mel_head, get_attns=return_attentions)
+            text_logits, mel_logits = self.get_logits(conds, text_emb, self.text_head, mel_emb, self.mel_head, get_attns=return_attentions, return_latent=return_latent)
+            if return_latent:
+                return mel_logits[:, :-1]  # Despite the name, these are not logits.
         else:
-            mel_logits, text_logits = self.get_logits(conds, mel_emb, self.mel_head, text_emb, self.text_head, get_attns=return_attentions)
+            mel_logits, text_logits = self.get_logits(conds, mel_emb, self.mel_head, text_emb, self.text_head, get_attns=return_attentions, return_latent=return_latent)
+            if return_latent:
+                return text_logits[:, :-1]  # Despite the name, these are not logits
 
         if return_attentions:
             return mel_logits
