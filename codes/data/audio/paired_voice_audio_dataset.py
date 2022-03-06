@@ -47,7 +47,7 @@ def load_tsv_aligned_codes(filename):
         bad_lines = 0
         for line in f:
             components = line.strip().split('\t')
-            if len(components) < 2:
+            if len(components) < 3:
                 bad_lines += 1
                 if bad_lines > 10:
                     print(f'{filename} contains 10+ bad entries. Failing. Sample last entry: {line}')
