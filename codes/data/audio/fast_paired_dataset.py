@@ -37,7 +37,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
 
     In practice, this means two things:
     1) Index {i} of this dataset means nothing: fetching from the same index will almost always return different data.
-       As a result, this dataset should not be used for validation or test runs.
+       As a result, this dataset should not be used for validation or test runs. Use PairedVoiceAudio dataset instead.
     2) This dataset has a slight bias for items with longer text or longer filenames.
 
     The upshot is that this dataset loads extremely quickly and consumes almost no system memory.

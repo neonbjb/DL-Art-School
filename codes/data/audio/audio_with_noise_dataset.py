@@ -8,6 +8,7 @@ import torchaudio
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+import torch.nn.functional as F
 from data.audio.unsupervised_audio_dataset import UnsupervisedAudioDataset, load_audio
 from data.util import load_paths_from_cache, find_files_of_type, is_audio_file
 
@@ -95,6 +96,8 @@ class AudioWithNoiseDataset(Dataset):
 
         out = self.underlying_dataset[item]
         clip = out['clip']
+        dlen = clip.shape[-1]
+        clip = clip[:, :out['clip_lengths']]
         augpath = ''
         augvol = 0
         try:
@@ -149,15 +152,17 @@ class AudioWithNoiseDataset(Dataset):
                 # Apply the GSM codec to simulate cellular phone audio.
                 clip = torchaudio.functional.apply_codec(clip, self.underlying_dataset.sampling_rate, format="gsm")
         except:
-            print(f"Exception encountered processing {item}, re-trying because this is often just a failed aug.")
-            print(sys.exc_info())
+            #print(f"Exception encountered processing {item}, re-trying because this is often just a failed aug.")
+            #print(sys.exc_info())
             #raise  # Uncomment to surface exceptions.
             return self[item]
 
         clip.clip_(-1, 1)
+        # Restore padding.
+        clip = F.pad(clip, (0, dlen-clip.shape[-1]))
         out['clip'] = clip
         out['label'] = label
-        out['aug'] = aug
+        #out['aug'] = aug
         out['augpath'] = augpath
         out['augvol'] = augvol
         out['clipvol'] = clipvol
@@ -170,10 +175,10 @@ class AudioWithNoiseDataset(Dataset):
 if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio_with_noise',
-        'path': ['\\\\192.168.5.3\\rtx3080_audio\\split\\cleaned\\books0'],
-        'cache_path': 'E:\\audio\\remote-cache3.pth',
+        'path': ['y:/clips/books1'],
+        'cache_path': 'E:\\audio\\remote-cache4.pth',
         'sampling_rate': 22050,
-        'pad_to_samples': 80960,
+        'pad_to_samples': 400000,
         'phase': 'train',
         'n_workers': 0,
         'batch_size': 4,
@@ -191,7 +196,7 @@ if __name__ == '__main__':
     i = 0
     for b in tqdm(dl):
         for b_ in range(b['clip'].shape[0]):
-            #torchaudio.save(f'{i}_clip_{b_}_{b["label"][b_].item()}.wav', b['clip'][b_], ds.sampling_rate)
+            torchaudio.save(f'{i}_clip_{b_}_{b["label"][b_].item()}.wav', b['clip'][b_], ds.sampling_rate)
             #torchaudio.save(f'{i}_clip_{b_}_aug.wav', b['aug'][b_], ds.sampling_rate)
             print(f'{i} aug path: {b["augpath"][b_]} aug volume: {b["augvol"][b_]} clip volume: {b["clipvol"][b_]}')
             i += 1
