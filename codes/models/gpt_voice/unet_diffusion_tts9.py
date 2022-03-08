@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import autocast
-from x_transformers.x_transformers import AbsolutePositionalEmbedding, AttentionLayers, CrossAttender
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, \
@@ -14,63 +13,7 @@ from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequent
 from models.gpt_voice.mini_encoder import AudioMiniEncoder
 from scripts.audio.gen.use_diffuse_tts import ceil_multiple
 from trainer.networks import register_model
-from utils.util import checkpoint
-from x_transformers import Encoder, ContinuousTransformerWrapper
-
-
-def clustered_mask(probability, shape, dev, lateral_expansion_radius_max=3, inverted=False):
-    """
-    Produces a masking vector of the specified shape where each element has probability to be zero.
-    lateral_expansion_radius_max neighbors of any element that is zero also have a 50% chance to be zero.
-    Effectively, this produces clusters of masks tending to be lateral_expansion_radius_max wide.
-    """
-    # Each masked token spreads out to 1+lateral_expansion_radius_max on average, therefore reduce the probability in
-    # kind
-    probability = probability / (1+lateral_expansion_radius_max)
-
-    mask = torch.rand(shape, device=dev)
-    mask = (mask < probability).float()
-    kernel = torch.tensor([.5 for _ in range(lateral_expansion_radius_max)] + [1] + [.5 for _ in range(lateral_expansion_radius_max)], device=dev)
-    mask = F.conv1d(mask.unsqueeze(1), kernel.view(1,1,2*lateral_expansion_radius_max+1), padding=lateral_expansion_radius_max).squeeze(1)
-    if inverted:
-        return torch.bernoulli(torch.clamp(mask, 0, 1)) != 0
-    else:
-        return torch.bernoulli(torch.clamp(mask, 0, 1)) == 0
-
-
-class CheckpointedLayer(nn.Module):
-    """
-    Wraps a module. When forward() is called, passes kwargs that require_grad through torch.checkpoint() and bypasses
-    checkpoint for all other args.
-    """
-    def __init__(self, wrap):
-        super().__init__()
-        self.wrap = wrap
-
-    def forward(self, x, *args, **kwargs):
-        for k, v in kwargs.items():
-            assert not (isinstance(v, torch.Tensor) and v.requires_grad)  # This would screw up checkpointing.
-        partial = functools.partial(self.wrap, **kwargs)
-        return torch.utils.checkpoint.checkpoint(partial, x, *args)
-
-
-class CheckpointedXTransformerEncoder(nn.Module):
-    """
-    Wraps a ContinuousTransformerWrapper and applies CheckpointedLayer to each layer and permutes from channels-mid
-    to channels-last that XTransformer expects.
-    """
-    def __init__(self, **xtransformer_kwargs):
-        super().__init__()
-        self.transformer = ContinuousTransformerWrapper(**xtransformer_kwargs)
-
-        for i in range(len(self.transformer.attn_layers.layers)):
-            n, b, r = self.transformer.attn_layers.layers[i]
-            self.transformer.attn_layers.layers[i] = nn.ModuleList([n, CheckpointedLayer(b), r])
-
-    def forward(self, x, **kwargs):
-        x = x.permute(0,2,1)
-        h = self.transformer(x, **kwargs)
-        return h.permute(0,2,1)
+from utils.util import checkpoint, opt_get
 
 
 class ResBlock(TimestepBlock):
@@ -172,7 +115,7 @@ class DiffusionTts(nn.Module):
 
     def __init__(
             self,
-            model_channels,
+            model_channels=1024,
             in_channels=1,
             in_latent_channels=1024,
             out_channels=2,  # mean and variance
@@ -193,8 +136,6 @@ class DiffusionTts(nn.Module):
             kernel_size=3,
             scale_factor=2,
             time_embed_dim_multiplier=4,
-            cond_transformer_depth=8,
-            mid_transformer_depth=8,
             # Parameters for regularization.
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
             # Parameters for super-sampling.
@@ -234,26 +175,16 @@ class DiffusionTts(nn.Module):
 
         conditioning_dim = model_channels * 8
         self.latent_converter = nn.Conv1d(in_latent_channels, conditioning_dim, 1)
-        self.aligned_latent_padding_embedding = nn.Parameter(torch.randn(1,conditioning_dim,1))
+        self.aligned_latent_padding_embedding = nn.Parameter(torch.randn(1,in_latent_channels,1))
         self.contextual_embedder = AudioMiniEncoder(1, conditioning_dim, base_channels=32, depth=6, resnet_blocks=1,
-                         attn_blocks=4, num_attn_heads=8, dropout=dropout, downsample_factor=4, kernel_size=5)
+                         attn_blocks=3, num_attn_heads=8, dropout=dropout, downsample_factor=4, kernel_size=5)
         self.conditioning_conv = nn.Conv1d(conditioning_dim*2, conditioning_dim, 1)
-        self.conditioning_encoder = CheckpointedXTransformerEncoder(
-                max_seq_len=-1,  # Should be unused
-                use_pos_emb=False,
-                attn_layers=Encoder(
-                    dim=conditioning_dim,
-                    depth=cond_transformer_depth,
-                    heads=num_heads,
-                    ff_dropout=dropout,
-                    attn_dropout=dropout,
-                    ff_glu=True,
-                    rotary_pos_emb=True
-                )
-        )
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,conditioning_dim,1))
         self.conditioning_timestep_integrator = TimestepEmbedSequential(
                     ResBlock(conditioning_dim, time_embed_dim, dropout, out_channels=conditioning_dim, dims=dims, kernel_size=1),
+                    AttentionBlock(conditioning_dim, num_heads=num_heads, num_head_channels=num_head_channels),
+                    ResBlock(conditioning_dim, time_embed_dim, dropout, out_channels=conditioning_dim, dims=dims, kernel_size=1),
+                    AttentionBlock(conditioning_dim, num_heads=num_heads, num_head_channels=num_head_channels),
                     ResBlock(conditioning_dim, time_embed_dim, dropout, out_channels=conditioning_dim, dims=dims, kernel_size=1),
         )
 
@@ -314,20 +245,6 @@ class DiffusionTts(nn.Module):
                 ds *= 2
                 self._feature_size += ch
 
-        mid_transformer = CheckpointedXTransformerEncoder(
-                max_seq_len=-1,  # Should be unused
-                use_pos_emb=False,
-                attn_layers=Encoder(
-                    dim=ch,
-                    depth=mid_transformer_depth,
-                    heads=num_heads,
-                    ff_dropout=dropout,
-                    attn_dropout=dropout,
-                    use_rmsnorm=True,
-                    ff_glu=True,
-                    rotary_pos_emb=True,
-                )
-            )
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,
@@ -336,7 +253,11 @@ class DiffusionTts(nn.Module):
                 dims=dims,
                 kernel_size=kernel_size,
             ),
-            mid_transformer,
+            AttentionBlock(
+                ch,
+                num_heads=num_heads,
+                num_head_channels=num_head_channels,
+            ),
             ResBlock(
                 ch,
                 time_embed_dim,
@@ -391,9 +312,59 @@ class DiffusionTts(nn.Module):
             'input_blocks': list(self.input_blocks.parameters()),
             'output_blocks': list(self.output_blocks.parameters()),
             'middle_transformer': list(self.middle_block.parameters()),
-            'conditioning_encoder': list(self.conditioning_encoder.parameters())
         }
         return groups
+
+
+    def forward(self, x, timesteps, aligned_latent, conditioning_input, conditioning_free):
+        hs = []
+        time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+
+        # Note: this block does not need to repeated on inference, since it is not timestep-dependent.
+        if conditioning_free:
+            code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, 1)
+        else:
+            cond_emb = self.contextual_embedder(conditioning_input)
+            code_emb = self.latent_converter(aligned_latent)
+            cond_emb = cond_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
+            code_emb = self.conditioning_conv(torch.cat([cond_emb, code_emb], dim=1))
+        # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
+        if self.training and self.unconditioned_percentage > 0:
+            unconditioned_batches = torch.rand((code_emb.shape[0],1,1), device=code_emb.device) < self.unconditioned_percentage
+            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(x.shape[0], 1, 1), code_emb)
+
+        # Everything after this comment is timestep dependent.
+        code_emb = self.conditioning_timestep_integrator(code_emb, time_emb)
+
+        time_emb = time_emb.float()
+        h = x
+        for k, module in enumerate(self.input_blocks):
+            if isinstance(module, nn.Conv1d):
+                h_tok = F.interpolate(module(code_emb), size=(h.shape[-1]), mode='nearest')
+                h = h + h_tok
+            else:
+                h = module(h, time_emb)
+                hs.append(h)
+        h = self.middle_block(h, time_emb)
+        for module in self.output_blocks:
+            h = torch.cat([h, hs.pop()], dim=1)
+            h = module(h, time_emb)
+
+        # Last block also has autocast disabled for high-precision outputs.
+        h = h.float()
+        out = self.out(h)
+        return out
+
+
+class DiffusionTtsWrapper(nn.Module):
+    """
+    Wraps the above module with some set-up logic such that the above module can be traced by the PyTorch JIT.
+    """
+    def __init__(self, jit_enabled=False, **kwargs):
+        super().__init__()
+        self.jit_enabled = jit_enabled
+        self.jit_forward = None
+        self.underlying = DiffusionTts(**kwargs)
 
     def forward(self, x, timesteps, aligned_latent, conditioning_input, lr_input=None, conditioning_free=False):
         """
@@ -408,75 +379,40 @@ class DiffusionTts(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         assert conditioning_input is not None
-        if self.super_sampling_enabled:
+        if self.underlying.super_sampling_enabled:
             assert lr_input is not None
             if self.training and self.super_sampling_max_noising_factor > 0:
-                noising_factor = random.uniform(0,self.super_sampling_max_noising_factor)
+                noising_factor = random.uniform(0,self.underlying.super_sampling_max_noising_factor)
                 lr_input = torch.randn_like(lr_input) * noising_factor + lr_input
             lr_input = F.interpolate(lr_input, size=(x.shape[-1],), mode='nearest')
             x = torch.cat([x, lr_input], dim=1)
 
-        with autocast(x.device.type, enabled=self.enable_fp16):
-            # Shuffle aligned_latent to BxCxS format
-            aligned_latent = aligned_latent.permute(0,2,1)
+        # Shuffle aligned_latent to BxCxS format
+        aligned_latent = aligned_latent.permute(0,2,1)
 
-            # Fix input size to the proper multiple of 2 so we don't get alignment errors going down and back up the U-net.
-            orig_x_shape = x.shape[-1]
-            cm = ceil_multiple(x.shape[-1], 2048)
-            if cm != 0:
-                pc = (cm-x.shape[-1])/x.shape[-1]
-                x = F.pad(x, (0,cm-x.shape[-1]))
-                # Also fix aligned_latent, which is aligned to x.
-                aligned_latent = torch.cat([aligned_latent,
-                                            self.aligned_latent_padding_embedding.repeat(x.shape[0],1,int(pc*aligned_latent.shape[-1]))], dim=-1)
+        # Fix input size to the proper multiple of 2 so we don't get alignment errors going down and back up the U-net.
+        orig_x_shape = x.shape[-1]
+        cm = ceil_multiple(x.shape[-1], 2048)
+        if cm != 0:
+            pc = (cm-x.shape[-1])/x.shape[-1]
+            x = F.pad(x, (0,cm-x.shape[-1]))
+            # Also fix aligned_latent, which is aligned to x.
+            aligned_latent = torch.cat([aligned_latent,
+                                        self.underlying.aligned_latent_padding_embedding.repeat(x.shape[0],1,int(pc*aligned_latent.shape[-1]))], dim=-1)
 
-            hs = []
-            time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-
-            # Note: this block does not need to repeated on inference, since it is not timestep-dependent.
-            if conditioning_free:
-                code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, 1)
+        with autocast(x.device.type, enabled=self.underlying.enable_fp16):
+            if self.jit_enabled:
+                if self.jit_forward is None:
+                    self.jit_forward = torch.jit.script(self.underlying, (x, timesteps, aligned_latent, conditioning_input, conditioning_free))
+                out = self.jit_forward(x, timesteps, aligned_latent, conditioning_input, conditioning_free)
             else:
-                cond_emb = self.contextual_embedder(conditioning_input)
-                code_emb = self.latent_converter(aligned_latent)
-                cond_emb = cond_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
-                code_emb = self.conditioning_conv(torch.cat([cond_emb, code_emb], dim=1))
-                code_emb = self.conditioning_encoder(code_emb)
-            # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
-            if self.training and self.unconditioned_percentage > 0:
-                unconditioned_batches = torch.rand((code_emb.shape[0],1,1), device=code_emb.device) < self.unconditioned_percentage
-                code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(x.shape[0], 1, 1), code_emb)
-
-            # Everything after this comment is timestep dependent.
-            code_emb = self.conditioning_timestep_integrator(code_emb, time_emb)
-
-            first = True
-            time_emb = time_emb.float()
-            h = x
-            for k, module in enumerate(self.input_blocks):
-                if isinstance(module, nn.Conv1d):
-                    h_tok = F.interpolate(module(code_emb), size=(h.shape[-1]), mode='nearest')
-                    h = h + h_tok
-                else:
-                    with autocast(x.device.type, enabled=self.enable_fp16 and not first):
-                        # First block has autocast disabled to allow a high precision signal to be properly vectorized.
-                        h = module(h, time_emb)
-                    hs.append(h)
-                first = False
-            h = self.middle_block(h, time_emb)
-            for module in self.output_blocks:
-                h = torch.cat([h, hs.pop()], dim=1)
-                h = module(h, time_emb)
-
-        # Last block also has autocast disabled for high-precision outputs.
-        h = h.float()
-        out = self.out(h)
+                out = self.underlying(x, timesteps, aligned_latent, conditioning_input, conditioning_free)
         return out[:, :, :orig_x_shape]
 
 
 @register_model
 def register_diffusion_tts9(opt_net, opt):
-    return DiffusionTts(**opt_net['kwargs'])
+    return DiffusionTtsWrapper(**opt_net['kwargs'])
 
 
 if __name__ == '__main__':
@@ -484,7 +420,7 @@ if __name__ == '__main__':
     aligned_latent = torch.randn(2,388,1024)
     cond = torch.randn(2, 1, 44000)
     ts = torch.LongTensor([600, 600])
-    model = DiffusionTts(128,
+    model = DiffusionTtsWrapper(128,
                          channel_mult=[1,1.5,2, 3, 4, 6, 8],
                          num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
                          token_conditioning_resolutions=[1,4,16,64],
