@@ -344,4 +344,6 @@ class ConfigurableStep(Module):
                 opt.zero_grad()
 
     def get_metrics(self):
-        return self.loss_accumulator.as_dict()
+        metrics = self.loss_accumulator.as_dict()
+        metrics['grad_scaler_scale'] = self.scaler.get_scale()
+        return metrics
