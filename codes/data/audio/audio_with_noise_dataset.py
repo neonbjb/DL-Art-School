@@ -98,6 +98,7 @@ class AudioWithNoiseDataset(Dataset):
         clip = out['clip']
         dlen = clip.shape[-1]
         clip = clip[:, :out['clip_lengths']]
+        padding_room = dlen - clip.shape[-1]
         augpath = ''
         augvol = 0
         try:
@@ -106,9 +107,9 @@ class AudioWithNoiseDataset(Dataset):
             clip = clip * clipvol
 
             label = random.randint(0, 4)  # Current excludes GSM corruption.
-            #label = 2
-            aug = torch.zeros_like(clip)
+            label = 3
             if label > 0 and label < 4:  # 0 is basically "leave it alone"
+                aug_needed = True
                 augvol = (random.random() * (self.max_volume-self.min_volume) + self.min_volume)
                 if label == 1:
                     # Add environmental noise.
@@ -120,22 +121,38 @@ class AudioWithNoiseDataset(Dataset):
                     intg_fns = [_integration_fn_fully_enabled]
                     augvol *= .5  # Music is often severely in the background.
                 elif label == 3:
-                    # Add another voice.
                     augpath = random.choice(self.underlying_dataset.audiopaths)
-                    intg_fns = [_integration_fn_smooth, _integration_fn_fully_enabled]
-                aug = load_audio(augpath, self.underlying_dataset.sampling_rate)
-                if aug.shape[1] > clip.shape[1]:
-                    n, cn = aug.shape[1], clip.shape[1]
-                    gap = n-cn
-                    placement = random.randint(0, gap)
-                    aug = aug[:, placement:placement+cn]
-                aug = random.choice(intg_fns)(aug.shape[1]) * aug
-                aug = aug * augvol
-                if aug.shape[1] < clip.shape[1]:
-                    gap = clip.shape[1] - aug.shape[1]
-                    placement = random.randint(0, gap-1)
-                    aug = torch.nn.functional.pad(aug, (placement, gap-placement))
-                clip = clip + aug
+                    # This can take two forms:
+                    if padding_room < 22000 or random.random() < .5:
+                        # (1) The voices talk over one another. If there is no padding room, we always take this choice.
+                        intg_fns = [_integration_fn_smooth, _integration_fn_fully_enabled]
+                    else:
+                        # (2) There are simply two voices in the clip, separated from one another.
+                        # This is a special case that does not use the same logic as the rest of the augmentations.
+                        aug = load_audio(augpath, self.underlying_dataset.sampling_rate)
+                        # Pad with some random silence
+                        aug = F.pad(aug, (random.randint(20,4000), 0))
+                        # Fit what we can given the padding room we have.
+                        aug = aug[:, :padding_room]
+                        clip = torch.cat([clip, aug], dim=1)
+                        # Restore some meta-parameters.
+                        padding_room = dlen - clip.shape[-1]
+                        out['clip_lengths'] = clip.shape[-1]
+                        aug_needed = False
+                if aug_needed:
+                    aug = load_audio(augpath, self.underlying_dataset.sampling_rate)
+                    if aug.shape[1] > clip.shape[1]:
+                        n, cn = aug.shape[1], clip.shape[1]
+                        gap = n-cn
+                        placement = random.randint(0, gap)
+                        aug = aug[:, placement:placement+cn]
+                    aug = random.choice(intg_fns)(aug.shape[1]) * aug
+                    aug = aug * augvol
+                    if aug.shape[1] < clip.shape[1]:
+                        gap = clip.shape[1] - aug.shape[1]
+                        placement = random.randint(0, gap-1)
+                        aug = torch.nn.functional.pad(aug, (placement, gap-placement))
+                    clip = clip + aug
             elif label == 4:
                 # Perform reverb (to simulate being in a large room with an omni-mic). This is performed by convolving
                 # impulse recordings from openair over the input clip.
@@ -159,7 +176,7 @@ class AudioWithNoiseDataset(Dataset):
 
         clip.clip_(-1, 1)
         # Restore padding.
-        clip = F.pad(clip, (0, dlen-clip.shape[-1]))
+        clip = F.pad(clip, (0, padding_room))
         out['clip'] = clip
         out['label'] = label
         #out['aug'] = aug
@@ -196,7 +213,7 @@ if __name__ == '__main__':
     i = 0
     for b in tqdm(dl):
         for b_ in range(b['clip'].shape[0]):
-            torchaudio.save(f'{i}_clip_{b_}_{b["label"][b_].item()}.wav', b['clip'][b_], ds.sampling_rate)
+            torchaudio.save(f'{i}_clip_{b_}_{b["label"][b_].item()}.wav', b['clip'][b_][:, :b['clip_lengths'][b_]], ds.sampling_rate)
             #torchaudio.save(f'{i}_clip_{b_}_aug.wav', b['aug'][b_], ds.sampling_rate)
             print(f'{i} aug path: {b["augpath"][b_]} aug volume: {b["augvol"][b_]} clip volume: {b["clipvol"][b_]}')
             i += 1
