@@ -155,7 +155,6 @@ class DiffusionTts(nn.Module):
             # Parameters for super-sampling.
             super_sampling=False,
             super_sampling_max_noising_factor=.1,
-            jit_enabled=False,
     ):
         super().__init__()
 
@@ -179,8 +178,6 @@ class DiffusionTts(nn.Module):
         self.super_sampling_max_noising_factor = super_sampling_max_noising_factor
         self.unconditioned_percentage = unconditioned_percentage
         self.enable_fp16 = use_fp16
-        self.jit_enabled = jit_enabled
-        self.jit_forward = None
         padding = 1 if kernel_size == 3 else 2
         down_kernel = 1 if efficient_convs else 3
 
@@ -450,14 +447,6 @@ class DiffusionTts(nn.Module):
 @register_model
 def register_diffusion_tts9(opt_net, opt):
     return DiffusionTts(**opt_net['kwargs'])
-
-@register_model
-def register_traced_diffusion_tts9(opt_net, opt):
-    # Cannot use branching logic when training with torchscript.
-    assert(opt_get(opt_net['kwargs'], ['unconditioned_percentage'], 0) == 0)
-    model = DiffusionTts(**opt_net['kwargs'])
-    model = torch.jit.trace(model, example_inputs=(torch.randn(2,1,32868), torch.LongTensor([600,600]), torch.randn(2,388,1024),torch.randn(2,1,44000)))
-    return model
 
 
 if __name__ == '__main__':
