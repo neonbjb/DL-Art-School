@@ -18,5 +18,5 @@ if __name__ == '__main__':
     '''
 
     # Build tokenizer vocab
-    mapping = tacotron_symbol_mapping()
-    print(json.dumps(mapping))
+    #mapping = tacotron_symbol_mapping()
+    #print(json.dumps(mapping))

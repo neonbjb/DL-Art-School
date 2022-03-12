@@ -9,6 +9,7 @@ from utils.util import opt_get
 
 def create_dataloader(dataset, dataset_opt, opt=None, sampler=None, collate_fn=None, shuffle=True):
     phase = dataset_opt['phase']
+    pin_memory = opt_get(dataset_opt, ['pin_memory'], True)
     if phase == 'train':
         if opt_get(opt, ['dist'], False):
             world_size = torch.distributed.get_world_size()
@@ -20,11 +21,11 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None, collate_fn=N
             batch_size = dataset_opt['batch_size']
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
                                            num_workers=num_workers, sampler=sampler, drop_last=True,
-                                           pin_memory=True, collate_fn=collate_fn)
+                                           pin_memory=pin_memory, collate_fn=collate_fn)
     else:
         batch_size = dataset_opt['batch_size'] or 1
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0,
-                                           pin_memory=True, collate_fn=collate_fn)
+                                           pin_memory=pin_memory, collate_fn=collate_fn)
 
 
 def create_dataset(dataset_opt, return_collate=False):
