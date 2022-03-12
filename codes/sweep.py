@@ -34,16 +34,16 @@ if __name__ == '__main__':
     Ad-hoc script (hard coded; no command-line parameters) that spawns multiple separate trainers from a single options
     file, with a hard-coded set of modifications.
     """
-    base_opt = '../experiments/train_diffusion_tts6.yml'
+    base_opt = '../experiments/train_diffusion_tts9_sweep.yml'
     modifications = {
         'baseline': {},
-        'only_conv': {'networks': {'generator': {'kwargs': {'cond_transformer_depth': 4, 'mid_transformer_depth': 1}}}},
-        'intermediary_attention': {'networks': {'generator': {'kwargs': {'attention_resolutions': [32,64], 'num_res_blocks': [2, 2, 2, 2, 2, 2, 2]}}}},
-        'more_resblocks': {'networks': {'generator': {'kwargs': {'num_res_blocks': [3, 3, 3, 3, 3, 3, 2]}}}},
-        'less_resblocks': {'networks': {'generator': {'kwargs': {'num_res_blocks': [1, 1, 1, 1, 1, 1, 1]}}}},
-        'wider': {'networks': {'generator': {'kwargs': {'channel_mult': [1,2,4,6,8,8,8]}}}},
-        'inject_every_layer': {'networks': {'generator': {'kwargs': {'token_conditioning_resolutions': [1,2,4,8,16,32,64]}}}},
-        'cosine_diffusion': {'steps': {'generator': {'injectors': {'diffusion': {'beta_schedule': {'schedule_name': 'cosine'}}}}}},
+        'more_filters': {'networks': {'generator': {'kwargs': {'model_channels': 96}}}},
+        'more_kern': {'networks': {'generator': {'kwargs': {'kernel_size': 5}}}},
+        'less_heads': {'networks': {'generator': {'kwargs': {'num_heads': 2}}}},
+        'eff_off': {'networks': {'generator': {'kwargs': {'efficient_convs': False}}}},
+        'more_time': {'networks': {'generator': {'kwargs': {'time_embed_dim_multiplier': 8}}}},
+        'deeper_res': {'networks': {'generator': {'kwargs': {'num_res_blocks': [3, 3, 3, 3, 3, 4, 4]}}}},
+        'shallow_res': {'networks': {'generator': {'kwargs': {'num_res_blocks': [1, 1, 1, 1, 1, 2, 2]}}}},
     }
     opt = option.parse(base_opt, is_train=True)
     all_opts = []
