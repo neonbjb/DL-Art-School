@@ -82,6 +82,8 @@ class AudioWithNoiseDataset(Dataset):
         self.sampling_rate = self.underlying_dataset.sampling_rate
         self.use_gpu_for_reverb_compute = opt_get(opt, ['use_gpu_for_reverb_compute'], True)
         self.openair_kernels = None
+        self.current_item_fetch = 0
+        self.fetch_error_count = 0
 
     def load_openair_kernels(self):
         if self.use_gpu_for_reverb_compute and self.openair_kernels is None:
@@ -91,6 +93,10 @@ class AudioWithNoiseDataset(Dataset):
                 self.openair_kernels.append(load_rir(oa, self.underlying_dataset.sampling_rate, self.underlying_dataset.sampling_rate*2).cuda())
 
     def __getitem__(self, item):
+        if self.current_item_fetch != item:
+            self.current_item_fetch = item
+            self.fetch_error_count = 0
+
         # Load on the fly to prevent GPU memory sharing across process errors.
         self.load_openair_kernels()
 
@@ -107,7 +113,7 @@ class AudioWithNoiseDataset(Dataset):
             clip = clip * clipvol
 
             label = random.randint(0, 4)  # Current excludes GSM corruption.
-            label = 3
+            #label = 3
             if label > 0 and label < 4:  # 0 is basically "leave it alone"
                 aug_needed = True
                 augvol = (random.random() * (self.max_volume-self.min_volume) + self.min_volume)
@@ -137,7 +143,7 @@ class AudioWithNoiseDataset(Dataset):
                         clip = torch.cat([clip, aug], dim=1)
                         # Restore some meta-parameters.
                         padding_room = dlen - clip.shape[-1]
-                        out['clip_lengths'] = clip.shape[-1]
+                        out['clip_lengths'] = torch.tensor(clip.shape[-1])
                         aug_needed = False
                 if aug_needed:
                     aug = load_audio(augpath, self.underlying_dataset.sampling_rate)
@@ -169,9 +175,11 @@ class AudioWithNoiseDataset(Dataset):
                 # Apply the GSM codec to simulate cellular phone audio.
                 clip = torchaudio.functional.apply_codec(clip, self.underlying_dataset.sampling_rate, format="gsm")
         except:
-            #print(f"Exception encountered processing {item}, re-trying because this is often just a failed aug.")
-            #print(sys.exc_info())
-            #raise  # Uncomment to surface exceptions.
+            if self.fetch_error_count > 10:
+                print(f"Exception encountered processing {item}, re-trying because this is often just a failed aug.")
+                print(sys.exc_info())
+                #raise  # Uncomment to surface exceptions.
+            self.fetch_error_count += 1
             return self[item]
 
         clip.clip_(-1, 1)
@@ -193,27 +201,29 @@ if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio_with_noise',
         'path': ['y:/clips/books1'],
-        'cache_path': 'E:\\audio\\remote-cache4.pth',
+        'cache_path': 'D:\\data\\clips_for_noise_classifier.pth',
         'sampling_rate': 22050,
         'pad_to_samples': 400000,
+        'do_augmentation': False,
         'phase': 'train',
-        'n_workers': 0,
-        'batch_size': 4,
-        'extra_samples': 4,
+        'n_workers': 4,
+        'batch_size': 256,
+        'extra_samples': 0,
         'env_noise_paths': ['E:\\audio\\UrbanSound\\filtered', 'E:\\audio\\UrbanSound\\MSSND'],
         'env_noise_cache': 'E:\\audio\\UrbanSound\\cache.pth',
         'music_paths': ['E:\\audio\\music\\FMA\\fma_large', 'E:\\audio\\music\\maestro\\maestro-v3.0.0'],
         'music_cache': 'E:\\audio\\music\\cache.pth',
-        'openair_path': 'D:\\data\\audio\\openair\\resampled'
+        'openair_path': 'D:\\data\\audio\\openair\\resampled',
+        'use_gpu_for_reverb_compute': False,
     }
     from data import create_dataset, create_dataloader, util
 
     ds = create_dataset(params)
-    dl = create_dataloader(ds, params)
+    dl = create_dataloader(ds, params, pin_memory=False)
     i = 0
     for b in tqdm(dl):
         for b_ in range(b['clip'].shape[0]):
-            torchaudio.save(f'{i}_clip_{b_}_{b["label"][b_].item()}.wav', b['clip'][b_][:, :b['clip_lengths'][b_]], ds.sampling_rate)
+            #torchaudio.save(f'{i}_clip_{b_}_{b["label"][b_].item()}.wav', b['clip'][b_][:, :b['clip_lengths'][b_]], ds.sampling_rate)
             #torchaudio.save(f'{i}_clip_{b_}_aug.wav', b['aug'][b_], ds.sampling_rate)
             print(f'{i} aug path: {b["augpath"][b_]} aug volume: {b["augvol"][b_]} clip volume: {b["clipvol"][b_]}')
             i += 1
