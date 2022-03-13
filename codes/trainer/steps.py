@@ -304,6 +304,8 @@ class ConfigurableStep(Module):
             return
         self.grads_generated = False
         for opt in self.optimizers:
+            self.scaler.unscale_(opt)
+            
             # Optimizers can be opted out in the early stages of training.
             after = opt._config['after'] if 'after' in opt._config.keys() else 0
             after_network = self.opt['networks'][opt._config['network']]['after'] if 'after' in self.opt['networks'][opt._config['network']].keys() else 0
