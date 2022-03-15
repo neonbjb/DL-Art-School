@@ -223,8 +223,8 @@ class DiffusionTts(nn.Module):
             ))
         self.latent_converter = nn.Conv1d(in_latent_channels, conditioning_dim, 1)
         self.aligned_latent_padding_embedding = nn.Parameter(torch.randn(1,in_latent_channels,1))
-        if in_channels == 80:
-            self.contextual_embedder = nn.Sequential(nn.Conv1d(80,conditioning_dim,3,padding=1,stride=2),
+        if in_channels > 60:  # It's a spectrogram.
+            self.contextual_embedder = nn.Sequential(nn.Conv1d(in_channels,conditioning_dim,3,padding=1,stride=2),
                                                      CheckpointedXTransformerEncoder(
                                                          needs_permute=True,
                                                          max_seq_len=-1,
