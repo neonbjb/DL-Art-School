@@ -5,16 +5,28 @@ import torch
 
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import find_files_of_type, is_audio_file
+from models.audio.vocoders.univnet.generator import UnivNetGenerator
 from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.respace import SpacedDiffusion, space_timesteps
-from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector
+from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector, MelSpectrogramInjector
 from utils.audio import plot_spectrogram
 from utils.util import load_model_from_config
 
 
 def load_speech_dvae():
-    return load_model_from_config("../experiments/train_diffusion_vocoder_22k_level.yml",
+    dvae = load_model_from_config("../experiments/train_diffusion_vocoder_22k_level.yml",
                                   "dvae").cpu()
+    dvae.eval()
+    return dvae
+
+
+def load_univnet_vocoder():
+    model = UnivNetGenerator()
+    sd = torch.load('univnet_c32_pretrained_libri.pt')
+    model.load_state_dict(sd)
+    model = model.cpu()
+    model.eval()
+    return model
 
 
 def wav_to_mel(wav, mel_norms_file='../experiments/clips_mel_norms.pth'):
@@ -22,6 +34,14 @@ def wav_to_mel(wav, mel_norms_file='../experiments/clips_mel_norms.pth'):
     Converts an audio clip into a MEL tensor that the vocoder, DVAE and GptTts models use whenever a MEL is called for.
     """
     return TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_norm_file': mel_norms_file},{})({'wav': wav})['mel']
+
+
+def wav_to_univnet_mel(wav):
+    """
+    Converts an audio clip into a MEL tensor that the univnet vocoder knows how to decode.
+    """
+    return MelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'sampling_rate': 24000,
+                                   'n_mel_channels': 100, 'mel_fmax': 12000},{})({'wav': wav})['mel']
 
 
 def convert_mel_to_codes(dvae_model, mel):
