@@ -2,12 +2,11 @@ from itertools import groupby
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from transformers import Wav2Vec2ForCTC, Wav2Vec2CTCTokenizer
+from transformers import Wav2Vec2ForCTC
 from transformers.models.wav2vec2.modeling_wav2vec2 import Wav2Vec2Attention, Wav2Vec2Model
 
 from data.audio.unsupervised_audio_dataset import load_audio
-from models.tacotron2.text import symbols, sequence_to_text
+from models.audio.tts.tacotron2.text import sequence_to_text
 from trainer.networks import register_model
 from utils.util import opt_get
 
