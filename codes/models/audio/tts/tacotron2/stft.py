@@ -36,7 +36,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from scipy.signal import get_window
 from librosa.util import pad_center, tiny
-from models.tacotron2.audio_processing import window_sumsquare
+from models.audio.tts.tacotron2.audio_processing import window_sumsquare
 
 
 class STFT(torch.nn.Module):

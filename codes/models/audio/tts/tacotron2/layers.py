@@ -1,8 +1,8 @@
 import torch
 from librosa.filters import mel as librosa_mel_fn
-from models.tacotron2.audio_processing import dynamic_range_compression
-from models.tacotron2.audio_processing import dynamic_range_decompression
-from models.tacotron2.stft import STFT
+from models.audio.tts.tacotron2.audio_processing import dynamic_range_compression
+from models.audio.tts.tacotron2.audio_processing import dynamic_range_decompression
+from models.audio.tts.tacotron2.stft import STFT
 
 
 class LinearNorm(torch.nn.Module):

@@ -1,10 +1,3 @@
-import json
-
-import torch
-
-from models.asr.w2v_wrapper import Wav2VecWrapper
-from models.tacotron2.text import tacotron_symbol_mapping
-
 if __name__ == '__main__':
     """
     Utility script for uploading model weights to the HF hub

@@ -3,12 +3,10 @@ import logging
 import random
 import argparse
 
-import torchvision
-
 import utils
 import utils.options as option
 import utils.util as util
-from models.tacotron2.text import sequence_to_text
+from models.audio.tts.tacotron2 import sequence_to_text
 from trainer.ExtensibleTrainer import ExtensibleTrainer
 from data import create_dataset, create_dataloader
 from tqdm import tqdm

@@ -83,7 +83,7 @@ class CombineMelInjector(Injector):
         self.text_lengths = opt['text_lengths_key']
         self.output_audio_key = opt['output_audio_key']
         self.output_text_key = opt['output_text_key']
-        from models.tacotron2.text import symbols
+        from models.audio.tts.tacotron2 import symbols
         self.text_separator = len(symbols)+1  # Probably need to allow this to be set by user.
 
     def forward(self, state):

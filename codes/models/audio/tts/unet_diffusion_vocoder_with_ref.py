@@ -1,13 +1,11 @@
-from models.diffusion.fp16_util import convert_module_to_f32, convert_module_to_f16
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import AttentionPool2d, AttentionBlock, ResBlock, TimestepEmbedSequential, \
+from models.diffusion.unet_diffusion import AttentionBlock, ResBlock, TimestepEmbedSequential, \
     Downsample, Upsample
 import torch
 import torch.nn as nn
 
-from models.gpt_voice.mini_encoder import AudioMiniEncoder, EmbeddingCombiner
+from models.audio.tts.mini_encoder import AudioMiniEncoder
 from trainer.networks import register_model
-from utils.util import get_mask_from_lengths
 
 
 class DiscreteSpectrogramConditioningBlock(nn.Module):

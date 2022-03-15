@@ -1,20 +1,17 @@
 import functools
 import random
-from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import autocast
-from x_transformers.x_transformers import AbsolutePositionalEmbedding, AttentionLayers, CrossAttender
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, \
-    Downsample, Upsample, TimestepBlock
-from models.gpt_voice.mini_encoder import AudioMiniEncoder
+from models.diffusion.unet_diffusion import TimestepEmbedSequential, \
+    Downsample, Upsample
+from models.audio.tts.mini_encoder import AudioMiniEncoder
 from scripts.audio.gen.use_diffuse_tts import ceil_multiple
 from trainer.networks import register_model
-from utils.util import checkpoint
 from x_transformers import Encoder, ContinuousTransformerWrapper
 
 

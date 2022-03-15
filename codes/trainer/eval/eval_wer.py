@@ -4,12 +4,12 @@ from datasets import load_metric
 
 import torch
 from tqdm import tqdm
-from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+from transformers import Wav2Vec2Processor
 
 import trainer.eval.evaluator as evaluator
 from data import create_dataset, create_dataloader
-from models.asr.w2v_wrapper import only_letters, Wav2VecWrapper
-from models.tacotron2.text import sequence_to_text, tacotron_symbols
+from models.audio.asr.w2v_wrapper import only_letters, Wav2VecWrapper
+from models.audio.tts.tacotron2 import sequence_to_text, tacotron_symbols
 from pyctcdecode import build_ctcdecoder
 
 # Librispeech:

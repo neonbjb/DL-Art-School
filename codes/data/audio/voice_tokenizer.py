@@ -1,16 +1,14 @@
 import re
 
-import datasets
 import torch
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
-from tokenizers.processors import ByteLevel
 from tokenizers.trainers import BpeTrainer
 
 from data.audio.paired_voice_audio_dataset import load_mozilla_cv, load_voxpopuli, load_tsv
-from models.tacotron2.taco_utils import load_filepaths_and_text
-from models.tacotron2.text.cleaners import english_cleaners
+from models.audio.tts.tacotron2 import load_filepaths_and_text
+from models.audio.tts.tacotron2.text.cleaners import english_cleaners
 
 
 def remove_extraneous_punctuation(word):

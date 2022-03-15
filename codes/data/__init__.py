@@ -1,5 +1,4 @@
 """create dataset and dataloader"""
-import logging
 import torch
 import torch.utils.data
 from munch import munchify
@@ -64,7 +63,7 @@ def create_dataset(dataset_opt, return_collate=False):
     elif mode == 'nv_tacotron':
         from data.audio.nv_tacotron_dataset import TextWavLoader as D
         from data.audio.nv_tacotron_dataset import TextMelCollate as C
-        from models.tacotron2.hparams import create_hparams
+        from models.audio.tts.tacotron2 import create_hparams
         default_params = create_hparams()
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
@@ -72,13 +71,13 @@ def create_dataset(dataset_opt, return_collate=False):
             collate = C()
     elif mode == 'paired_voice_audio':
         from data.audio.paired_voice_audio_dataset import TextWavLoader as D
-        from models.tacotron2.hparams import create_hparams
+        from models.audio.tts.tacotron2 import create_hparams
         default_params = create_hparams()
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
     elif mode == 'fast_paired_voice_audio':
         from data.audio.fast_paired_dataset import FastPairedVoiceDataset as D
-        from models.tacotron2.hparams import create_hparams
+        from models.audio.tts.tacotron2 import create_hparams
         default_params = create_hparams()
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)

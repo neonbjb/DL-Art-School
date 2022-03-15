@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from x_transformers import Encoder, Decoder, ContinuousTransformerWrapper
 
-from models.gpt_voice.mini_encoder import AudioMiniEncoder
+from models.audio.tts.mini_encoder import AudioMiniEncoder
 from trainer.networks import register_model
 
 
@@ -134,6 +134,31 @@ class Wav2VecMatcher(nn.Module):
         mse_loss = (mse_pad_loss * (loss_mask_collapsed == 0)).mean()
 
         return ce_loss, mse_loss
+
+    def find_matching_w2v_logit(self, key, w2v_logit_iterable):
+        pass
+
+    def sample(self, text_tokens, conditioning_clip, w2v_logit_iterable, audio_clip_iterable):
+        text_emb = self.text_embedding(text_tokens)
+        cond_emb = self.conditioning_encoder(conditioning_clip)
+        enc_inputs = torch.cat([cond_emb.unsqueeze(1), text_emb], dim=1)
+        dec_context = self.encoder(enc_inputs)
+        dec_inputs = self.decoder_start_embedding
+        count = 0
+        while count < 400:
+            dec_out = self.decoder(dec_inputs, context=dec_context)
+
+            # Check if that was EOS.
+            l2 = F.mse_loss(dec_out[:,-1], self.decoder_stop_embedding)
+            if l2 < .1:  # TODO: fix threshold.
+                break
+
+            # Find a matching w2v logit from the given iterable.
+            matching_logit_index = self.find_matching_w2v_logit(dec_out[:,-1], w2v_logit_iterable)
+            matching_logit = w2v_logit_iterable[matching_logit_index]
+            dec_inputs = torch.cat([dec_inputs, self.w2v_value_encoder(matching_logit).unsqueeze(1)], dim=1)
+            produced_audio = torch.cat([produced_audio, audio_clip_iterable[matching_logit_index]], dim=-1)
+        return produced_audio
 
 
 @register_model

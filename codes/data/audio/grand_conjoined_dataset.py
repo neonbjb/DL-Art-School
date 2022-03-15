@@ -1,7 +1,4 @@
 import os
-import os
-import random
-import shutil
 
 import torch
 import torch.nn.functional as F
@@ -9,19 +6,15 @@ import torch.utils.data
 import torchaudio
 from munch import munchify
 from tqdm import tqdm
-from transformers import GPT2TokenizerFast
 
-from data.audio.unsupervised_audio_dataset import load_audio, UnsupervisedAudioDataset
+from data.audio.unsupervised_audio_dataset import UnsupervisedAudioDataset
 from data.text.hf_datasets_wrapper import HfDataset
-from data.util import find_files_of_type, is_audio_file
-from models.tacotron2.taco_utils import load_filepaths_and_text
-from models.tacotron2.text import text_to_sequence
 from utils.util import opt_get
 
 
 def build_paired_voice_dataset(args):
     from data.audio.paired_voice_audio_dataset import TextWavLoader as D
-    from models.tacotron2.hparams import create_hparams
+    from models.audio.tts.tacotron2 import create_hparams
     default_params = create_hparams()
     default_params.update(args)
     dataset_opt = munchify(default_params)

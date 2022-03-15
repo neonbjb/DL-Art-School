@@ -2,11 +2,9 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 from torch import einsum
 
-from models.gpt_voice.mini_encoder import AudioMiniEncoder
-from models.lucidrains.dalle.transformer import Transformer
+from models.audio.tts.mini_encoder import AudioMiniEncoder
 from trainer.injectors.spec_augment import spec_augment
 from trainer.networks import register_model
 from utils.util import opt_get

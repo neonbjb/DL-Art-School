@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 from torch import einsum
 
-from models.gpt_voice.unified_voice2 import ConditioningEncoder
+from models.audio.tts.unified_voice2 import ConditioningEncoder
 from models.lucidrains.dalle.transformer import Transformer
 from trainer.networks import register_model
 from utils.util import opt_get

@@ -1,8 +1,6 @@
 import os
-import pathlib
 import random
 import sys
-from warnings import warn
 
 import torch
 import torch.utils.data
@@ -11,9 +9,8 @@ import torchaudio
 from audio2numpy import open_audio
 from tqdm import tqdm
 
-from data.audio.wav_aug import WavAugmentor
-from data.util import find_files_of_type, is_wav_file, is_audio_file, load_paths_from_cache
-from models.tacotron2.taco_utils import load_wav_to_torch
+from data.util import find_files_of_type, is_audio_file, load_paths_from_cache
+from models.audio.tts.tacotron2 import load_wav_to_torch
 from utils.util import opt_get
 
 
@@ -189,7 +186,7 @@ if __name__ == '__main__':
         'extra_samples': 4,
         'resample_clip': True,
     }
-    from data import create_dataset, create_dataloader, util
+    from data import create_dataset, create_dataloader
 
     ds = create_dataset(params)
     dl = create_dataloader(ds, params)

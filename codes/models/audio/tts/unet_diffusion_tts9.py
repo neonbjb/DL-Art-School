@@ -1,78 +1,26 @@
-import functools
 import random
-from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import autocast
-from x_transformers.x_transformers import AbsolutePositionalEmbedding, AttentionLayers, CrossAttender
+from x_transformers import Encoder
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, \
     Downsample, Upsample, TimestepBlock
-from models.gpt_voice.mini_encoder import AudioMiniEncoder
+from models.audio.tts.mini_encoder import AudioMiniEncoder
+from models.audio.tts.unet_diffusion_tts7 import CheckpointedXTransformerEncoder
 from scripts.audio.gen.use_diffuse_tts import ceil_multiple
 from trainer.networks import register_model
 from utils.util import checkpoint
-from x_transformers import Encoder, ContinuousTransformerWrapper
 
 
-def clustered_mask(probability, shape, dev, lateral_expansion_radius_max=3, inverted=False):
-    """
-    Produces a masking vector of the specified shape where each element has probability to be zero.
-    lateral_expansion_radius_max neighbors of any element that is zero also have a 50% chance to be zero.
-    Effectively, this produces clusters of masks tending to be lateral_expansion_radius_max wide.
-    """
-    # Each masked token spreads out to 1+lateral_expansion_radius_max on average, therefore reduce the probability in
-    # kind
-    probability = probability / (1+lateral_expansion_radius_max)
+def is_latent(t):
+    return t.dtype == torch.float
 
-    mask = torch.rand(shape, device=dev)
-    mask = (mask < probability).float()
-    kernel = torch.tensor([.5 for _ in range(lateral_expansion_radius_max)] + [1] + [.5 for _ in range(lateral_expansion_radius_max)], device=dev)
-    mask = F.conv1d(mask.unsqueeze(1), kernel.view(1,1,2*lateral_expansion_radius_max+1), padding=lateral_expansion_radius_max).squeeze(1)
-    if inverted:
-        return torch.bernoulli(torch.clamp(mask, 0, 1)) != 0
-    else:
-        return torch.bernoulli(torch.clamp(mask, 0, 1)) == 0
-
-
-class CheckpointedLayer(nn.Module):
-    """
-    Wraps a module. When forward() is called, passes kwargs that require_grad through torch.checkpoint() and bypasses
-    checkpoint for all other args.
-    """
-    def __init__(self, wrap):
-        super().__init__()
-        self.wrap = wrap
-
-    def forward(self, x, *args, **kwargs):
-        for k, v in kwargs.items():
-            assert not (isinstance(v, torch.Tensor) and v.requires_grad)  # This would screw up checkpointing.
-        partial = functools.partial(self.wrap, **kwargs)
-        return torch.utils.checkpoint.checkpoint(partial, x, *args)
-
-
-class CheckpointedXTransformerEncoder(nn.Module):
-    """
-    Wraps a ContinuousTransformerWrapper and applies CheckpointedLayer to each layer and permutes from channels-mid
-    to channels-last that XTransformer expects.
-    """
-    def __init__(self, needs_permute=True, **xtransformer_kwargs):
-        super().__init__()
-        self.transformer = ContinuousTransformerWrapper(**xtransformer_kwargs)
-        self.needs_permute = needs_permute
-
-        for i in range(len(self.transformer.attn_layers.layers)):
-            n, b, r = self.transformer.attn_layers.layers[i]
-            self.transformer.attn_layers.layers[i] = nn.ModuleList([n, CheckpointedLayer(b), r])
-
-    def forward(self, x, **kwargs):
-        if self.needs_permute:
-            x = x.permute(0,2,1)
-        h = self.transformer(x, **kwargs)
-        return h.permute(0,2,1)
+def is_sequence(t):
+    return t.dtype == torch.long
 
 
 class ResBlock(TimestepBlock):
@@ -84,25 +32,30 @@ class ResBlock(TimestepBlock):
         out_channels=None,
         dims=2,
         kernel_size=3,
+        efficient_config=True,
+        use_scale_shift_norm=False,
     ):
         super().__init__()
         self.channels = channels
         self.emb_channels = emb_channels
         self.dropout = dropout
         self.out_channels = out_channels or channels
-        padding = 1 if kernel_size == 3 else 2
+        self.use_scale_shift_norm = use_scale_shift_norm
+        padding = {1: 0, 3: 1, 5: 2}[kernel_size]
+        eff_kernel = 1 if efficient_config else 3
+        eff_padding = 0 if efficient_config else 1
 
         self.in_layers = nn.Sequential(
             normalization(channels),
             nn.SiLU(),
-            conv_nd(dims, channels, self.out_channels, 1, padding=0),
+            conv_nd(dims, channels, self.out_channels, eff_kernel, padding=eff_padding),
         )
 
         self.emb_layers = nn.Sequential(
             nn.SiLU(),
             linear(
                 emb_channels,
-                self.out_channels,
+                2 * self.out_channels if use_scale_shift_norm else self.out_channels,
             ),
         )
         self.out_layers = nn.Sequential(
@@ -117,7 +70,7 @@ class ResBlock(TimestepBlock):
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
         else:
-            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, eff_kernel, padding=eff_padding)
 
     def forward(self, x, emb):
         """
@@ -136,18 +89,25 @@ class ResBlock(TimestepBlock):
         emb_out = self.emb_layers(emb).type(h.dtype)
         while len(emb_out.shape) < len(h.shape):
             emb_out = emb_out[..., None]
-        h = h + emb_out
-        h = self.out_layers(h)
+        if self.use_scale_shift_norm:
+            out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
+            scale, shift = torch.chunk(emb_out, 2, dim=1)
+            h = out_norm(h) * (1 + scale) + shift
+            h = out_rest(h)
+        else:
+            h = h + emb_out
+            h = self.out_layers(h)
         return self.skip_connection(x) + h
 
 class DiffusionTts(nn.Module):
     """
     The full UNet model with attention and timestep embedding.
 
-    Customized to be conditioned on an aligned token prior.
+    Customized to be conditioned on an aligned prior derived from a autoregressive
+    GPT-style model.
 
     :param in_channels: channels in the input Tensor.
-    :param num_tokens: number of tokens (e.g. characters) which can be provided.
+    :param in_latent_channels: channels from the input latent.
     :param model_channels: base channel count for the model.
     :param out_channels: channels in the output Tensor.
     :param num_res_blocks: number of residual blocks per downsample.
@@ -175,7 +135,10 @@ class DiffusionTts(nn.Module):
             self,
             model_channels,
             in_channels=1,
-            num_tokens=32,
+            in_latent_channels=1024,
+            in_tokens=8193,
+            conditioning_dim_factor=8,
+            conditioning_expansion=4,
             out_channels=2,  # mean and variance
             dropout=0,
             # res           1, 2, 4, 8,16,32,64,128,256,512, 1K, 2K
@@ -194,20 +157,13 @@ class DiffusionTts(nn.Module):
             kernel_size=3,
             scale_factor=2,
             time_embed_dim_multiplier=4,
-            cond_transformer_depth=8,
-            mid_transformer_depth=8,
+            efficient_convs=True,  # Uses kernels with width of 1 in several places rather than 3.
+            use_scale_shift_norm=True,
             # Parameters for regularization.
-            nil_guidance_fwd_proportion=.3,
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
             # Parameters for super-sampling.
             super_sampling=False,
             super_sampling_max_noising_factor=.1,
-            # Parameters for unaligned inputs.
-            enabled_unaligned_inputs=False,
-            num_unaligned_tokens=164,
-            unaligned_encoder_depth=8,
-            # Experimental parameters
-            component_gradient_boosting=False,
     ):
         super().__init__()
 
@@ -227,14 +183,12 @@ class DiffusionTts(nn.Module):
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
         self.dims = dims
-        self.nil_guidance_fwd_proportion = nil_guidance_fwd_proportion
-        self.mask_token_id = num_tokens
         self.super_sampling_enabled = super_sampling
         self.super_sampling_max_noising_factor = super_sampling_max_noising_factor
         self.unconditioned_percentage = unconditioned_percentage
         self.enable_fp16 = use_fp16
-        self.component_gradient_boosting = component_gradient_boosting
         padding = 1 if kernel_size == 3 else 2
+        down_kernel = 1 if efficient_convs else 3
 
         time_embed_dim = model_channels * time_embed_dim_multiplier
         self.time_embed = nn.Sequential(
@@ -243,21 +197,20 @@ class DiffusionTts(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        embedding_dim = model_channels * 8
-        self.code_embedding = nn.Embedding(num_tokens+1, embedding_dim)
-        self.contextual_embedder = AudioMiniEncoder(1, embedding_dim, base_channels=32, depth=6, resnet_blocks=1,
-                         attn_blocks=2, num_attn_heads=2, dropout=dropout, downsample_factor=4, kernel_size=5)
-        self.conditioning_conv = nn.Conv1d(embedding_dim*3, embedding_dim, 1)
-
-        self.enable_unaligned_inputs = enabled_unaligned_inputs
-        if enabled_unaligned_inputs:
-            self.unaligned_embedder = nn.Embedding(num_unaligned_tokens, embedding_dim)
-            self.unaligned_encoder = CheckpointedXTransformerEncoder(
+        conditioning_dim = model_channels * conditioning_dim_factor
+        # Either code_converter or latent_converter is used, depending on what type of conditioning data is fed.
+        # This model is meant to be able to be trained on both for efficiency purposes - it is far less computationally
+        # complex to generate tokens, while generating latents will normally mean propagating through a deep autoregressive
+        # transformer network.
+        self.code_converter = nn.Sequential(
+            nn.Embedding(in_tokens, conditioning_dim),
+            CheckpointedXTransformerEncoder(
+                needs_permute=False,
                 max_seq_len=-1,
                 use_pos_emb=False,
                 attn_layers=Encoder(
-                    dim=embedding_dim,
-                    depth=unaligned_encoder_depth,
+                    dim=conditioning_dim,
+                    depth=3,
                     heads=num_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
@@ -265,24 +218,39 @@ class DiffusionTts(nn.Module):
                     ff_glu=True,
                     rotary_emb_dim=True,
                 )
-            )
-
-        self.conditioning_encoder = CheckpointedXTransformerEncoder(
-                max_seq_len=-1,  # Should be unused
-                use_pos_emb=False,
-                attn_layers=Encoder(
-                    dim=embedding_dim,
-                    depth=cond_transformer_depth,
-                    heads=num_heads,
-                    ff_dropout=dropout,
-                    attn_dropout=dropout,
-                    use_rmsnorm=True,
-                    ff_glu=True,
-                    rotary_pos_emb=True,
-                    cross_attend=self.enable_unaligned_inputs,
-                )
+            ))
+        self.latent_converter = nn.Conv1d(in_latent_channels, conditioning_dim, 1)
+        self.aligned_latent_padding_embedding = nn.Parameter(torch.randn(1,in_latent_channels,1))
+        if in_channels > 60:  # It's a spectrogram.
+            self.contextual_embedder = nn.Sequential(nn.Conv1d(in_channels,conditioning_dim,3,padding=1,stride=2),
+                                                     CheckpointedXTransformerEncoder(
+                                                         needs_permute=True,
+                                                         max_seq_len=-1,
+                                                         use_pos_emb=False,
+                                                         attn_layers=Encoder(
+                                                             dim=conditioning_dim,
+                                                             depth=4,
+                                                             heads=num_heads,
+                                                             ff_dropout=dropout,
+                                                             attn_dropout=dropout,
+                                                             use_rmsnorm=True,
+                                                             ff_glu=True,
+                                                             rotary_emb_dim=True,
+                                                         )
+                                                     ))
+        else:
+            self.contextual_embedder = AudioMiniEncoder(1, conditioning_dim, base_channels=32, depth=6, resnet_blocks=1,
+                                                        attn_blocks=3, num_attn_heads=8, dropout=dropout, downsample_factor=4, kernel_size=5)
+        self.conditioning_conv = nn.Conv1d(conditioning_dim*2, conditioning_dim, 1)
+        self.unconditioned_embedding = nn.Parameter(torch.randn(1,conditioning_dim,1))
+        self.conditioning_timestep_integrator = TimestepEmbedSequential(
+                    ResBlock(conditioning_dim, time_embed_dim, dropout, out_channels=conditioning_dim, dims=dims, kernel_size=1, use_scale_shift_norm=use_scale_shift_norm),
+                    AttentionBlock(conditioning_dim, num_heads=num_heads, num_head_channels=num_head_channels),
+                    ResBlock(conditioning_dim, time_embed_dim, dropout, out_channels=conditioning_dim, dims=dims, kernel_size=1, use_scale_shift_norm=use_scale_shift_norm),
+                    AttentionBlock(conditioning_dim, num_heads=num_heads, num_head_channels=num_head_channels),
+                    ResBlock(conditioning_dim, time_embed_dim, dropout, out_channels=conditioning_dim, dims=dims, kernel_size=1, use_scale_shift_norm=use_scale_shift_norm),
         )
-        self.unconditioned_embedding = nn.Parameter(torch.randn(1,embedding_dim,1))
+        self.conditioning_expansion = conditioning_expansion
 
         self.input_blocks = nn.ModuleList(
             [
@@ -299,7 +267,7 @@ class DiffusionTts(nn.Module):
 
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
             if ds in token_conditioning_resolutions:
-                token_conditioning_block = nn.Conv1d(embedding_dim, ch, 1)
+                token_conditioning_block = nn.Conv1d(conditioning_dim, ch, 1)
                 token_conditioning_block.weight.data *= .02
                 self.input_blocks.append(token_conditioning_block)
                 token_conditioning_blocks.append(token_conditioning_block)
@@ -313,6 +281,8 @@ class DiffusionTts(nn.Module):
                         out_channels=int(mult * model_channels),
                         dims=dims,
                         kernel_size=kernel_size,
+                        efficient_config=efficient_convs,
+                        use_scale_shift_norm=use_scale_shift_norm,
                     )
                 ]
                 ch = int(mult * model_channels)
@@ -332,7 +302,7 @@ class DiffusionTts(nn.Module):
                 self.input_blocks.append(
                     TimestepEmbedSequential(
                         Downsample(
-                            ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor, ksize=1, pad=0
+                            ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor, ksize=down_kernel, pad=0 if down_kernel == 1 else 1
                         )
                     )
                 )
@@ -341,20 +311,6 @@ class DiffusionTts(nn.Module):
                 ds *= 2
                 self._feature_size += ch
 
-        mid_transformer = CheckpointedXTransformerEncoder(
-                max_seq_len=-1,  # Should be unused
-                use_pos_emb=False,
-                attn_layers=Encoder(
-                    dim=ch,
-                    depth=mid_transformer_depth,
-                    heads=num_heads,
-                    ff_dropout=dropout,
-                    attn_dropout=dropout,
-                    use_rmsnorm=True,
-                    ff_glu=True,
-                    rotary_pos_emb=True,
-                )
-            )
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,
@@ -362,14 +318,22 @@ class DiffusionTts(nn.Module):
                 dropout,
                 dims=dims,
                 kernel_size=kernel_size,
+                efficient_config=efficient_convs,
+                use_scale_shift_norm=use_scale_shift_norm,
             ),
-            mid_transformer,
+            AttentionBlock(
+                ch,
+                num_heads=num_heads,
+                num_head_channels=num_head_channels,
+            ),
             ResBlock(
                 ch,
                 time_embed_dim,
                 dropout,
                 dims=dims,
                 kernel_size=kernel_size,
+                efficient_config=efficient_convs,
+                use_scale_shift_norm=use_scale_shift_norm,
             ),
         )
         self._feature_size += ch
@@ -386,6 +350,8 @@ class DiffusionTts(nn.Module):
                         out_channels=int(model_channels * mult),
                         dims=dims,
                         kernel_size=kernel_size,
+                        efficient_config=efficient_convs,
+                        use_scale_shift_norm=use_scale_shift_norm,
                     )
                 ]
                 ch = int(model_channels * mult)
@@ -418,43 +384,19 @@ class DiffusionTts(nn.Module):
             'input_blocks': list(self.input_blocks.parameters()),
             'output_blocks': list(self.output_blocks.parameters()),
             'middle_transformer': list(self.middle_block.parameters()),
-            'conditioning_encoder': list(self.conditioning_encoder.parameters())
         }
-        if self.enable_unaligned_inputs:
-            groups['unaligned_encoder'] = list(self.unaligned_encoder.parameters())
         return groups
 
-    def before_step(self, it):
-        if not self.component_gradient_boosting:
-            return
-        MIN_PROPORTIONAL_BOOST_LEVEL = .5
-        MAX_MULTIPLIER = 100
-        components = [list(self.contextual_embedder.parameters()), list(self.middle_block.parameters()), list(self.conditioning_encoder.parameters()),
-                      list(self.unaligned_encoder.parameters())]
-        input_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2) for p in self.input_blocks.parameters()]), 2)
-        output_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2) for p in self.output_blocks.parameters()]), 2)
-        diffusion_norm = (input_norm + output_norm) / 2
-        min_norm = diffusion_norm * MIN_PROPORTIONAL_BOOST_LEVEL
-        for component in components:
-            norm = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2) for p in component]), 2)
-            if norm < min_norm:
-                mult = min_norm / (norm + 1e-8)
-                mult = min(mult, MAX_MULTIPLIER)
-                for p in component:
-                    p.grad.data.mul_(mult)
-
-    def forward(self, x, timesteps, tokens=None, conditioning_input=None, lr_input=None, unaligned_input=None, conditioning_free=False):
+    def forward(self, x, timesteps, aligned_conditioning, conditioning_input, lr_input=None, conditioning_free=False):
         """
         Apply the model to an input batch.
 
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
-        :param tokens: an aligned text input.
+        :param aligned_conditioning: an aligned latent or sequence of tokens providing useful data about the sample to be produced.
         :param conditioning_input: a full-resolution audio clip that is used as a reference to the style you want decoded.
         :param lr_input: for super-sampling models, a guidance audio clip at a lower sampling rate.
-        :param unaligned_input: A structural input that is not properly aligned with the output of the diffusion model.
-                                Can be combined with a conditioning input to produce more robust conditioning.
-        :param conditioning_free: When set, all conditioning inputs (including tokens, conditioning_input and unaligned_input) will not be considered.
+        :param conditioning_free: When set, all conditioning inputs (including tokens and conditioning_input) will not be considered.
         :return: an [N x C x ...] Tensor of outputs.
         """
         assert conditioning_input is not None
@@ -466,48 +408,51 @@ class DiffusionTts(nn.Module):
             lr_input = F.interpolate(lr_input, size=(x.shape[-1],), mode='nearest')
             x = torch.cat([x, lr_input], dim=1)
 
+        # Shuffle aligned_latent to BxCxS format
+        if is_latent(aligned_conditioning):
+            aligned_conditioning = aligned_conditioning.permute(0, 2, 1)
+
+        # Fix input size to the proper multiple of 2 so we don't get alignment errors going down and back up the U-net.
+        orig_x_shape = x.shape[-1]
+        cm = ceil_multiple(x.shape[-1], 2048)
+        if cm != 0:
+            pc = (cm-x.shape[-1])/x.shape[-1]
+            x = F.pad(x, (0,cm-x.shape[-1]))
+            # Also fix aligned_latent, which is aligned to x.
+            if is_latent(aligned_conditioning):
+                aligned_conditioning = torch.cat([aligned_conditioning,
+                                                  self.aligned_latent_padding_embedding.repeat(x.shape[0], 1, int(pc * aligned_conditioning.shape[-1]))], dim=-1)
+            else:
+                aligned_conditioning = F.pad(aligned_conditioning, (0,int(pc*aligned_conditioning.shape[-1])))
+
         with autocast(x.device.type, enabled=self.enable_fp16):
-            orig_x_shape = x.shape[-1]
-            cm = ceil_multiple(x.shape[-1], 2048)
-            if cm != 0:
-                pc = (cm-x.shape[-1])/x.shape[-1]
-                x = F.pad(x, (0,cm-x.shape[-1]))
-                if tokens is not None:
-                    tokens = F.pad(tokens, (0,int(pc*tokens.shape[-1])))
 
             hs = []
             time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
+            # Note: this block does not need to repeated on inference, since it is not timestep-dependent.
             if conditioning_free:
                 code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, 1)
             else:
-                if self.enable_unaligned_inputs:
-                    assert unaligned_input is not None
-                    unaligned_h = self.unaligned_embedder(unaligned_input).permute(0,2,1)
-                    unaligned_h = self.unaligned_encoder(unaligned_h).permute(0,2,1)
-
                 cond_emb = self.contextual_embedder(conditioning_input)
-                if tokens is not None:
-                    # Mask out guidance tokens for un-guided diffusion.
-                    if self.training and self.nil_guidance_fwd_proportion > 0:
-                        token_mask = clustered_mask(self.nil_guidance_fwd_proportion, tokens.shape, tokens.device, inverted=True)
-                        tokens = torch.where(token_mask, self.mask_token_id, tokens)
-                    code_emb = self.code_embedding(tokens).permute(0,2,1)
-                    cond_emb = cond_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
-                    cond_time_emb = timestep_embedding(torch.zeros_like(timesteps), code_emb.shape[1])  # This was something I was doing (adding timesteps into this computation), but removed on second thought. TODO: completely remove.
-                    cond_time_emb = cond_time_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1])
-                    code_emb = self.conditioning_conv(torch.cat([cond_emb, code_emb, cond_time_emb], dim=1))
+                if len(cond_emb.shape) == 3:  # Just take the first element.
+                    cond_emb = cond_emb[:, :, 0]
+                if is_latent(aligned_conditioning):
+                    code_emb = self.latent_converter(aligned_conditioning)
                 else:
-                    code_emb = cond_emb.unsqueeze(-1)
-                if self.enable_unaligned_inputs:
-                    code_emb = self.conditioning_encoder(code_emb, context=unaligned_h)
-                else:
-                    code_emb = self.conditioning_encoder(code_emb)
-
+                    code_emb = self.code_converter(aligned_conditioning)
+                cond_emb = cond_emb.unsqueeze(-1).repeat(1, 1, code_emb.shape[-1])
+                code_emb = self.conditioning_conv(torch.cat([cond_emb, code_emb], dim=1))
             # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
             if self.training and self.unconditioned_percentage > 0:
-                unconditioned_batches = torch.rand((code_emb.shape[0],1,1), device=code_emb.device) < self.unconditioned_percentage
-                code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(x.shape[0], 1, 1), code_emb)
+                unconditioned_batches = torch.rand((code_emb.shape[0], 1, 1),
+                                                   device=code_emb.device) < self.unconditioned_percentage
+                code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(x.shape[0], 1, 1),
+                                       code_emb)
+
+            # Everything after this comment is timestep dependent.
+            code_emb = torch.repeat_interleave(code_emb, self.conditioning_expansion, dim=-1)
+            code_emb = self.conditioning_timestep_integrator(code_emb, time_emb)
 
             first = True
             time_emb = time_emb.float()
@@ -530,22 +475,28 @@ class DiffusionTts(nn.Module):
         # Last block also has autocast disabled for high-precision outputs.
         h = h.float()
         out = self.out(h)
+
+        # Involve probabilistic or possibly unused parameters in loss so we don't get DDP errors.
+        extraneous_addition = 0
+        params = [self.aligned_latent_padding_embedding, self.unconditioned_embedding] + list(self.latent_converter.parameters())
+        for p in params:
+            extraneous_addition = extraneous_addition + p.mean()
+        out = out + extraneous_addition * 0
+
         return out[:, :, :orig_x_shape]
 
 
 @register_model
-def register_diffusion_tts7(opt_net, opt):
+def register_diffusion_tts9(opt_net, opt):
     return DiffusionTts(**opt_net['kwargs'])
 
 
-# Test for ~4 second audio clip at 22050Hz
 if __name__ == '__main__':
-    clip = torch.randn(2, 1, 32768)
-    tok = torch.randint(0,30, (2,388))
+    clip = torch.randn(2, 1, 32868)
+    aligned_latent = torch.randn(2,388,1024)
+    aligned_sequence = torch.randint(0,8192,(2,388))
     cond = torch.randn(2, 1, 44000)
     ts = torch.LongTensor([600, 600])
-    lr = torch.randn(2,1,10000)
-    un = torch.randint(0,120, (2,100))
     model = DiffusionTts(128,
                          channel_mult=[1,1.5,2, 3, 4, 6, 8],
                          num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
@@ -554,11 +505,11 @@ if __name__ == '__main__':
                          num_heads=8,
                          kernel_size=3,
                          scale_factor=2,
-                         time_embed_dim_multiplier=4, super_sampling=False,
-                         enabled_unaligned_inputs=True,
-                         component_gradient_boosting=True)
-    o = model(clip, ts, tok, cond, lr, un)
-    o.sum().backward()
-    model.before_step(0)
-    torch.save(model.state_dict(), 'test_out.pth')
+                         time_embed_dim_multiplier=4,
+                         super_sampling=False,
+                         efficient_convs=False)
+    # Test with latent aligned conditioning
+    o = model(clip, ts, aligned_latent, cond)
+    # Test with sequence aligned conditioning
+    o = model(clip, ts, aligned_sequence, cond)
 

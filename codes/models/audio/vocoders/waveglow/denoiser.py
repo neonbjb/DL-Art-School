@@ -1,6 +1,6 @@
 import sys
 
-from models.tacotron2.stft import STFT
+from models.audio.tts.tacotron2.stft import STFT
 
 sys.path.append('tacotron2')
 import torch

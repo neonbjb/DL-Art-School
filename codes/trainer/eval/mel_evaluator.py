@@ -4,7 +4,7 @@ import trainer.eval.evaluator as evaluator
 
 from data import create_dataset
 from data.audio.nv_tacotron_dataset import TextMelCollate
-from models.tacotron2.loss import Tacotron2LossRaw
+from models.audio.tts.tacotron2 import Tacotron2LossRaw
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 

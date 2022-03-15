@@ -3,11 +3,11 @@ import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from x_transformers import Encoder, XTransformer, TransformerWrapper
+from x_transformers import Encoder, TransformerWrapper
 
-from models.gpt_voice.unet_diffusion_tts6 import CheckpointedLayer
-from models.gpt_voice.unified_voice2 import ConditioningEncoder
-from models.tacotron2.text.cleaners import english_cleaners
+from models.audio.tts.unet_diffusion_tts6 import CheckpointedLayer
+from models.audio.tts.unified_voice2 import ConditioningEncoder
+from models.audio.tts.tacotron2.text.cleaners import english_cleaners
 from trainer.networks import register_model
 from utils.util import opt_get
 

@@ -2,12 +2,10 @@ import os
 import os.path as osp
 import torch
 import torchaudio
-import torchvision
-from pytorch_fid import fid_score
 from pytorch_fid.fid_score import calculate_frechet_distance
 from torch import distributed
 from tqdm import tqdm
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+from transformers import Wav2Vec2ForCTC
 import torch.nn.functional as F
 import numpy as np
 
@@ -15,7 +13,7 @@ import trainer.eval.evaluator as evaluator
 from data.audio.paired_voice_audio_dataset import load_tsv_aligned_codes
 from data.audio.unsupervised_audio_dataset import load_audio
 from models.clip.mel_text_clip import MelTextCLIP
-from models.tacotron2.text import sequence_to_text, text_to_sequence
+from models.audio.tts.tacotron2 import text_to_sequence
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel, load_speech_dvae, \
     convert_mel_to_codes
 from utils.util import ceil_multiple, opt_get
@@ -97,6 +95,27 @@ class AudioDiffusionFid(evaluator.Evaluator):
 
 
     def perform_diffusion_vocoder(self, audio, codes, text, sample_rate=5500):
+        mel = wav_to_mel(audio)
+        mel_codes = convert_mel_to_codes(self.dvae, mel)
+        text_codes = text_to_sequence(text)
+        real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
+
+        output_size = real_resampled.shape[-1]
+        aligned_codes_compression_factor = output_size // mel_codes.shape[-1]
+        padded_size = ceil_multiple(output_size, 2048)
+        padding_added = padded_size - output_size
+        padding_needed_for_codes = padding_added // aligned_codes_compression_factor
+        if padding_needed_for_codes > 0:
+            mel_codes = F.pad(mel_codes, (0, padding_needed_for_codes))
+        output_shape = (1, 1, padded_size)
+        gen = self.diffuser.p_sample_loop(self.model, output_shape,
+                                    model_kwargs={'tokens': mel_codes,
+                                                  'conditioning_input': audio.unsqueeze(0),
+                                                  'unaligned_input': torch.tensor(text_codes, device=audio.device).unsqueeze(0)})
+        return gen, real_resampled, sample_rate
+
+
+    def perform_diffusion_tts9_from_codes(self, audio, codes, text, sample_rate=5500):
         mel = wav_to_mel(audio)
         mel_codes = convert_mel_to_codes(self.dvae, mel)
         text_codes = text_to_sequence(text)

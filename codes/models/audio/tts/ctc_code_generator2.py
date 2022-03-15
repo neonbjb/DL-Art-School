@@ -4,17 +4,11 @@ import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
-from transformers import T5Config, T5Model, T5PreTrainedModel, T5ForConditionalGeneration
-from transformers.file_utils import replace_return_docstrings
-from transformers.modeling_outputs import Seq2SeqLMOutput, BaseModelOutput
-from transformers.utils.model_parallel_utils import get_device_map, assert_device_map
-from x_transformers import Encoder, XTransformer
+from transformers import T5Config, T5ForConditionalGeneration
 
-from models.gpt_voice.transformer_builders import null_position_embeddings
-from models.gpt_voice.unet_diffusion_tts6 import CheckpointedLayer
-from models.gpt_voice.unified_voice2 import ConditioningEncoder
-from models.tacotron2.text.cleaners import english_cleaners
+from models.audio.tts.transformer_builders import null_position_embeddings
+from models.audio.tts.unified_voice2 import ConditioningEncoder
+from models.audio.tts.tacotron2.text.cleaners import english_cleaners
 from trainer.networks import register_model
 from utils.util import opt_get
 
@@ -146,7 +140,6 @@ def inf():
     model.load_state_dict(sd)
     raw_batch = torch.load('raw_batch.pth')
     with torch.no_grad():
-        from data.audio.unsupervised_audio_dataset import load_audio
         from scripts.audio.gen.speech_synthesis_utils import wav_to_mel
         ref_mel = torch.cat([wav_to_mel(raw_batch['conditioning'][0])[:, :, :256],
                                wav_to_mel(raw_batch['conditioning'][0])[:, :, :256]], dim=0).unsqueeze(0)

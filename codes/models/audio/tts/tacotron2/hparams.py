@@ -1,5 +1,5 @@
 #import tensorflow as tf
-from models.tacotron2.text import symbols
+from models.audio.tts.tacotron2.text import symbols
 
 
 def create_hparams(hparams_string=None, verbose=False):

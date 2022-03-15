@@ -1,7 +1,6 @@
 import random
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 
@@ -12,7 +11,7 @@ from utils.util import opt_get, load_model_from_config
 class MelSpectrogramInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
-        from models.tacotron2.layers import TacotronSTFT
+        from models.audio.tts.tacotron2 import TacotronSTFT
         # These are the default tacotron values for the MEL spectrogram.
         filter_length = opt_get(opt, ['filter_length'], 1024)
         hop_length = opt_get(opt, ['hop_length'], 256)

@@ -1,15 +1,12 @@
-import functools
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import GPT2Model, GPT2Config, GPT2PreTrainedModel
+from transformers import GPT2Config, GPT2PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.utils.model_parallel_utils import get_device_map, assert_device_map
 
 from models.arch_util import AttentionBlock
-from models.gpt_voice.transformer_builders import build_hf_gpt_transformer
-from models.tacotron2.text import symbols
+from models.audio.tts.transformer_builders import build_hf_gpt_transformer
 from trainer.networks import register_model
 from utils.util import opt_get
 

@@ -6,9 +6,9 @@ import torch.utils.data
 from torch import LongTensor
 from tqdm import tqdm
 
-from models.tacotron2.taco_utils import load_filepaths_and_text
-from models.tacotron2.text import symbols
-from models.tacotron2.text import text_to_sequence
+from models.audio.tts.tacotron2 import load_filepaths_and_text
+from models.audio.tts.tacotron2 import symbols
+from models.audio.tts.tacotron2 import text_to_sequence
 
 
 class GptTtsDataset(torch.utils.data.Dataset):

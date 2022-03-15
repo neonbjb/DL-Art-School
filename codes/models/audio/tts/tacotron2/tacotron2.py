@@ -4,11 +4,10 @@ from munch import munchify
 from torch.autograd import Variable
 from torch import nn
 from torch.nn import functional as F
-from models.tacotron2.layers import ConvNorm, LinearNorm
-from models.tacotron2.hparams import create_hparams
+from models.audio.tts.tacotron2.layers import ConvNorm, LinearNorm
+from models.audio.tts.tacotron2.hparams import create_hparams
 from trainer.networks import register_model
-from models.tacotron2.taco_utils import get_mask_from_lengths
-from utils.util import opt_get, checkpoint
+from models.audio.tts.tacotron2.taco_utils import get_mask_from_lengths
 
 
 class LocationLayer(nn.Module):

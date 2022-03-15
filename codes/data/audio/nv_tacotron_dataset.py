@@ -1,5 +1,4 @@
 import os
-import os
 import random
 
 import torch
@@ -10,8 +9,8 @@ from tqdm import tqdm
 
 from data.audio.unsupervised_audio_dataset import load_audio
 from data.util import find_files_of_type, is_audio_file
-from models.tacotron2.taco_utils import load_filepaths_and_text
-from models.tacotron2.text import text_to_sequence
+from models.audio.tts.tacotron2 import load_filepaths_and_text
+from models.audio.tts.tacotron2 import text_to_sequence
 from utils.util import opt_get
 
 

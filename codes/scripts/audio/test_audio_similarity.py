@@ -1,12 +1,11 @@
 import os
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 from data.util import is_wav_file, find_files_of_type
-from models.audio_resnet import resnet34, resnet50
-from models.tacotron2.taco_utils import load_wav_to_torch
+from models.audio_resnet import resnet50
+from models.audio.tts.tacotron2 import load_wav_to_torch
 from scripts.byol.byol_extract_wrapped_model import extract_byol_model_from_state_dict
 
 if __name__ == '__main__':

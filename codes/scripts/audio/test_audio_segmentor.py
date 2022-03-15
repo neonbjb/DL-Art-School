@@ -4,20 +4,17 @@ import random
 import argparse
 
 import audio2numpy
-import torchvision
 from munch import munchify
 
 import utils
 import utils.options as option
 import utils.util as util
 from data.audio.nv_tacotron_dataset import save_mel_buffer_to_file
-from models.tacotron2 import hparams
-from models.tacotron2.layers import TacotronSTFT
-from models.tacotron2.text import sequence_to_text
+from models.audio.tts.tacotron2 import hparams
+from models.audio.tts.tacotron2 import TacotronSTFT
+from models.audio.tts.tacotron2 import sequence_to_text
 from scripts.audio.use_vocoder import Vocoder
 from trainer.ExtensibleTrainer import ExtensibleTrainer
-from data import create_dataset, create_dataloader
-from tqdm import tqdm
 import torch
 import numpy as np
 from scipy.io import wavfile

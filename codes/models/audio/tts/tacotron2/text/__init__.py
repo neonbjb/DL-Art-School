@@ -3,8 +3,8 @@ import re
 
 import torch
 
-from models.tacotron2.text import cleaners
-from models.tacotron2.text.symbols import symbols
+from models.audio.tts.tacotron2.text import cleaners
+from models.audio.tts.tacotron2.text.symbols import symbols
 
 
 # Mappings from symbol to numeric ID and vice versa:

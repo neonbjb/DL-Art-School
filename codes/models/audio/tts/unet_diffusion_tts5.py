@@ -1,17 +1,15 @@
 import functools
-import random
 from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import autocast
-from x_transformers.x_transformers import AbsolutePositionalEmbedding, AttentionLayers
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, \
     Downsample, Upsample, TimestepBlock
-from models.gpt_voice.mini_encoder import AudioMiniEncoder
+from models.audio.tts.mini_encoder import AudioMiniEncoder
 from scripts.audio.gen.use_diffuse_tts import ceil_multiple
 from trainer.networks import register_model
 from utils.util import checkpoint
@@ -177,20 +175,16 @@ class DiffusionTts(nn.Module):
             num_heads_upsample=-1,
             kernel_size=3,
             scale_factor=2,
+            conditioning_inputs_provided=True,
             time_embed_dim_multiplier=4,
-            cond_transformer_depth=8,
-            mid_transformer_depth=8,
+            transformer_depths=8,
             nil_guidance_fwd_proportion=.3,
-            super_sampling=False,
-            super_sampling_max_noising_factor=.1,
     ):
         super().__init__()
 
         if num_heads_upsample == -1:
             num_heads_upsample = num_heads
 
-        if super_sampling:
-            in_channels *= 2  # In super-sampling mode, the LR input is concatenated directly onto the input.
         self.in_channels = in_channels
         self.model_channels = model_channels
         self.out_channels = out_channels
@@ -205,8 +199,7 @@ class DiffusionTts(nn.Module):
         self.dims = dims
         self.nil_guidance_fwd_proportion = nil_guidance_fwd_proportion
         self.mask_token_id = num_tokens
-        self.super_sampling_enabled = super_sampling
-        self.super_sampling_max_noising_factor = super_sampling_max_noising_factor
+
         padding = 1 if kernel_size == 3 else 2
 
         time_embed_dim = model_channels * time_embed_dim_multiplier
@@ -218,15 +211,16 @@ class DiffusionTts(nn.Module):
 
         embedding_dim = model_channels * 8
         self.code_embedding = nn.Embedding(num_tokens+1, embedding_dim)
-        self.contextual_embedder = AudioMiniEncoder(1, embedding_dim, base_channels=32, depth=6, resnet_blocks=1,
-                         attn_blocks=2, num_attn_heads=2, dropout=dropout, downsample_factor=4, kernel_size=5)
-        self.conditioning_conv = nn.Conv1d(embedding_dim*2, embedding_dim, 1)
+        self.conditioning_enabled = conditioning_inputs_provided
+        if conditioning_inputs_provided:
+            self.contextual_embedder = AudioMiniEncoder(in_channels, embedding_dim, base_channels=32, depth=6, resnet_blocks=1,
+                             attn_blocks=2, num_attn_heads=2, dropout=dropout, downsample_factor=4, kernel_size=5)
         self.conditioning_encoder = CheckpointedXTransformerEncoder(
                 max_seq_len=-1,  # Should be unused
                 use_pos_emb=False,
                 attn_layers=Encoder(
                     dim=embedding_dim,
-                    depth=cond_transformer_depth,
+                    depth=transformer_depths,
                     heads=num_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
@@ -298,7 +292,7 @@ class DiffusionTts(nn.Module):
                 use_pos_emb=False,
                 attn_layers=Encoder(
                     dim=ch,
-                    depth=mid_transformer_depth,
+                    depth=transformer_depths,
                     heads=num_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
@@ -364,49 +358,54 @@ class DiffusionTts(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
 
+    def load_state_dict(self, state_dict: 'OrderedDict[str, Tensor]',
+                        strict: bool = True):
+        # Temporary hack to allow the addition of nil-guidance token embeddings to the existing guidance embeddings.
+        lsd = self.state_dict()
+        revised = 0
+        for i, blk in enumerate(self.input_blocks):
+            if isinstance(blk, nn.Embedding):
+                key = f'input_blocks.{i}.weight'
+                if state_dict[key].shape[0] != lsd[key].shape[0]:
+                    t = torch.randn_like(lsd[key]) * .02
+                    t[:state_dict[key].shape[0]] = state_dict[key]
+                    state_dict[key] = t
+                    revised += 1
+        print(f"Loaded experimental unet_diffusion_net with {revised} modifications.")
+        return super().load_state_dict(state_dict, strict)
 
-    def forward(self, x, timesteps, tokens=None, conditioning_input=None, lr_input=None):
+
+
+    def forward(self, x, timesteps, tokens, conditioning_input=None):
         """
         Apply the model to an input batch.
 
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
         :param tokens: an aligned text input.
-        :param conditioning_input: a full-resolution audio clip that is used as a reference to the style you want decoded.
-        :param lr_input: for super-sampling models, a guidance audio clip at a lower sampling rate.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert conditioning_input is not None
-        if self.super_sampling_enabled:
-            assert lr_input is not None
-            if self.training and self.super_sampling_max_noising_factor > 0:
-                noising_factor = random.uniform(0,self.super_sampling_max_noising_factor)
-                lr_input = torch.randn_like(lr_input) * noising_factor + lr_input
-            lr_input = F.interpolate(lr_input, size=(x.shape[-1],), mode='nearest')
-            x = torch.cat([x, lr_input], dim=1)
-
         with autocast(x.device.type):
             orig_x_shape = x.shape[-1]
             cm = ceil_multiple(x.shape[-1], 2048)
             if cm != 0:
                 pc = (cm-x.shape[-1])/x.shape[-1]
                 x = F.pad(x, (0,cm-x.shape[-1]))
-                if tokens is not None:
-                    tokens = F.pad(tokens, (0,int(pc*tokens.shape[-1])))
+                tokens = F.pad(tokens, (0,int(pc*tokens.shape[-1])))
+            if self.conditioning_enabled:
+                assert conditioning_input is not None
 
             hs = []
             time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
-            cond_emb = self.contextual_embedder(conditioning_input)
-            if tokens is not None:
-                # Mask out guidance tokens for un-guided diffusion.
-                if self.training and self.nil_guidance_fwd_proportion > 0:
-                    token_mask = torch.rand(tokens.shape, device=tokens.device) < self.nil_guidance_fwd_proportion
-                    tokens = torch.where(token_mask, self.mask_token_id, tokens)
-                code_emb = self.code_embedding(tokens).permute(0,2,1)
-                code_emb = self.conditioning_conv(torch.cat([cond_emb.unsqueeze(-1).repeat(1,1,code_emb.shape[-1]), code_emb], dim=1))
-            else:
-                code_emb = cond_emb.unsqueeze(-1)
+            # Mask out guidance tokens for un-guided diffusion.
+            if self.training and self.nil_guidance_fwd_proportion > 0:
+                token_mask = torch.rand(tokens.shape, device=tokens.device) < self.nil_guidance_fwd_proportion
+                tokens = torch.where(token_mask, self.mask_token_id, tokens)
+            code_emb = self.code_embedding(tokens).permute(0,2,1)
+            if self.conditioning_enabled:
+                cond_emb = self.contextual_embedder(conditioning_input)
+                code_emb = cond_emb.unsqueeze(-1) * code_emb
             code_emb = self.conditioning_encoder(code_emb)
 
             first = True
@@ -434,7 +433,7 @@ class DiffusionTts(nn.Module):
 
 
 @register_model
-def register_diffusion_tts6(opt_net, opt):
+def register_diffusion_tts5(opt_net, opt):
     return DiffusionTts(**opt_net['kwargs'])
 
 
@@ -444,7 +443,6 @@ if __name__ == '__main__':
     tok = torch.randint(0,30, (2,388))
     cond = torch.randn(2, 1, 44000)
     ts = torch.LongTensor([600, 600])
-    lr = torch.randn(2,1,10000)
     model = DiffusionTts(128,
                          channel_mult=[1,1.5,2, 3, 4, 6, 8],
                          num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
@@ -453,8 +451,8 @@ if __name__ == '__main__':
                          num_heads=8,
                          kernel_size=3,
                          scale_factor=2,
-                         time_embed_dim_multiplier=4, super_sampling=True)
-    model(clip, ts, tok, cond, lr)
-    model(clip, ts, None, cond, lr)
+                         conditioning_inputs_provided=True,
+                         time_embed_dim_multiplier=4)
+    model(clip, ts, tok, cond)
     torch.save(model.state_dict(), 'test_out.pth')
 
