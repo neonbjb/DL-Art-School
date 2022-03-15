@@ -104,9 +104,9 @@ def process_folder(folder, output_path, base_path, progress_file, max_files):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-path', type=str, help='Path to search for split files (should be the direct output of phase 1)',
-                        default='Y:\\split\\big_podcast')
+                        default='Y:\\split\\youtube')
     parser.add_argument('-progress_file', type=str, help='Place to store all folders that have already been processed', default='Y:\\filtered\\big_podcast\\already_processed.txt')
-    parser.add_argument('-output_path', type=str, help='Path where sampled&filtered files are sent', default='Y:\\filtered\\big_podcast')
+    parser.add_argument('-output_path', type=str, help='Path where sampled&filtered files are sent', default='Y:\\filtered\\youtube')
     parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=6)
     parser.add_argument('-max_samples_per_folder', type=int, help='Maximum number of clips that can be extracted from each folder.', default=1000)
     parser.add_argument('-classifier_model_opt', type=str, help='Train/test options file that configures the model used to classify the audio clips.',

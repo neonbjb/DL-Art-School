@@ -42,7 +42,7 @@ if __name__ == '__main__':
         'less_heads': {'networks': {'generator': {'kwargs': {'num_heads': 2}}}},
         'eff_off': {'networks': {'generator': {'kwargs': {'efficient_convs': False}}}},
         'more_time': {'networks': {'generator': {'kwargs': {'time_embed_dim_multiplier': 8}}}},
-        'deeper_res': {'networks': {'generator': {'kwargs': {'num_res_blocks': [3, 3, 3, 3, 3, 4, 4]}}}},
+        'scale_shift_off': {'networks': {'generator': {'kwargs': {'use_scale_shift_norm': False}}}},
         'shallow_res': {'networks': {'generator': {'kwargs': {'num_res_blocks': [1, 1, 1, 1, 1, 2, 2]}}}},
     }
     opt = option.parse(base_opt, is_train=True)

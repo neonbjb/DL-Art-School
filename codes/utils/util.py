@@ -592,6 +592,7 @@ def load_audio(audiopath, sampling_rate, raw_data=None):
 
 
 def load_wav_to_torch(full_path):
+    import scipy.io.wavfile
     sampling_rate, data = scipy.io.wavfile.read(full_path)
     if data.dtype == np.int32:
         norm_fix = 2 ** 31
