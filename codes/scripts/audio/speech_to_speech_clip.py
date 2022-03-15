@@ -4,17 +4,13 @@ import os
 from multiprocessing.pool import ThreadPool
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import yaml
 from tqdm import tqdm
 
 from data.audio.unsupervised_audio_dataset import load_audio
-from data.util import is_wav_file, find_files_of_type, is_audio_file
-from models.audio_resnet import resnet34, resnet50
-from models.tacotron2.taco_utils import load_wav_to_torch
+from data.util import is_audio_file
 from scripts.audio.gen.speech_synthesis_utils import wav_to_mel
-from scripts.byol.byol_extract_wrapped_model import extract_byol_model_from_state_dict
 from utils.options import Loader
 from utils.util import load_model_from_config
 
