@@ -1,8 +1,7 @@
 import torch
 from scipy.io import wavfile
 
-from models.waveglow.waveglow import WaveGlow
-from utils.audio import plot_spectrogram
+from models.audio.vocoders.waveglow.waveglow import WaveGlow
 
 
 class Vocoder:
