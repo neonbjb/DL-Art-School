@@ -125,20 +125,21 @@ class AudioDiffusionFid(evaluator.Evaluator):
         real_resampled = torchaudio.functional.resample(audio, 22050, SAMPLE_RATE).unsqueeze(0)
         univnet_mel = wav_to_univnet_mel(audio)  # to be used for a conditioning input
 
-        output_size = real_resampled.shape[-1]
+        output_size = univnet_mel.shape[-1]
         aligned_codes_compression_factor = output_size // mel_codes.shape[-1]
-        padded_size = ceil_multiple(output_size, 2048)
+        padded_size = ceil_multiple(output_size, self.model.alignment_size)
         padding_added = padded_size - output_size
         padding_needed_for_codes = padding_added // aligned_codes_compression_factor
         if padding_needed_for_codes > 0:
             mel_codes = F.pad(mel_codes, (0, padding_needed_for_codes))
-        output_shape = (1, 1, padded_size)
+        output_shape = (1, 100, padded_size)
         gen_mel = self.diffuser.p_sample_loop(self.model, output_shape,
                                     model_kwargs={'aligned_conditioning': mel_codes,
                                                   'conditioning_input': univnet_mel})
 
-        gen_wav = self.local_modules['vocoder'](gen_mel)
-        return gen_wav, real_resampled, SAMPLE_RATE
+        gen_wav = self.local_modules['vocoder'].inference(gen_mel)
+        real_dec = self.local_modules['vocoder'].inference(univnet_mel)
+        return gen_wav.float(), real_dec, SAMPLE_RATE
 
     def load_projector(self):
         """
@@ -257,9 +258,9 @@ if __name__ == '__main__':
 if __name__ == '__main__':
     from utils.util import load_model_from_config
 
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts9.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts9_mel.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_diffusion_tts9\\models\\7500_generator_ema.pth').cuda()
+                                       load_path='X:\\dlas\\experiments\\train_diffusion_tts9_mel\\models\\10000_generator_ema.pth').cuda()
     opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'tts9_mel'}

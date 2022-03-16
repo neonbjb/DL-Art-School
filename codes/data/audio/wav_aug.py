@@ -3,7 +3,7 @@ import random
 import torch
 import torchaudio.sox_effects
 
-from models.audio.tts.tacotron2 import load_wav_to_torch
+from models.audio.tts.tacotron2.taco_utils import load_wav_to_torch
 
 
 # Returns random double on [l,h] as a string

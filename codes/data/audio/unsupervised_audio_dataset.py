@@ -10,7 +10,7 @@ from audio2numpy import open_audio
 from tqdm import tqdm
 
 from data.util import find_files_of_type, is_audio_file, load_paths_from_cache
-from models.audio.tts.tacotron2 import load_wav_to_torch
+from models.audio.tts.tacotron2.taco_utils import load_wav_to_torch
 from utils.util import opt_get
 
 
