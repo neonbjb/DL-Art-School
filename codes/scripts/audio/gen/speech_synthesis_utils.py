@@ -22,10 +22,10 @@ def load_speech_dvae():
 
 def load_univnet_vocoder():
     model = UnivNetGenerator()
-    sd = torch.load('univnet_c32_pretrained_libri.pt')
-    model.load_state_dict(sd)
+    sd = torch.load('../experiments/univnet_c32_pretrained_libri.pt')
+    model.load_state_dict(sd['model_g'])
     model = model.cpu()
-    model.eval()
+    model.eval(inference=True)
     return model
 
 
@@ -36,12 +36,13 @@ def wav_to_mel(wav, mel_norms_file='../experiments/clips_mel_norms.pth'):
     return TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_norm_file': mel_norms_file},{})({'wav': wav})['mel']
 
 
-def wav_to_univnet_mel(wav):
+def wav_to_univnet_mel(wav, do_normalization=False):
     """
     Converts an audio clip into a MEL tensor that the univnet vocoder knows how to decode.
     """
     return MelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'sampling_rate': 24000,
-                                   'n_mel_channels': 100, 'mel_fmax': 12000},{})({'wav': wav})['mel']
+                                   'n_mel_channels': 100, 'mel_fmax': 12000,
+                                   'do_normalizattion': do_normalization},{})({'wav': wav})['mel']
 
 
 def convert_mel_to_codes(dvae_model, mel):

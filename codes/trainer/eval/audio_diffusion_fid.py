@@ -16,6 +16,7 @@ from models.clip.mel_text_clip import MelTextCLIP
 from models.audio.tts.tacotron2 import text_to_sequence
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel, load_speech_dvae, \
     convert_mel_to_codes, load_univnet_vocoder, wav_to_univnet_mel
+from trainer.injectors.audio_injectors import denormalize_tacotron_mel
 from utils.util import ceil_multiple, opt_get
 
 
@@ -124,7 +125,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
         mel = wav_to_mel(audio)
         mel_codes = convert_mel_to_codes(self.local_modules['dvae'], mel)
         real_resampled = torchaudio.functional.resample(audio, 22050, SAMPLE_RATE).unsqueeze(0)
-        univnet_mel = wav_to_univnet_mel(audio)  # to be used for a conditioning input
+        univnet_mel = wav_to_univnet_mel(audio, mel_norms_file=None)  # to be used for a conditioning input
 
         output_size = univnet_mel.shape[-1]
         aligned_codes_compression_factor = output_size // mel_codes.shape[-1]
@@ -138,7 +139,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
                                     model_kwargs={'aligned_conditioning': mel_codes,
                                                   'conditioning_input': univnet_mel})
         # denormalize mel
-        gen_mel = ((gen_mel+1)/2)*(self.mel_max-self.mel_min)+self.mel_min
+        gen_mel = denormalize_tacotron_mel(gen_mel)
 
         gen_wav = self.local_modules['vocoder'].inference(gen_mel)
         real_dec = self.local_modules['vocoder'].inference(univnet_mel)
@@ -263,7 +264,7 @@ if __name__ == '__main__':
 
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts9_mel.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_diffusion_tts9_mel\\models\\10000_generator_ema.pth').cuda()
+                                       load_path='X:\\dlas\\experiments\\train_diffusion_tts9_mel\\models\\5000_generator_ema.pth').cuda()
     opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'tts9_mel'}
