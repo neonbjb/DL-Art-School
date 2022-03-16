@@ -28,7 +28,7 @@ class MelSpectrogramInjector(Injector):
             self.mel_max = mel_max
             self.mel_min = mel_min
         else:
-            self.mel_norms = None
+            self.mel_max = None
 
     def forward(self, state):
         inp = state[self.input]
@@ -37,7 +37,7 @@ class MelSpectrogramInjector(Injector):
         assert len(inp.shape) == 2
         self.stft = self.stft.to(inp.device)
         mel = self.stft.mel_spectrogram(inp)
-        if self.mel_norms is not None:
+        if self.mel_max is not None:
             mel = 2 * ((mel - self.mel_min) / (self.mel_max - self.mel_min)) - 1
         return {self.output: mel}
 
