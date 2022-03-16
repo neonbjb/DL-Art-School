@@ -21,6 +21,14 @@ class MelSpectrogramInjector(Injector):
         mel_fmax = opt_get(opt, ['mel_fmax'], 8000)
         sampling_rate = opt_get(opt, ['sampling_rate'], 22050)
         self.stft = TacotronSTFT(filter_length, hop_length, win_length, n_mel_channels, sampling_rate, mel_fmin, mel_fmax)
+        self.mel_norm_file = opt_get(opt, ['mel_norm_file'], None)
+        if self.mel_norm_file is not None:
+            # Note that this format is different from TorchMelSpectrogramInjector.
+            mel_means, mel_max, mel_min, mel_stds, mel_vars = torch.load(self.mel_norm_file)
+            self.mel_max = mel_max
+            self.mel_min = mel_min
+        else:
+            self.mel_norms = None
 
     def forward(self, state):
         inp = state[self.input]
@@ -28,7 +36,10 @@ class MelSpectrogramInjector(Injector):
             inp = inp.squeeze(1)
         assert len(inp.shape) == 2
         self.stft = self.stft.to(inp.device)
-        return {self.output: self.stft.mel_spectrogram(inp)}
+        mel = self.stft.mel_spectrogram(inp)
+        if self.mel_norms is not None:
+            mel = 2 * ((mel - self.mel_min) / (self.mel_max - self.mel_min)) - 1
+        return {self.output: mel}
 
 
 class TorchMelSpectrogramInjector(Injector):
