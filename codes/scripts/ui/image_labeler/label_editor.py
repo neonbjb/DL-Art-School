@@ -1,6 +1,6 @@
 import orjson
 
-from data.image_label_parser import VsNetImageLabeler
+from data.images.image_label_parser import VsNetImageLabeler
 
 
 # Translates from the label JSON output of the VS.NET UI to something more compact and usable.

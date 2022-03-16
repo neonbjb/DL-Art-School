@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 from tqdm import tqdm
 
-from data.image_folder_dataset import ImageFolderDataset
+from data.images.image_folder_dataset import ImageFolderDataset
 from models.classifiers.resnet_with_checkpointing import resnet50
 
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved

@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor, Normalize
 from tqdm import tqdm
 
-from data.image_folder_dataset import ImageFolderDataset
+from data.images.image_folder_dataset import ImageFolderDataset
 from models.segformer.segformer import Segformer
 
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved

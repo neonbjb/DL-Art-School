@@ -5,7 +5,7 @@ import torch
 import torchvision
 from torch.cuda.amp import autocast
 
-from data.multiscale_dataset import build_multiscale_patch_index_map
+from data.images.multiscale_dataset import build_multiscale_patch_index_map
 from trainer.inject import Injector
 from trainer.losses import extract_params_from_state
 import os.path as osp

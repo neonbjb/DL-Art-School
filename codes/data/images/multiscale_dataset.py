@@ -4,13 +4,9 @@ import cv2
 import torch
 import torch.utils.data as data
 import data.util as util
-from PIL import Image, ImageOps
-from io import BytesIO
-import torchvision.transforms.functional as F
-
 
 # Reads full-quality images and pulls tiles at regular zoom intervals from them. Only usable for training purposes.
-from data.image_corruptor import ImageCorruptor
+from data.images.image_corruptor import ImageCorruptor
 
 
 # Selects the smallest dimension from the image and crops it randomly so the other dimension matches. The cropping

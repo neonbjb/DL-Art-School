@@ -11,7 +11,7 @@ import torch
 import torchvision
 from PIL import ImageTk
 
-from data.image_label_parser import VsNetImageLabeler
+from data.images.image_label_parser import VsNetImageLabeler
 from scripts.ui.image_labeler.pretrained_image_patch_classifier import PretrainedImagePatchClassifier
 
 # Globals used to define state that event handlers might operate on.

@@ -10,7 +10,7 @@ from torchvision.transforms import ToTensor, Resize
 from tqdm import tqdm
 import numpy as np
 
-from data.image_folder_dataset import ImageFolderDataset
+from data.images.image_folder_dataset import ImageFolderDataset
 from models.image_latents.spinenet_arch import SpineNet
 
 

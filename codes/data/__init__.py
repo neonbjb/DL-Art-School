@@ -33,33 +33,33 @@ def create_dataset(dataset_opt, return_collate=False):
 
     # datasets for image restoration
     if mode == 'fullimage':
-        from data.full_image_dataset import FullImageDataset as D
+        from data.images.full_image_dataset import FullImageDataset as D
     elif mode == 'single_image_extensible':
-        from data.single_image_dataset import SingleImageDataset as D
+        from data.images.single_image_dataset import SingleImageDataset as D
     elif mode == 'multi_frame_extensible':
-        from data.multi_frame_dataset import MultiFrameDataset as D
+        from data.images.multi_frame_dataset import MultiFrameDataset as D
     elif mode == 'combined':
         from data.combined_dataset import CombinedDataset as D
     elif mode == 'multiscale':
-        from data.multiscale_dataset import MultiScaleDataset as D
+        from data.images.multiscale_dataset import MultiScaleDataset as D
     elif mode == 'paired_frame':
-        from data.paired_frame_dataset import PairedFrameDataset as D
+        from data.images.paired_frame_dataset import PairedFrameDataset as D
     elif mode == 'stylegan2':
-        from data.stylegan2_dataset import Stylegan2Dataset as D
+        from data.images.stylegan2_dataset import Stylegan2Dataset as D
     elif mode == 'imagefolder':
-        from data.image_folder_dataset import ImageFolderDataset as D
+        from data.images.image_folder_dataset import ImageFolderDataset as D
     elif mode == 'torch_dataset':
         from data.torch_dataset import TorchDataset as D
     elif mode == 'byol_dataset':
-        from data.byol_attachment import ByolDatasetWrapper as D
+        from data.images.byol_attachment import ByolDatasetWrapper as D
     elif mode == 'byol_structured_dataset':
-        from data.byol_attachment import StructuredCropDatasetWrapper as D
+        from data.images.byol_attachment import StructuredCropDatasetWrapper as D
     elif mode == 'random_aug_wrapper':
-        from data.byol_attachment import DatasetRandomAugWrapper as D
+        from data.images.byol_attachment import DatasetRandomAugWrapper as D
     elif mode == 'random_dataset':
-        from data.random_dataset import RandomDataset as D
+        from data.images.random_dataset import RandomDataset as D
     elif mode == 'zipfile':
-        from data.zip_file_dataset import ZipFileDataset as D
+        from data.images.zip_file_dataset import ZipFileDataset as D
     elif mode == 'nv_tacotron':
         from data.audio.nv_tacotron_dataset import TextWavLoader as D
         from data.audio.nv_tacotron_dataset import TextMelCollate as C

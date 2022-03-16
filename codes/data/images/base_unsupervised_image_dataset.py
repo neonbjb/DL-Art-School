@@ -1,7 +1,7 @@
 import torch
 from torch.utils import data
-from data.image_corruptor import ImageCorruptor
-from data.chunk_with_reference import ChunkWithReference
+from data.images.image_corruptor import ImageCorruptor
+from data.images.chunk_with_reference import ChunkWithReference
 import os
 import cv2
 import numpy as np

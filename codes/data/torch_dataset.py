@@ -1,10 +1,9 @@
-import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as T
 from torchvision import datasets
 
 # Wrapper for basic pytorch datasets which re-wraps them into a format usable by ExtensibleTrainer.
-from data.cifar import CIFAR100, CIFAR10
+from data.images.cifar import CIFAR100, CIFAR10
 from utils.util import opt_get
 
 

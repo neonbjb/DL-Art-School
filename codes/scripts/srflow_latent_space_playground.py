@@ -13,7 +13,7 @@ from tqdm import tqdm
 import utils.options as option
 
 import utils
-from data.image_corruptor import ImageCorruptor
+from data.images.image_corruptor import ImageCorruptor
 from trainer.ExtensibleTrainer import ExtensibleTrainer
 from utils import util
 

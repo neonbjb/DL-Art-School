@@ -1,4 +1,4 @@
-from data.base_unsupervised_image_dataset import BaseUnsupervisedImageDataset
+from data.images.base_unsupervised_image_dataset import BaseUnsupervisedImageDataset
 import numpy as np
 import torch
 from bisect import bisect_left

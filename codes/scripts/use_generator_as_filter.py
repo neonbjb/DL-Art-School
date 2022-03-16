@@ -3,7 +3,7 @@ import shutil
 
 from torch.utils.data import DataLoader
 
-from data.single_image_dataset import SingleImageDataset
+from data.images.single_image_dataset import SingleImageDataset
 from tqdm import tqdm
 import torch
 

@@ -1,18 +1,13 @@
-import os
-
 import torch
-import os.path as osp
-import torchvision
 from torch.nn import MSELoss
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import trainer.eval.evaluator as evaluator
-from pytorch_fid import fid_score
 
-from data.image_pair_with_corresponding_points_dataset import ImagePairWithCorrespondingPointsDataset
+from data.images.image_pair_with_corresponding_points_dataset import ImagePairWithCorrespondingPointsDataset
 from models.segformer.segformer import Segformer
-from utils.util import opt_get
+
 
 # Uses two datasets: a "similar" and "dissimilar" dataset, each of which contains pairs of images and similar/dissimilar
 # points in those datasets. Uses the provided network to compute a latent vector for both similar and dissimilar.

@@ -9,7 +9,7 @@ import torchvision
 from kornia import filters
 from torch import nn
 
-from data.byol_attachment import RandomApply
+from data.images.byol_attachment import RandomApply
 from trainer.networks import register_model, create_model
 from utils.util import checkpoint, opt_get
 

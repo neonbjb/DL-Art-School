@@ -11,7 +11,7 @@ from pytorch_fid import fid_score
 
 # Evaluate that feeds a LR structure into the input, then calculates a FID score on the results added to
 # the interpolated LR structure.
-from data.stylegan2_dataset import Stylegan2Dataset
+from data.images.stylegan2_dataset import Stylegan2Dataset
 
 
 class SrStyleTransferEvaluator(evaluator.Evaluator):

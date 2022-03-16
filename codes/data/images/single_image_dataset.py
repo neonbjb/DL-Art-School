@@ -2,8 +2,7 @@ import random
 from bisect import bisect_left
 import numpy as np
 import torch
-from torch.utils import data
-from data.base_unsupervised_image_dataset import BaseUnsupervisedImageDataset
+from data.images.base_unsupervised_image_dataset import BaseUnsupervisedImageDataset
 
 
 # Builds a dataset composed of a set of folders. Each folder represents a single high resolution image that has been

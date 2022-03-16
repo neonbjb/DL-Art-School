@@ -1,11 +1,3 @@
-import glob
-import itertools
-import random
-
-import cv2
-import kornia
-import numpy as np
-import pytorch_ssim
 import torch
 import os
 
@@ -13,14 +5,10 @@ import torchvision
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-from torchvision.transforms import Normalize
 from tqdm import tqdm
 
-from data import util
+
 # Builds a dataset created from a simple folder containing a list of training/test/validation images.
-from data.image_corruptor import ImageCorruptor
-from data.image_label_parser import VsNetImageLabeler
-from utils.util import opt_get
 
 
 class ImagePairWithCorrespondingPointsDataset(Dataset):
@@ -70,7 +58,7 @@ if __name__ == '__main__':
         'path': 'F:\\dlas\\codes\\scripts\\ui\\image_pair_labeler\\results',
         'size': 256
     }
-    output_path = '.'
+    output_path = '..'
 
     ds = DataLoader(ImagePairWithCorrespondingPointsDataset(opt), shuffle=True, num_workers=0)
     for i, d in tqdm(enumerate(ds)):
