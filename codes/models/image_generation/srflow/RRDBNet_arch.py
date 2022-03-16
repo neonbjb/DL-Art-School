@@ -2,7 +2,7 @@ import functools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import models.srflow.module_util as mutil
+import models.image_generation.srflow.module_util as mutil
 from models.arch_util import default_init_weights, ConvGnSilu, ConvGnLelu
 from trainer.networks import register_model
 from utils.util import opt_get

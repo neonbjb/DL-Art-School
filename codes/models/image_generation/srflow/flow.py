@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 
-from models.srflow.FlowActNorms import ActNorm2d
+from models.image_generation.srflow.FlowActNorms import ActNorm2d
 from . import thops
 
 

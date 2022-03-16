@@ -1,7 +1,7 @@
 import torch
 from torch import nn as nn
 
-from models.srflow import thops
+from models.image_generation.srflow import thops
 
 
 class _ActNorm(nn.Module):

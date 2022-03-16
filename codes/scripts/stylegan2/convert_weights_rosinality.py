@@ -13,7 +13,7 @@ import torch
 import numpy as np
 from torchvision import utils
 
-from models.stylegan.stylegan2_rosinality import Generator, Discriminator
+from models.image_generation.stylegan.stylegan2_rosinality import Generator, Discriminator
 
 
 # Converts from the TF state_dict input provided into the vars originally expected from the rosinality converter.
@@ -237,7 +237,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     sys.path.append('scripts\\stylegan2')
 
-    import dnnlib
     from dnnlib.tflib.network import generator, discriminator, gen_ema
 
     with open(args.path, "rb") as f:

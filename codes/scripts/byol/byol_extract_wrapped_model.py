@@ -1,6 +1,5 @@
 import torch
 
-from models.spinenet_arch import SpineNet
 
 def extract_byol_model_from_state_dict(sd):
     wrap_key = 'online_encoder.net.'

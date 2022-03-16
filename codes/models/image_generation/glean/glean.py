@@ -3,13 +3,13 @@ import math
 import torch.nn as nn
 import torch
 
-from models.RRDBNet_arch import RRDB
+from models.image_generation.RRDBNet_arch import RRDB
 from models.arch_util import ConvGnLelu
 
 
 # Produces a convolutional feature (`f`) and a reduced feature map with double the filters.
-from models.glean.stylegan2_latent_bank import Stylegan2LatentBank
-from models.stylegan.stylegan2_rosinality import EqualLinear
+from models.image_generation.glean.stylegan2_latent_bank import Stylegan2LatentBank
+from models.image_generation.stylegan.stylegan2_rosinality import EqualLinear
 from trainer.networks import register_model
 from utils.util import checkpoint, sequential_checkpoint
 

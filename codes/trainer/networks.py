@@ -5,8 +5,6 @@ import pkgutil
 import sys
 from collections import OrderedDict
 from inspect import isfunction, getmembers, signature
-import torch
-import models.feature_arch as feature_arch
 
 logger = logging.getLogger('base')
 

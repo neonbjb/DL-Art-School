@@ -1,7 +1,6 @@
 import torch
 from torch import nn
-import models.SwitchedResidualGenerator_arch as srg
-import models.discriminator_vgg_arch as disc
+import models.image_generation.discriminator_vgg_arch as disc
 import functools
 
 blacklisted_modules = [nn.Conv2d, nn.ReLU, nn.LeakyReLU, nn.BatchNorm2d, nn.Softmax]

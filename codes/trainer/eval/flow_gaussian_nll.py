@@ -6,7 +6,7 @@ import trainer.eval.evaluator as evaluator
 
 # Evaluate how close to true Gaussian a flow network predicts in a "normal" pass given a LQ/HQ image pair.
 from data.image_folder_dataset import ImageFolderDataset
-from models.srflow.flow import GaussianDiag
+from models.image_generation.srflow import GaussianDiag
 
 
 class FlowGaussianNll(evaluator.Evaluator):

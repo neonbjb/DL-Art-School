@@ -1,5 +1,4 @@
 import os
-import shutil
 
 import torch
 import torch.nn as nn
@@ -11,14 +10,12 @@ from torchvision.transforms import ToTensor, Resize
 from tqdm import tqdm
 import numpy as np
 
-import utils
 from data.image_folder_dataset import ImageFolderDataset
-from models.spinenet_arch import SpineNet
+from models.image_latents.spinenet_arch import SpineNet
 
 
 # Computes the structural euclidean distance between [x,y]. "Structural" here means the [h,w] dimensions are preserved
 # and the distance is computed across the channel dimension.
-from utils import util
 from utils.options import dict_to_nonedict
 
 

@@ -20,7 +20,7 @@ from torch import nn, einsum
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from models.stylegan.stylegan2_lucidrains import gradient_penalty
+from models.image_generation.stylegan.stylegan2_lucidrains import gradient_penalty
 from trainer.networks import register_model
 from utils.util import opt_get
 

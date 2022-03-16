@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from models.arch_util import ConvGnLelu
-from models.stylegan.stylegan2_rosinality import Generator
+from models.image_generation.stylegan.stylegan2_rosinality import Generator
 
 
 class Stylegan2LatentBank(nn.Module):

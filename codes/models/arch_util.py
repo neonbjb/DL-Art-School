@@ -1016,3 +1016,17 @@ class FinalUpsampleBlock2x(nn.Module):
 
     def forward(self, x):
         return self.chain(x)
+
+# torch.gather() which operates as it always fucking should have: pulling indexes from the input.
+def gather_2d(input, index):
+    b, c, h, w = input.shape
+    nodim = input.view(b, c, h * w)
+    ind_nd = index[:, 0]*w + index[:, 1]
+    ind_nd = ind_nd.unsqueeze(1)
+    ind_nd = ind_nd.repeat((1, c))
+    ind_nd = ind_nd.unsqueeze(2)
+    result = torch.gather(nodim, dim=2, index=ind_nd)
+    result = result.squeeze()
+    if b == 1:
+        result = result.unsqueeze(0)
+    return result

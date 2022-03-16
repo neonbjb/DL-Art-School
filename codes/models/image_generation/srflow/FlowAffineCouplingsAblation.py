@@ -1,8 +1,8 @@
 import torch
 from torch import nn as nn
 
-from models.srflow import thops
-from models.srflow.flow import Conv2d, Conv2dZeros
+from models.image_generation.srflow import thops
+from models.image_generation.srflow.flow import Conv2d, Conv2dZeros
 from utils.util import opt_get
 
 

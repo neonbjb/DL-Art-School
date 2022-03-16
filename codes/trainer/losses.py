@@ -16,13 +16,13 @@ def create_loss(opt_loss, env):
         from trainer.custom_training_components import create_teco_loss
         return create_teco_loss(opt_loss, env)
     elif 'stylegan2_' in type:
-        from models.stylegan import create_stylegan2_loss
+        from models.image_generation.stylegan import create_stylegan2_loss
         return create_stylegan2_loss(opt_loss, env)
     elif 'style_sr_' in type:
         from models.styled_sr import create_stylesr_loss
         return create_stylesr_loss(opt_loss, env)
     elif 'lightweight_gan_divergence' == type:
-        from models.lightweight_gan import LightweightGanDivergenceLoss
+        from models.image_generation.lightweight_gan import LightweightGanDivergenceLoss
         return LightweightGanDivergenceLoss(opt_loss, env)
     elif type == 'crossentropy' or type == 'cross_entropy':
         return CrossEntropy(opt_loss, env)
@@ -401,7 +401,7 @@ class DiscriminatorGanLoss(ConfigurableLoss):
 
         if self.gradient_penalty:
             # Apply gradient penalty. TODO: migrate this elsewhere.
-            from models.stylegan.stylegan2_lucidrains import gradient_penalty
+            from models.image_generation.stylegan.stylegan2_lucidrains import gradient_penalty
             assert len(real) == 1   # Grad penalty doesn't currently support multi-input discriminators.
             gp, gp_structure = gradient_penalty(real[0], d_real, return_structured_grads=True)
             self.metrics.append(("gradient_penalty", gp.clone().detach()))
