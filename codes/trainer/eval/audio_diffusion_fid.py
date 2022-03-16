@@ -125,7 +125,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
         mel = wav_to_mel(audio)
         mel_codes = convert_mel_to_codes(self.local_modules['dvae'], mel)
         real_resampled = torchaudio.functional.resample(audio, 22050, SAMPLE_RATE).unsqueeze(0)
-        univnet_mel = wav_to_univnet_mel(audio, mel_norms_file=None)  # to be used for a conditioning input
+        univnet_mel = wav_to_univnet_mel(real_resampled, do_normalization=False)  # to be used for a conditioning input, but also guides output shape.
 
         output_size = univnet_mel.shape[-1]
         aligned_codes_compression_factor = output_size // mel_codes.shape[-1]

@@ -388,6 +388,23 @@ class DiffusionTts(nn.Module):
         }
         return groups
 
+    def fix_alignment(self, x, aligned_conditioning):
+        """
+        The UNet requires that the input <x> is a certain multiple of 2, defined by the UNet depth. Enforce this by
+        padding both <x> and <aligned_conditioning> before forward propagation and removing the padding before returning.
+        """
+        cm = ceil_multiple(x.shape[-1], self.alignment_size)
+        if cm != 0:
+            pc = (cm-x.shape[-1])/x.shape[-1]
+            x = F.pad(x, (0,cm-x.shape[-1]))
+            # Also fix aligned_latent, which is aligned to x.
+            if is_latent(aligned_conditioning):
+                aligned_conditioning = torch.cat([aligned_conditioning,
+                                                  self.aligned_latent_padding_embedding.repeat(x.shape[0], 1, int(pc * aligned_conditioning.shape[-1]))], dim=-1)
+            else:
+                aligned_conditioning = F.pad(aligned_conditioning, (0,int(pc*aligned_conditioning.shape[-1])))
+        return x, aligned_conditioning
+
     def forward(self, x, timesteps, aligned_conditioning, conditioning_input, lr_input=None, conditioning_free=False):
         """
         Apply the model to an input batch.
@@ -415,16 +432,7 @@ class DiffusionTts(nn.Module):
 
         # Fix input size to the proper multiple of 2 so we don't get alignment errors going down and back up the U-net.
         orig_x_shape = x.shape[-1]
-        cm = ceil_multiple(x.shape[-1], self.alignment_size)
-        if cm != 0:
-            pc = (cm-x.shape[-1])/x.shape[-1]
-            x = F.pad(x, (0,cm-x.shape[-1]))
-            # Also fix aligned_latent, which is aligned to x.
-            if is_latent(aligned_conditioning):
-                aligned_conditioning = torch.cat([aligned_conditioning,
-                                                  self.aligned_latent_padding_embedding.repeat(x.shape[0], 1, int(pc * aligned_conditioning.shape[-1]))], dim=-1)
-            else:
-                aligned_conditioning = F.pad(aligned_conditioning, (0,int(pc*aligned_conditioning.shape[-1])))
+        x, aligned_conditioning = self.fix_alignment(x, aligned_conditioning)
 
         with autocast(x.device.type, enabled=self.enable_fp16):
 

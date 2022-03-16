@@ -304,7 +304,7 @@ class ConfigurableStep(Module):
             return
         self.grads_generated = False
         for opt in self.optimizers:
-            self.scaler.unscale_(opt)
+            # self.scaler.unscale_(opt) It would be important to do this here, but ExtensibleTrainer currently does it.
             
             # Optimizers can be opted out in the early stages of training.
             after = opt._config['after'] if 'after' in opt._config.keys() else 0

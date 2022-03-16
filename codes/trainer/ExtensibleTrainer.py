@@ -314,6 +314,11 @@ class ExtensibleTrainer(BaseModel):
                     if hasattr(net.module, "before_step"):
                         net.module.before_step(it)
 
+                # Unscale gradients within the step. (This is admittedly pretty messy but the API contract between step & ET is pretty much broken at this point)
+                # This is needed to accurately log the grad norms.
+                for opt in step.optimizers:
+                    step.scaler.unscale_(opt)
+
                 if return_grad_norms and train_step:
                     for name in nets_to_train:
                         model = self.networks[name]
