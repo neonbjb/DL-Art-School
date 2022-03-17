@@ -101,21 +101,14 @@ class ResBlock(TimestepBlock):
 
 
 class DiffusionLayer(nn.Module):
-    def __init__(self, model_channels, aligned_channels, cond_channels, dropout, num_heads):
+    def __init__(self, model_channels, dropout, num_heads):
         super().__init__()
-        self.aligned_mutation = zero_module(conv_nd(1, aligned_channels, model_channels, 1))
-        self.cond_mutation = zero_module(conv_nd(1, cond_channels, model_channels, 1))
-        self.inp_mutation = conv_nd(1, model_channels, model_channels, 1)
         self.resblk = ResBlock(model_channels, model_channels, dropout, model_channels, dims=1, use_scale_shift_norm=True)
         self.attn = AttentionBlock(model_channels, num_heads)
 
-    def forward(self, x, aligned, pointwise, time_emb):
-        a = self.aligned_mutation(aligned)
-        c = self.cond_mutation(pointwise.unsqueeze(-1))
-        f = self.inp_mutation(x)
-        y = self.resblk(f + c.repeat(1,1,f.shape[-1]) + F.interpolate(a, size=f.shape[-1], mode='nearest'), time_emb)
-        y = self.attn(y)
-        return y
+    def forward(self, x, time_emb):
+        y = self.resblk(x, time_emb)
+        return self.attn(y)
 
 
 class DiffusionTtsFlat(nn.Module):
@@ -147,8 +140,8 @@ class DiffusionTtsFlat(nn.Module):
         self.enable_fp16 = use_fp16
         self.layer_drop = layer_drop
 
-        self.inp_block = conv_nd(1, in_channels, model_channels, 3, 1, 1)
-        self.position_embed = nn.Embedding(max_positions, model_channels)
+        self.inp_block = conv_nd(1, in_channels, model_channels//2, 3, 1, 1)
+        self.position_embed = nn.Embedding(max_positions, model_channels//2)
         self.time_embed = nn.Embedding(max_timesteps, model_channels)
 
         # Either code_converter or latent_converter is used, depending on what type of conditioning data is fed.
@@ -171,7 +164,8 @@ class DiffusionTtsFlat(nn.Module):
                     ff_glu=True,
                     rotary_emb_dim=True,
                 )
-            ))
+            )
+        )
         self.latent_converter = nn.Conv1d(in_latent_channels, model_channels, 1)
         if in_channels > 60:  # It's a spectrogram.
             self.contextual_embedder = nn.Sequential(nn.Conv1d(in_channels,model_channels,3,padding=1,stride=2),
@@ -196,14 +190,14 @@ class DiffusionTtsFlat(nn.Module):
         self.conditioning_conv = nn.Conv1d(model_channels*2, model_channels, 1)
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,1))
         self.conditioning_timestep_integrator = TimestepEmbedSequential(
-                    ResBlock(model_channels, model_channels, dropout, out_channels=model_channels, dims=1, kernel_size=1, use_scale_shift_norm=True),
-                    AttentionBlock(model_channels, num_heads=num_heads),
-                    ResBlock(model_channels, model_channels, dropout, out_channels=model_channels, dims=1, kernel_size=1, use_scale_shift_norm=True),
-                    AttentionBlock(model_channels, num_heads=num_heads),
-                    ResBlock(model_channels, model_channels, dropout, out_channels=model_channels, dims=1, kernel_size=1, use_scale_shift_norm=True),
+            ResBlock(model_channels, model_channels, dropout, out_channels=model_channels, dims=1, kernel_size=1, use_scale_shift_norm=True),
+            AttentionBlock(model_channels, num_heads=num_heads),
+            ResBlock(model_channels, model_channels, dropout, out_channels=model_channels, dims=1, kernel_size=1, use_scale_shift_norm=True),
+            AttentionBlock(model_channels, num_heads=num_heads),
+            ResBlock(model_channels, model_channels, dropout, out_channels=model_channels//2, dims=1, kernel_size=1, use_scale_shift_norm=True),
         )
 
-        self.layers = nn.ModuleList([DiffusionLayer(model_channels, model_channels, model_channels, dropout, num_heads) for _ in range(num_layers)])
+        self.layers = nn.ModuleList([DiffusionLayer(model_channels, dropout, num_heads) for _ in range(num_layers)])
 
         self.out = nn.Sequential(
             normalization(model_channels),
@@ -259,19 +253,19 @@ class DiffusionTtsFlat(nn.Module):
                                    code_emb)
 
         # Everything after this comment is timestep dependent.
-        x = self.inp_block(x)
-        pos_emb = self.position_embed(torch.arange(0, x.shape[-1], device=x.device)).unsqueeze(0).repeat(x.shape[0],1,1).permute(0,2,1)
-        x = x + pos_emb
         time_emb = self.time_embed(timesteps)
         code_emb = self.conditioning_timestep_integrator(code_emb, time_emb)
+        pos_emb = self.position_embed(torch.arange(0, x.shape[-1], device=x.device)).unsqueeze(0).repeat(x.shape[0],1,1).permute(0,2,1)
+        x = self.inp_block(x) + pos_emb
+        x = torch.cat([x, F.interpolate(code_emb, size=x.shape[-1], mode='nearest')], dim=1)
         for i, lyr in enumerate(self.layers):
             # Do layer drop where applicable. Do not drop first and last layers.
-            if self.layer_drop > 0 and i != 0 and i != (len(self.layers)-1) and random.random() < self.layer_drop:
+            if self.training and self.layer_drop > 0 and i != 0 and i != (len(self.layers)-1) and random.random() < self.layer_drop:
                 unused_params.extend(list(lyr.parameters()))
             else:
                 # First and last blocks will have autocast disabled for improved precision.
                 with autocast(x.device.type, enabled=self.enable_fp16 and i != 0):
-                    x = lyr(x, code_emb, cond_emb, time_emb)
+                    x = lyr(x, time_emb)
 
         x = x.float()
         out = self.out(x)

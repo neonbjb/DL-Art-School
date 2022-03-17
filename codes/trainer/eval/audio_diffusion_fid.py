@@ -129,12 +129,15 @@ class AudioDiffusionFid(evaluator.Evaluator):
 
         output_size = univnet_mel.shape[-1]
         aligned_codes_compression_factor = output_size // mel_codes.shape[-1]
-        padded_size = ceil_multiple(output_size, self.model.alignment_size)
-        padding_added = padded_size - output_size
-        padding_needed_for_codes = padding_added // aligned_codes_compression_factor
-        if padding_needed_for_codes > 0:
-            mel_codes = F.pad(mel_codes, (0, padding_needed_for_codes))
-        output_shape = (1, 100, padded_size)
+        if hasattr(self.model, 'alignment_size'):
+            padded_size = ceil_multiple(output_size, self.model.alignment_size)
+            padding_added = padded_size - output_size
+            padding_needed_for_codes = padding_added // aligned_codes_compression_factor
+            if padding_needed_for_codes > 0:
+                mel_codes = F.pad(mel_codes, (0, padding_needed_for_codes))
+            output_shape = (1, 100, padded_size)
+        else:
+            output_shape = univnet_mel.shape
         gen_mel = self.diffuser.p_sample_loop(self.model, output_shape,
                                     model_kwargs={'aligned_conditioning': mel_codes,
                                                   'conditioning_input': univnet_mel})
