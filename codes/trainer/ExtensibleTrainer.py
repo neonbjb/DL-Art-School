@@ -327,7 +327,13 @@ class ExtensibleTrainer(BaseModel):
                         else:
                             pgroups = {f'{name}_all_parameters': list(model.parameters())}
                     for name in pgroups.keys():
-                        grad_norms[name] = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2) for p in pgroups[name]]), 2)
+                        stacked_grads = []
+                        for p in pgroups[name]:
+                            if hasattr(p, 'grad') and p.grad is not None:
+                                stacked_grads.append(torch.norm(p.grad.detach(), 2))
+                        if not stacked_grads:
+                            continue
+                        grad_norms[name] = torch.norm(torch.stack(stacked_grads), 2)
                         if distributed.is_available() and distributed.is_initialized():
                             # Gather the metric from all devices if in a distributed setting.
                             distributed.all_reduce(grad_norms[name], op=distributed.ReduceOp.SUM)
