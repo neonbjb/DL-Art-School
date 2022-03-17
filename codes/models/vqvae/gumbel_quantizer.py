@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import einsum
 
-from models.switched_conv.switched_conv_hard_routing import SwitchNorm
 from utils.weight_scheduler import LinearDecayWeightScheduler
 
 
@@ -48,7 +47,6 @@ class GumbelQuantizer(nn.Module):
         return sampled.permute(0,2,1), 0, codes
 
 if __name__ == '__main__':
-    from models.diffusion.diffusion_dvae import DiscreteDecoder
     j =  torch.randn(8,40,1024)
     m = GumbelQuantizer(1024, 1024, 4096)
     m2 = DiscreteDecoder(1024, (512, 256), 2)

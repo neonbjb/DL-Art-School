@@ -11,7 +11,6 @@ from torchvision.models.resnet import Bottleneck
 from models.arch_util import make_layer, default_init_weights, ConvGnSilu, ConvGnLelu
 from trainer.networks import register_model
 from utils.util import checkpoint, sequential_checkpoint, opt_get
-from models.switched_conv.switched_conv import SwitchedConv
 
 
 class ResidualDenseBlock(nn.Module):
