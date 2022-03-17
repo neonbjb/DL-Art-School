@@ -6,7 +6,6 @@ from tqdm import tqdm
 import trainer.eval.evaluator as evaluator
 
 from data.images.image_pair_with_corresponding_points_dataset import ImagePairWithCorrespondingPointsDataset
-from models.segformer.segformer import Segformer
 
 
 # Uses two datasets: a "similar" and "dissimilar" dataset, each of which contains pairs of images and similar/dissimilar
