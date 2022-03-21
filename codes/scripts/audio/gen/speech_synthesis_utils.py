@@ -22,7 +22,7 @@ def load_speech_dvae():
 
 def load_univnet_vocoder():
     model = UnivNetGenerator()
-    sd = torch.load('../experiments/univnet_c32_pretrained_libri.pt')
+    sd = torch.load('../experiments/univnet_c32_pretrained_libri.pt', map_location='cpu')
     model.load_state_dict(sd['model_g'])
     model = model.cpu()
     model.eval(inference=True)
