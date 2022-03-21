@@ -80,6 +80,7 @@ class DiffusionTtsFlat(nn.Module):
         self.contextual_embedder = nn.Sequential(nn.Conv1d(in_channels,model_channels,3,padding=1,stride=2),
                                                  CheckpointedXTransformerEncoder(
                                                      needs_permute=True,
+                                                     checkpoint=False,  # This is repeatedly executed for many conditioning signals, which is incompatible with checkpointing & DDP.
                                                      max_seq_len=-1,
                                                      use_pos_emb=False,
                                                      attn_layers=Encoder(
@@ -166,18 +167,16 @@ class DiffusionTtsFlat(nn.Module):
             conds = []
             for j in range(speech_conditioning_input.shape[1]):
                 conds.append(self.contextual_embedder(speech_conditioning_input[:, j]))
-            conds = torch.stack(conds, dim=1)
-            cond_emb = conds.mean(dim=1)
+            conds = torch.cat(conds, dim=-1)
+            cond_emb = conds.mean(dim=-1).unsqueeze(-1)
 
-            if len(cond_emb.shape) == 3:  # Just take the first element.
-                cond_emb = cond_emb[:, :, 0]
             if is_latent(aligned_conditioning):
                 code_emb = self.latent_converter(aligned_conditioning)
                 unused_params.extend(list(self.code_converter.parameters()))
             else:
                 code_emb = self.code_converter(aligned_conditioning)
                 unused_params.extend(list(self.latent_converter.parameters()))
-            cond_emb_spread = cond_emb.unsqueeze(-1).repeat(1, 1, code_emb.shape[-1])
+            cond_emb_spread = cond_emb.repeat(1, 1, code_emb.shape[-1])
             code_emb = self.conditioning_conv(torch.cat([cond_emb_spread, code_emb], dim=1))
 
         # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.

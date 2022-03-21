@@ -157,6 +157,7 @@ class DiffusionTts(nn.Module):
             kernel_size=3,
             scale_factor=2,
             time_embed_dim_multiplier=4,
+            freeze_main_net=False,
             efficient_convs=True,  # Uses kernels with width of 1 in several places rather than 3.
             use_scale_shift_norm=True,
             # Parameters for regularization.
@@ -188,6 +189,7 @@ class DiffusionTts(nn.Module):
         self.unconditioned_percentage = unconditioned_percentage
         self.enable_fp16 = use_fp16
         self.alignment_size = 2 ** (len(channel_mult)+1)
+        self.freeze_main_net = freeze_main_net
         padding = 1 if kernel_size == 3 else 2
         down_kernel = 1 if efficient_convs else 3
 
@@ -379,7 +381,17 @@ class DiffusionTts(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
 
+        if self.freeze_main_net:
+            mains = [self.time_embed, self.contextual_embedder, self.conditioning_conv, self.unconditioned_embedding, self.conditioning_timestep_integrator,
+                     self.input_blocks, self.middle_block, self.output_blocks, self.out]
+            for m in mains:
+                for p in m.parameters():
+                    p.requires_grad = False
+                    p.DO_NOT_TRAIN = True
+
     def get_grad_norm_parameter_groups(self):
+        if self.freeze_main_net:
+            return {}
         groups = {
             'minicoder': list(self.contextual_embedder.parameters()),
             'input_blocks': list(self.input_blocks.parameters()),
