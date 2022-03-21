@@ -76,28 +76,26 @@ class DiffusionTtsFlat(nn.Module):
             )
         )
         self.latent_converter = nn.Conv1d(in_latent_channels, model_channels, 1)
-        if in_channels > 60:  # It's a spectrogram.
-            self.contextual_embedder = nn.Sequential(nn.Conv1d(in_channels,model_channels,3,padding=1,stride=2),
-                                                     CheckpointedXTransformerEncoder(
-                                                         needs_permute=True,
-                                                         max_seq_len=-1,
-                                                         use_pos_emb=False,
-                                                         attn_layers=Encoder(
-                                                             dim=model_channels,
-                                                             depth=4,
-                                                             heads=num_heads,
-                                                             ff_dropout=dropout,
-                                                             attn_dropout=dropout,
-                                                             use_rmsnorm=True,
-                                                             ff_glu=True,
-                                                             rotary_emb_dim=True,
-                                                         )
-                                                     ))
-        else:
-            self.contextual_embedder = AudioMiniEncoder(1, model_channels, base_channels=32, depth=6, resnet_blocks=1,
-                                                        attn_blocks=3, num_attn_heads=8, dropout=dropout, downsample_factor=4, kernel_size=5)
+        # The contextual embedder processes a sample MEL that the output should be "like".
+        self.contextual_embedder = nn.Sequential(nn.Conv1d(in_channels,model_channels,3,padding=1,stride=2),
+                                                 CheckpointedXTransformerEncoder(
+                                                     needs_permute=True,
+                                                     max_seq_len=-1,
+                                                     use_pos_emb=False,
+                                                     attn_layers=Encoder(
+                                                         dim=model_channels,
+                                                         depth=4,
+                                                         heads=num_heads,
+                                                         ff_dropout=dropout,
+                                                         attn_dropout=dropout,
+                                                         use_rmsnorm=True,
+                                                         ff_glu=True,
+                                                         rotary_emb_dim=True,
+                                                     )
+                                                 ))
         self.conditioning_conv = nn.Conv1d(model_channels*2, model_channels, 1)
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,1))
+        # This is a further encoder extension that integrates a timestep signal into the conditioning signal.
         self.conditioning_timestep_integrator = CheckpointedXTransformerEncoder(
                 needs_permute=True,
                 max_seq_len=-1,
@@ -117,6 +115,7 @@ class DiffusionTtsFlat(nn.Module):
             )
         self.integrate_conditioning = nn.Conv1d(model_channels*2, model_channels, 1)
 
+        # This is the main processing module.
         self.layers = CheckpointedXTransformerEncoder(
                 needs_permute=True,
                 max_seq_len=-1,
@@ -151,18 +150,7 @@ class DiffusionTtsFlat(nn.Module):
         }
         return groups
 
-    def forward(self, x, timesteps, aligned_conditioning, conditioning_input, conditioning_free=False):
-        """
-        Apply the model to an input batch.
-
-        :param x: an [N x C x ...] Tensor of inputs.
-        :param timesteps: a 1-D batch of timesteps.
-        :param aligned_conditioning: an aligned latent or sequence of tokens providing useful data about the sample to be produced.
-        :param conditioning_input: a full-resolution audio clip that is used as a reference to the style you want decoded.
-        :param lr_input: for super-sampling models, a guidance audio clip at a lower sampling rate.
-        :param conditioning_free: When set, all conditioning inputs (including tokens and conditioning_input) will not be considered.
-        :return: an [N x C x ...] Tensor of outputs.
-        """
+    def get_conditioning_encodings(self, aligned_conditioning, conditioning_input, conditioning_free, return_unused=False):
         # Shuffle aligned_latent to BxCxS format
         if is_latent(aligned_conditioning):
             aligned_conditioning = aligned_conditioning.permute(0, 2, 1)
@@ -184,14 +172,31 @@ class DiffusionTtsFlat(nn.Module):
                 unused_params.extend(list(self.latent_converter.parameters()))
             cond_emb_spread = cond_emb.unsqueeze(-1).repeat(1, 1, code_emb.shape[-1])
             code_emb = self.conditioning_conv(torch.cat([cond_emb_spread, code_emb], dim=1))
+
         # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
         if self.training and self.unconditioned_percentage > 0:
             unconditioned_batches = torch.rand((code_emb.shape[0], 1, 1),
                                                device=code_emb.device) < self.unconditioned_percentage
-            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(x.shape[0], 1, 1),
+            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(conditioning_input.shape[0], 1, 1),
                                    code_emb)
 
-        # Everything after this comment is timestep dependent.
+        if return_unused:
+            return code_emb, unused_params
+        return code_emb
+
+    def forward(self, x, timesteps, aligned_conditioning, conditioning_input, conditioning_free=False):
+        """
+        Apply the model to an input batch.
+
+        :param x: an [N x C x ...] Tensor of inputs.
+        :param timesteps: a 1-D batch of timesteps.
+        :param aligned_conditioning: an aligned latent or sequence of tokens providing useful data about the sample to be produced.
+        :param conditioning_input: a full-resolution audio clip that is used as a reference to the style you want decoded.
+        :param conditioning_free: When set, all conditioning inputs (including tokens and conditioning_input) will not be considered.
+        :return: an [N x C x ...] Tensor of outputs.
+        """
+        code_emb, unused_params = self.get_conditioning_encodings(aligned_conditioning, conditioning_input, conditioning_free, return_unused=True)
+        # Everything after this comment is timestep-dependent.
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         code_emb = self.conditioning_timestep_integrator(code_emb, time_emb=time_emb)
         x = self.inp_block(x)
