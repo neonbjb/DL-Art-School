@@ -1,20 +1,13 @@
-import random
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import autocast
 from x_transformers import Encoder
 
 from models.audio.tts.diffusion_encoder import TimestepEmbeddingAttentionLayers
-from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, \
-    Downsample, Upsample, TimestepBlock
 from models.audio.tts.mini_encoder import AudioMiniEncoder
 from models.audio.tts.unet_diffusion_tts7 import CheckpointedXTransformerEncoder
-from scripts.audio.gen.use_diffuse_tts import ceil_multiple
+from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from trainer.networks import register_model
-from utils.util import checkpoint
 
 
 def is_latent(t):
@@ -139,8 +132,10 @@ class DiffusionTtsFlat(nn.Module):
                     ff_glu=True,
                     rotary_emb_dim=True,
                     layerdrop_percent=layer_drop,
+                    zero_init_branch_output=True,
                 )
             )
+        self.layers.transformer.norm = nn.Identity()  # We don't want the final norm for the main encoder.
 
         self.out = nn.Sequential(
             normalization(model_channels),
@@ -151,11 +146,12 @@ class DiffusionTtsFlat(nn.Module):
     def get_grad_norm_parameter_groups(self):
         groups = {
             'minicoder': list(self.contextual_embedder.parameters()),
-            'layers': list(self.layers),
+            'conditioning_timestep_integrator': list(self.conditioning_timestep_integrator.parameters()),
+            'layers': list(self.layers.parameters()),
         }
         return groups
 
-    def forward(self, x, timesteps, aligned_conditioning, conditioning_input, lr_input=None, conditioning_free=False):
+    def forward(self, x, timesteps, aligned_conditioning, conditioning_input, conditioning_free=False):
         """
         Apply the model to an input batch.
 

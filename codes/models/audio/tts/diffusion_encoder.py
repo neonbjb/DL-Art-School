@@ -8,7 +8,7 @@ import torch.nn as nn
 from x_transformers.x_transformers import groupby_prefix_and_trim, FixedPositionalEmbedding, default, RotaryEmbedding, \
     DEFAULT_DIM_HEAD, RelativePositionBias, LearnedAlibiPositionalBias, AlibiPositionalBias, ScaleNorm, RMSNorm, Rezero, \
     exists, Attention, FeedForward, Scale, ShiftTokens, GRUGating, Residual, cast_tuple, equals, LayerIntermediates, \
-    AttentionLayers
+    AttentionLayers, not_equals
 
 
 class TimeIntegrationBlock(nn.Module):
@@ -138,19 +138,16 @@ class TimestepEmbeddingAttentionLayers(AttentionLayers):
             default_block = ('f',) + default_block
 
         # qk normalization
-
         if use_qk_norm_attn:
             attn_scale_init_value = -math.log(math.log2(qk_norm_attn_seq_len ** 2 - qk_norm_attn_seq_len)) if exists(qk_norm_attn_seq_len) else None
             attn_kwargs = {**attn_kwargs, 'qk_norm': True, 'scale_init_value': attn_scale_init_value}
 
         # zero init
-
         if zero_init_branch_output:
             attn_kwargs = {**attn_kwargs, 'zero_init_output':  True}
             ff_kwargs = {**ff_kwargs, 'zero_init_output':  True}
 
         # calculate layer block order
-
         if exists(custom_layers):
             layer_types = custom_layers
         elif exists(par_ratio):
@@ -174,7 +171,6 @@ class TimestepEmbeddingAttentionLayers(AttentionLayers):
         self.num_attn_layers = len(list(filter(equals('a'), layer_types)))
 
         # calculate token shifting
-
         shift_tokens = cast_tuple(shift_tokens, len(layer_types))
 
         # iterate and construct layers
