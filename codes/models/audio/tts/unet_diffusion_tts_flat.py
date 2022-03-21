@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch import autocast
 from x_transformers import Encoder
 
+from models.audio.tts.diffusion_encoder import TimestepEmbeddingAttentionLayers
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, \
     Downsample, Upsample, TimestepBlock
@@ -23,94 +24,6 @@ def is_sequence(t):
     return t.dtype == torch.long
 
 
-class ResBlock(TimestepBlock):
-    def __init__(
-        self,
-        channels,
-        emb_channels,
-        dropout,
-        out_channels=None,
-        dims=2,
-        kernel_size=3,
-        efficient_config=True,
-        use_scale_shift_norm=False,
-    ):
-        super().__init__()
-        self.channels = channels
-        self.emb_channels = emb_channels
-        self.dropout = dropout
-        self.out_channels = out_channels or channels
-        self.use_scale_shift_norm = use_scale_shift_norm
-        padding = {1: 0, 3: 1, 5: 2}[kernel_size]
-        eff_kernel = 1 if efficient_config else 3
-        eff_padding = 0 if efficient_config else 1
-
-        self.in_layers = nn.Sequential(
-            normalization(channels),
-            nn.SiLU(),
-            conv_nd(dims, channels, self.out_channels, eff_kernel, padding=eff_padding),
-        )
-
-        self.emb_layers = nn.Sequential(
-            nn.SiLU(),
-            linear(
-                emb_channels,
-                2 * self.out_channels if use_scale_shift_norm else self.out_channels,
-            ),
-        )
-        self.out_layers = nn.Sequential(
-            normalization(self.out_channels),
-            nn.SiLU(),
-            nn.Dropout(p=dropout),
-            zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
-            ),
-        )
-
-        if self.out_channels == channels:
-            self.skip_connection = nn.Identity()
-        else:
-            self.skip_connection = conv_nd(dims, channels, self.out_channels, eff_kernel, padding=eff_padding)
-
-    def forward(self, x, emb):
-        """
-        Apply the block to a Tensor, conditioned on a timestep embedding.
-
-        :param x: an [N x C x ...] Tensor of features.
-        :param emb: an [N x emb_channels] Tensor of timestep embeddings.
-        :return: an [N x C x ...] Tensor of outputs.
-        """
-        return checkpoint(
-            self._forward, x, emb
-        )
-
-    def _forward(self, x, emb):
-        h = self.in_layers(x)
-        emb_out = self.emb_layers(emb).type(h.dtype)
-        while len(emb_out.shape) < len(h.shape):
-            emb_out = emb_out[..., None]
-        if self.use_scale_shift_norm:
-            out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
-            scale, shift = torch.chunk(emb_out, 2, dim=1)
-            h = out_norm(h) * (1 + scale) + shift
-            h = out_rest(h)
-        else:
-            h = h + emb_out
-            h = self.out_layers(h)
-        return self.skip_connection(x) + h
-
-
-class DiffusionLayer(nn.Module):
-    def __init__(self, model_channels, dropout, num_heads):
-        super().__init__()
-        self.resblk = ResBlock(model_channels, model_channels, dropout, model_channels, dims=1, use_scale_shift_norm=True)
-        self.attn = AttentionBlock(model_channels, num_heads)
-
-    def forward(self, x, time_emb):
-        y = self.resblk(x, time_emb)
-        return self.attn(y)
-
-
 class DiffusionTtsFlat(nn.Module):
     def __init__(
             self,
@@ -120,7 +33,6 @@ class DiffusionTtsFlat(nn.Module):
             in_latent_channels=512,
             in_tokens=8193,
             max_timesteps=4000,
-            max_positions=4000,
             out_channels=200,  # mean and variance
             dropout=0,
             use_fp16=False,
@@ -140,9 +52,13 @@ class DiffusionTtsFlat(nn.Module):
         self.enable_fp16 = use_fp16
         self.layer_drop = layer_drop
 
-        self.inp_block = conv_nd(1, in_channels, model_channels//2, 3, 1, 1)
-        self.position_embed = nn.Embedding(max_positions, model_channels//2)
-        self.time_embed = nn.Embedding(max_timesteps, model_channels)
+        self.inp_block = nn.Conv1d(in_channels, model_channels, kernel_size=3, padding=1)
+        time_embed_dim = model_channels
+        self.time_embed = nn.Sequential(
+            linear(model_channels, time_embed_dim),
+            nn.SiLU(),
+            linear(time_embed_dim, time_embed_dim),
+        )
 
         # Either code_converter or latent_converter is used, depending on what type of conditioning data is fed.
         # This model is meant to be able to be trained on both for efficiency purposes - it is far less computationally
@@ -189,15 +105,42 @@ class DiffusionTtsFlat(nn.Module):
                                                         attn_blocks=3, num_attn_heads=8, dropout=dropout, downsample_factor=4, kernel_size=5)
         self.conditioning_conv = nn.Conv1d(model_channels*2, model_channels, 1)
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,1))
-        self.conditioning_timestep_integrator = TimestepEmbedSequential(
-            ResBlock(model_channels, model_channels, dropout, out_channels=model_channels, dims=1, kernel_size=1, use_scale_shift_norm=True),
-            AttentionBlock(model_channels, num_heads=num_heads),
-            ResBlock(model_channels, model_channels, dropout, out_channels=model_channels, dims=1, kernel_size=1, use_scale_shift_norm=True),
-            AttentionBlock(model_channels, num_heads=num_heads),
-            ResBlock(model_channels, model_channels, dropout, out_channels=model_channels//2, dims=1, kernel_size=1, use_scale_shift_norm=True),
-        )
+        self.conditioning_timestep_integrator = CheckpointedXTransformerEncoder(
+                needs_permute=True,
+                max_seq_len=-1,
+                use_pos_emb=False,
+                attn_layers=TimestepEmbeddingAttentionLayers(
+                    dim=model_channels,
+                    timestep_dim=time_embed_dim,
+                    depth=3,
+                    heads=num_heads,
+                    ff_dropout=dropout,
+                    attn_dropout=dropout,
+                    use_rmsnorm=True,
+                    ff_glu=True,
+                    rotary_emb_dim=True,
+                    layerdrop_percent=0,
+                )
+            )
+        self.integrate_conditioning = nn.Conv1d(model_channels*2, model_channels, 1)
 
-        self.layers = nn.ModuleList([DiffusionLayer(model_channels, dropout, num_heads) for _ in range(num_layers)])
+        self.layers = CheckpointedXTransformerEncoder(
+                needs_permute=True,
+                max_seq_len=-1,
+                use_pos_emb=False,
+                attn_layers=TimestepEmbeddingAttentionLayers(
+                    dim=model_channels,
+                    timestep_dim=time_embed_dim,
+                    depth=num_layers,
+                    heads=num_heads,
+                    ff_dropout=dropout,
+                    attn_dropout=dropout,
+                    use_rmsnorm=True,
+                    ff_glu=True,
+                    rotary_emb_dim=True,
+                    layerdrop_percent=layer_drop,
+                )
+            )
 
         self.out = nn.Sequential(
             normalization(model_channels),
@@ -253,20 +196,12 @@ class DiffusionTtsFlat(nn.Module):
                                    code_emb)
 
         # Everything after this comment is timestep dependent.
-        time_emb = self.time_embed(timesteps)
-        code_emb = self.conditioning_timestep_integrator(code_emb, time_emb)
-        pos_emb = self.position_embed(torch.arange(0, x.shape[-1], device=x.device)).unsqueeze(0).repeat(x.shape[0],1,1).permute(0,2,1)
-        x = self.inp_block(x) + pos_emb
-        x = torch.cat([x, F.interpolate(code_emb, size=x.shape[-1], mode='nearest')], dim=1)
-        for i, lyr in enumerate(self.layers):
-            # Do layer drop where applicable. Do not drop first and last layers.
-            if self.training and self.layer_drop > 0 and i != 0 and i != (len(self.layers)-1) and random.random() < self.layer_drop:
-                unused_params.extend(list(lyr.parameters()))
-            else:
-                # First and last blocks will have autocast disabled for improved precision.
-                with autocast(x.device.type, enabled=self.enable_fp16 and i != 0):
-                    x = lyr(x, time_emb)
-
+        time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+        code_emb = self.conditioning_timestep_integrator(code_emb, time_emb=time_emb)
+        x = self.inp_block(x)
+        x = self.integrate_conditioning(torch.cat([x, F.interpolate(code_emb, size=x.shape[-1], mode='nearest')], dim=1))
+        with torch.autocast(x.device.type, enabled=self.enable_fp16):
+            x = self.layers(x, time_emb=time_emb)
         x = x.float()
         out = self.out(x)
 
