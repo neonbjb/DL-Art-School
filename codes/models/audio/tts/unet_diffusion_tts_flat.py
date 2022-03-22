@@ -133,7 +133,6 @@ class DiffusionTtsFlat(nn.Module):
                     rotary_pos_emb=True,
                     layerdrop_percent=layer_drop,
                     zero_init_branch_output=True,
-                    sandwich_coef=4,
                 )
             )
         self.layers.transformer.norm = nn.Identity()  # We don't want the final norm for the main encoder.
