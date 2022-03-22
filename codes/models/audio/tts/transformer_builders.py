@@ -21,6 +21,7 @@ Returns:
 
 """
 import functools
+import random
 from time import time
 import torch
 import torch.nn as nn
@@ -32,15 +33,21 @@ def null_position_embeddings(range, dim):
 
 
 class LearnedPositionEmbeddings(nn.Module):
-    def __init__(self, seq_len, model_dim, init=.02):
+    def __init__(self, seq_len, model_dim, init=.02, relative=True):
         super().__init__()
         self.emb = nn.Embedding(seq_len, model_dim)
         # Initializing this way is standard for GPT-2
         self.emb.weight.data.normal_(mean=0.0, std=init)
+        self.relative = relative
+        self.seq_len = seq_len
 
     def forward(self, x):
         sl = x.shape[1]
-        return self.emb(torch.arange(0, sl, device=x.device))
+        if self.relative:
+            start = random.randint(sl, self.seq_len) - sl
+            return self.emb(torch.arange(start, start+sl, device=x.device))
+        else:
+            return self.emb(torch.arange(0, sl, device=x.device))
 
     def get_fixed_embedding(self, ind, dev):
         return self.emb(torch.tensor([ind], device=dev)).unsqueeze(0)

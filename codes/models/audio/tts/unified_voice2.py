@@ -560,22 +560,16 @@ class UnifiedVoice(nn.Module):
         return results * eos_token_mask
 
 
-
 @register_model
 def register_unified_voice2(opt_net, opt):
     return UnifiedVoice(**opt_get(opt_net, ['kwargs'], {}))
 
 
 if __name__ == '__main__':
-    ld = torch.load('attentions.pth')
-    gpt = UnifiedVoice(model_dim=256, heads=4, train_solo_embeddings=True, use_mel_codes_as_input=True, max_conditioning_inputs=4)
-    gpt.convert_attentions_to_aligned_codes(*ld)
-    '''
     gpt = UnifiedVoice(model_dim=256, heads=4, train_solo_embeddings=True, use_mel_codes_as_input=True, max_conditioning_inputs=4)
     l = gpt(torch.randn(2, 3, 80, 800),
-            torch.randint(high=len(symbols), size=(2,120)),
+            torch.randint(high=256, size=(2,120)),
             torch.tensor([32, 120]),
             torch.randint(high=8192, size=(2,250)),
             torch.tensor([250*256,195*256]))
     gpt.text_forward(torch.randn(2,80,800), torch.randint(high=50, size=(2,80)), torch.tensor([32, 80]))
-    '''
