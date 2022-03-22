@@ -219,7 +219,7 @@ class DiffusionTts(nn.Module):
                     attn_dropout=dropout,
                     use_rmsnorm=True,
                     ff_glu=True,
-                    rotary_emb_dim=True,
+                    rotary_pos_emb=True,
                 )
             ))
         self.latent_converter = nn.Conv1d(in_latent_channels, conditioning_dim, 1)
@@ -238,7 +238,7 @@ class DiffusionTts(nn.Module):
                                                              attn_dropout=dropout,
                                                              use_rmsnorm=True,
                                                              ff_glu=True,
-                                                             rotary_emb_dim=True,
+                                                             rotary_pos_emb=True,
                                                          )
                                                      ))
         else:
