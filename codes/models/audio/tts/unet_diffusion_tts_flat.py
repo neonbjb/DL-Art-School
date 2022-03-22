@@ -91,6 +91,7 @@ class DiffusionTtsFlat(nn.Module):
                                                          attn_dropout=dropout,
                                                          use_rmsnorm=True,
                                                          ff_glu=True,
+                                                         ff_mult=2,
                                                          rotary_pos_emb=True,
                                                      )
                                                  ))
@@ -104,12 +105,13 @@ class DiffusionTtsFlat(nn.Module):
                 attn_layers=TimestepEmbeddingAttentionLayers(
                     dim=model_channels,
                     timestep_dim=time_embed_dim,
-                    depth=3,
+                    depth=2,
                     heads=num_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
                     use_rmsnorm=True,
                     ff_glu=True,
+                    ff_mult=2,
                     rotary_pos_emb=True,
                     layerdrop_percent=0,
                 )
@@ -130,6 +132,7 @@ class DiffusionTtsFlat(nn.Module):
                     attn_dropout=dropout,
                     use_rmsnorm=True,
                     ff_glu=True,
+                    ff_mult=2,
                     rotary_pos_emb=True,
                     layerdrop_percent=layer_drop,
                     zero_init_branch_output=True,
