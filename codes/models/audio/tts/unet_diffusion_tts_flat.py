@@ -21,7 +21,7 @@ class DiffusionTtsFlat(nn.Module):
     def __init__(
             self,
             model_channels=512,
-            num_layers=8,
+            num_layers=16,
             in_channels=100,
             in_latent_channels=512,
             in_tokens=8193,
