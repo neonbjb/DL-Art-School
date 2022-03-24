@@ -8,6 +8,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision  # For debugging, not actually used.
+from x_transformers.x_transformers import RelativePositionBias
 
 from models.diffusion.fp16_util import convert_module_to_f16, convert_module_to_f32
 from models.diffusion.nn import (
@@ -297,6 +298,7 @@ class AttentionBlock(nn.Module):
         num_head_channels=-1,
         use_new_attention_order=False,
         do_checkpoint=True,
+        relative_pos_embeddings=False,
     ):
         super().__init__()
         self.channels = channels
@@ -318,6 +320,10 @@ class AttentionBlock(nn.Module):
             self.attention = QKVAttentionLegacy(self.num_heads)
 
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
+        if relative_pos_embeddings:
+            self.relative_pos_embeddings = RelativePositionBias(scale=(channels // self.num_heads) ** .5, causal=False, heads=num_heads, num_buckets=32, max_distance=64)
+        else:
+            self.relative_pos_embeddings = None
 
     def forward(self, x, mask=None):
         if self.do_checkpoint:
@@ -329,7 +335,7 @@ class AttentionBlock(nn.Module):
         b, c, *spatial = x.shape
         x = x.reshape(b, c, -1)
         qkv = self.qkv(self.norm(x))
-        h = self.attention(qkv, mask)
+        h = self.attention(qkv, mask, self.relative_pos_embeddings)
         h = self.proj_out(h)
         return (x + h).reshape(b, c, *spatial)
 
@@ -363,7 +369,7 @@ class QKVAttentionLegacy(nn.Module):
         super().__init__()
         self.n_heads = n_heads
 
-    def forward(self, qkv, mask=None):
+    def forward(self, qkv, mask=None, rel_pos=None):
         """
         Apply QKV attention.
 
@@ -378,6 +384,8 @@ class QKVAttentionLegacy(nn.Module):
         weight = th.einsum(
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
+        if rel_pos is not None:
+            weight = rel_pos(weight.reshape(bs, self.n_heads, weight.shape[-2], weight.shape[-1])).reshape(bs * self.n_heads, weight.shape[-2], weight.shape[-1])
         weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
         if mask is not None:
             # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
@@ -401,7 +409,7 @@ class QKVAttention(nn.Module):
         super().__init__()
         self.n_heads = n_heads
 
-    def forward(self, qkv, mask=None):
+    def forward(self, qkv, mask=None, rel_pos=None):
         """
         Apply QKV attention.
 
@@ -418,6 +426,8 @@ class QKVAttention(nn.Module):
             (q * scale).view(bs * self.n_heads, ch, length),
             (k * scale).view(bs * self.n_heads, ch, length),
         )  # More stable with f16 than dividing afterwards
+        if rel_pos is not None:
+            weight = rel_pos(weight)
         if mask is not None:
             # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
             mask = mask.repeat(self.n_heads, 1).unsqueeze(1)
