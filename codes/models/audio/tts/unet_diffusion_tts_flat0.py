@@ -153,14 +153,15 @@ class DiffusionTtsFlat(nn.Module):
             AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
             AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
         )
+        self.code_norm = normalization(model_channels)
         self.latent_converter = nn.Conv1d(in_latent_channels, model_channels, 1)
         self.contextual_embedder = nn.Sequential(nn.Conv1d(in_channels,model_channels,3,padding=1,stride=2),
-                                                 AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
-                                                 AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
-                                                 AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
-                                                 AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
-                                                 AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True))
-        self.conditioning_conv = nn.Conv1d(model_channels*2, model_channels, 1)
+                                                 nn.Conv1d(model_channels, model_channels*2,3,padding=1,stride=2),
+                                                 AttentionBlock(model_channels*2, num_heads, relative_pos_embeddings=True),
+                                                 AttentionBlock(model_channels*2, num_heads, relative_pos_embeddings=True),
+                                                 AttentionBlock(model_channels*2, num_heads, relative_pos_embeddings=True),
+                                                 AttentionBlock(model_channels*2, num_heads, relative_pos_embeddings=True),
+                                                 AttentionBlock(model_channels*2, num_heads, relative_pos_embeddings=True))
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,1))
         self.conditioning_timestep_integrator = TimestepEmbedSequential(
             DiffusionLayer(model_channels, dropout, num_heads),
@@ -207,9 +208,13 @@ class DiffusionTtsFlat(nn.Module):
             code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, 1)
         else:
             unused_params.append(self.unconditioned_embedding)
-            cond_emb = self.contextual_embedder(conditioning_input)
-            if len(cond_emb.shape) == 3:  # Just take the first element.
-                cond_emb = cond_emb[:, :, 0]
+            speech_conditioning_input = conditioning_input.unsqueeze(1) if len(conditioning_input.shape) == 3 else conditioning_input
+            conds = []
+            for j in range(speech_conditioning_input.shape[1]):
+                conds.append(self.contextual_embedder(speech_conditioning_input[:, j]))
+            conds = torch.cat(conds, dim=-1)
+            cond_emb = conds.mean(dim=-1)
+            cond_scale, cond_shift = torch.chunk(cond_emb, 2, dim=1)
             if is_latent(aligned_conditioning):
                 code_emb = self.latent_converter(aligned_conditioning)
                 unused_params.extend(list(self.code_converter.parameters()) + list(self.code_embedding.parameters()))
@@ -217,8 +222,7 @@ class DiffusionTtsFlat(nn.Module):
                 code_emb = self.code_embedding(aligned_conditioning).permute(0,2,1)
                 code_emb = self.code_converter(code_emb)
                 unused_params.extend(list(self.latent_converter.parameters()))
-            cond_emb_spread = cond_emb.unsqueeze(-1).repeat(1, 1, code_emb.shape[-1])
-            code_emb = self.conditioning_conv(torch.cat([cond_emb_spread, code_emb], dim=1))
+            code_emb = self.code_norm(code_emb) * (1 + cond_scale.unsqueeze(-1)) + cond_shift.unsqueeze(-1)
         # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
         if self.training and self.unconditioned_percentage > 0:
             unconditioned_batches = torch.rand((code_emb.shape[0], 1, 1),
