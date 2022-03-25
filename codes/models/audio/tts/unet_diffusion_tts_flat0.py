@@ -4,12 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import autocast
-from x_transformers import Encoder
-from x_transformers.x_transformers import RelativePositionBias
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, TimestepBlock
-from models.audio.tts.mini_encoder import AudioMiniEncoder
 from trainer.networks import register_model
 from utils.util import checkpoint
 
@@ -189,7 +186,7 @@ class DiffusionTtsFlat(nn.Module):
         }
         return groups
 
-    def forward(self, x, timesteps, aligned_conditioning, conditioning_input, lr_input=None, conditioning_free=False):
+    def forward(self, x, timesteps, aligned_conditioning, conditioning_input, conditioning_free=False):
         """
         Apply the model to an input batch.
 
@@ -197,7 +194,6 @@ class DiffusionTtsFlat(nn.Module):
         :param timesteps: a 1-D batch of timesteps.
         :param aligned_conditioning: an aligned latent or sequence of tokens providing useful data about the sample to be produced.
         :param conditioning_input: a full-resolution audio clip that is used as a reference to the style you want decoded.
-        :param lr_input: for super-sampling models, a guidance audio clip at a lower sampling rate.
         :param conditioning_free: When set, all conditioning inputs (including tokens and conditioning_input) will not be considered.
         :return: an [N x C x ...] Tensor of outputs.
         """

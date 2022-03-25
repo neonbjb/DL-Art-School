@@ -132,7 +132,7 @@ class DiscreteTokenInjector(Injector):
         super().__init__(opt, env)
         cfg = opt_get(opt, ['dvae_config'], "../experiments/train_diffusion_vocoder_22k_level.yml")
         dvae_name = opt_get(opt, ['dvae_name'], 'dvae')
-        self.dvae = load_model_from_config(cfg, dvae_name, device=env['device']).eval()
+        self.dvae = load_model_from_config(cfg, dvae_name, device=f'cuda:{env["device"]}').eval()
 
     def forward(self, state):
         inp = state[self.input]

@@ -260,7 +260,7 @@ class FastPairedVoiceDebugger:
 
 
 if __name__ == '__main__':
-    batch_sz = 256
+    batch_sz = 16
     params = {
         'mode': 'fast_paired_voice_audio',
         'path': ['y:/libritts/train-other-500/transcribed-oco.tsv',
@@ -268,20 +268,19 @@ if __name__ == '__main__':
            'y:/libritts/train-clean-360/transcribed-oco.tsv',
            'y:/clips/books1/transcribed-w2v.tsv',
            'y:/clips/books2/transcribed-w2v.tsv',
-	       'y:/bigasr_dataset/hifi_tts/transcribed-w2v.tsv'],
+	       'y:/bigasr_dataset/hifi_tts/transcribed-w2v.tsv',
+	       'y:/clips/podcasts-1/transcribed-oco.tsv',],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
-        'max_wav_length': 163840,
-        'max_text_length': 200,
+        'max_wav_length': 220500,
+        'max_text_length': 500,
         'sample_rate': 22050,
         'load_conditioning': True,
-        'num_conditioning_candidates': 1,
-        'conditioning_length': 66000,
-        'use_bpe_tokenizer': False,
+        'num_conditioning_candidates': 2,
+        'conditioning_length': 102400,
+        'use_bpe_tokenizer': True,
         'load_aligned_codes': False,
-        'needs_collate': False,
-        'produce_ctc_metadata': False,
     }
     from data import create_dataset, create_dataloader
 
@@ -302,6 +301,8 @@ if __name__ == '__main__':
             #max_repeats = max(max_repeats, b['ctc_repeats'].max())
             print(f'{i} {ib} {b["real_text"][ib]}')
             save(b, i, ib, 'wav')
+            save(b, i, ib, 'conditioning', 0)
+            save(b, i, ib, 'conditioning', 1)
             pass
         if i > 15:
             break
