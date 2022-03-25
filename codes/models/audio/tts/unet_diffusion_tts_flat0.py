@@ -182,7 +182,10 @@ class DiffusionTtsFlat(nn.Module):
     def get_grad_norm_parameter_groups(self):
         groups = {
             'minicoder': list(self.contextual_embedder.parameters()),
-            'layers': list(self.layers),
+            'layers': list(self.layers.parameters()),
+            'code_converters': list(self.code_embedding.parameters()) + list(self.code_converter.parameters()) + list(self.latent_converter.parameters()) + list(self.latent_converter.parameters()),
+            'timestep_integrator': list(self.conditioning_timestep_integrator.parameters()) + list(self.integrating_conv.parameters()),
+            'time_embed': list(self.time_embed.parameters()),
         }
         return groups
 
