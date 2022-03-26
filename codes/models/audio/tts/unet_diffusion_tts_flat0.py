@@ -166,6 +166,7 @@ class DiffusionTtsFlat(nn.Module):
             DiffusionLayer(model_channels, dropout, num_heads),
         )
         self.integrating_conv = nn.Conv1d(model_channels*2, model_channels, kernel_size=1)
+        self.mel_head = nn.Conv1d(model_channels, in_channels, kernel_size=3, padding=1)
 
         self.layers = nn.ModuleList([DiffusionLayer(model_channels, dropout, num_heads) for _ in range(num_layers)] +
                                     [ResBlock(model_channels, model_channels, dropout, dims=1, use_scale_shift_norm=True) for _ in range(3)])
@@ -228,12 +229,14 @@ class DiffusionTtsFlat(nn.Module):
                                                device=code_emb.device) < self.unconditioned_percentage
             code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(x.shape[0], 1, 1),
                                    code_emb)
+        expanded_code_emb = F.interpolate(code_emb, size=x.shape[-1], mode='nearest')
+        mel_pred = self.mel_head(expanded_code_emb)
 
         # Everything after this comment is timestep dependent.
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-        code_emb = self.conditioning_timestep_integrator(code_emb, time_emb)
+        code_emb = self.conditioning_timestep_integrator(expanded_code_emb, time_emb)
         x = self.inp_block(x)
-        x = torch.cat([x, F.interpolate(code_emb, size=x.shape[-1], mode='nearest')], dim=1)
+        x = torch.cat([x, code_emb], dim=1)
         x = self.integrating_conv(x)
         for i, lyr in enumerate(self.layers):
             # Do layer drop where applicable. Do not drop first and last layers.
@@ -253,7 +256,7 @@ class DiffusionTtsFlat(nn.Module):
             extraneous_addition = extraneous_addition + p.mean()
         out = out + extraneous_addition * 0
 
-        return out
+        return out, mel_pred
 
 
 @register_model
@@ -269,7 +272,7 @@ if __name__ == '__main__':
     ts = torch.LongTensor([600, 600])
     model = DiffusionTtsFlat(512, layer_drop=.3)
     # Test with latent aligned conditioning
-    o = model(clip, ts, aligned_latent, cond)
+    #o = model(clip, ts, aligned_latent, cond)
     # Test with sequence aligned conditioning
     o = model(clip, ts, aligned_sequence, cond)
 

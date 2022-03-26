@@ -241,12 +241,13 @@ class ConfigurableStep(Module):
             # Finally, compute the losses.
             total_loss = 0
             for loss_name, loss in self.losses.items():
+                multiplier = 1
                 # Some losses only activate after a set number of steps. For example, proto-discriminator losses can
                 # be very disruptive to a generator.
                 if 'after' in loss.opt.keys() and loss.opt['after'] > self.env['step'] or \
                    'before' in loss.opt.keys() and self.env['step'] > loss.opt['before'] or \
                    'every' in loss.opt.keys() and self.env['step'] % loss.opt['every'] != 0:
-                    continue
+                    multiplier = 0  # Multiply by 0 so gradients still flow and DDP works. Effectively this means the loss is unused.
                 if loss.is_stateful():
                     l, lstate = loss(self.get_network_for_name(self.step_opt['training']), local_state)
                     local_state.update(lstate)
@@ -255,7 +256,7 @@ class ConfigurableStep(Module):
                     l = loss(self.get_network_for_name(self.step_opt['training']), local_state)
                 if not l.isfinite():
                     print(f'!!Detected non-finite loss {loss_name}')
-                total_loss += l * self.weights[loss_name]
+                total_loss += l * self.weights[loss_name] * multiplier
                 # Record metrics.
                 if isinstance(l, torch.Tensor):
                     loss_accumulator.add_loss(loss_name, l)
