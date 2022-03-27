@@ -57,10 +57,11 @@ class CheckpointedXTransformerEncoder(nn.Module):
     Wraps a ContinuousTransformerWrapper and applies CheckpointedLayer to each layer and permutes from channels-mid
     to channels-last that XTransformer expects.
     """
-    def __init__(self, needs_permute=True, checkpoint=True, **xtransformer_kwargs):
+    def __init__(self, needs_permute=True, exit_permute=True, checkpoint=True, **xtransformer_kwargs):
         super().__init__()
         self.transformer = ContinuousTransformerWrapper(**xtransformer_kwargs)
         self.needs_permute = needs_permute
+        self.exit_permute = exit_permute
 
         if not checkpoint:
             return
@@ -72,7 +73,9 @@ class CheckpointedXTransformerEncoder(nn.Module):
         if self.needs_permute:
             x = x.permute(0,2,1)
         h = self.transformer(x, **kwargs)
-        return h.permute(0,2,1)
+        if self.exit_permute:
+            h = h.permute(0,2,1)
+        return h
 
 
 class ResBlock(TimestepBlock):
