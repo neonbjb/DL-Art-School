@@ -591,6 +591,15 @@ def load_audio(audiopath, sampling_rate, raw_data=None):
     return audio
 
 
+def pad_or_truncate(t, length):
+    if t.shape[-1] == length:
+        return t
+    elif t.shape[-1] < length:
+        return F.pad(t, (0, length-t.shape[-1]))
+    else:
+        return t[..., :length]
+
+
 def load_wav_to_torch(full_path):
     import scipy.io.wavfile
     sampling_rate, data = scipy.io.wavfile.read(full_path)
