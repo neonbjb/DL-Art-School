@@ -217,6 +217,7 @@ class AutoregressiveCodegen(nn.Module):
                                       ff_mult=1,
                                       rotary_pos_emb=True,
                                   ))
+        self.encoder.to_logits = nn.Identity()  # This is unused.
         self.decoder = CheckpointedXTransformerWrapper(
                                   num_tokens=num_mel_tokens,
                                   use_pos_emb=False,
