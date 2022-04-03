@@ -205,6 +205,7 @@ class AutoregressiveCodegen(nn.Module):
         self.encoder = CheckpointedXTransformerWrapper(
                                   num_tokens=num_text_tokens,
                                   use_pos_emb=False,
+                                  max_seq_len=-1,
                                   attn_layers = Encoder(
                                       depth=depth//2,
                                       heads=model_dim//64,
@@ -220,6 +221,7 @@ class AutoregressiveCodegen(nn.Module):
         self.decoder = CheckpointedXTransformerWrapper(
                                   num_tokens=num_mel_tokens,
                                   use_pos_emb=False,
+                                  max_seq_len=-1,
                                   attn_layers=Decoder(
                                       depth=depth,
                                       heads=model_dim//64,
