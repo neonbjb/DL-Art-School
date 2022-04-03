@@ -216,7 +216,6 @@ class AutoregressiveCodegen(nn.Module):
                                       ff_glu=True,
                                       ff_mult=1,
                                       rotary_pos_emb=True,
-                                      rel_pos_bias=True,
                                   ))
         self.decoder = CheckpointedXTransformerWrapper(
                                   num_tokens=num_mel_tokens,
@@ -232,7 +231,6 @@ class AutoregressiveCodegen(nn.Module):
                                       ff_glu=True,
                                       ff_mult=1,
                                       rotary_pos_emb=True,
-                                      rel_pos_bias=True,
                                       cross_attend=True,
                                   ))
 
