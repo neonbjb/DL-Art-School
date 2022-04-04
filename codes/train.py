@@ -165,6 +165,7 @@ class Trainer:
             self.start_epoch = 0
         if 'force_start_step' in opt.keys():
             self.current_step = opt['force_start_step']
+            self.total_training_data_encountered = self.current_step * opt['datasets']['train']['batch_size']
         opt['current_step'] = self.current_step
 
     def do_step(self, train_data):
@@ -318,7 +319,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../experiments/train_autoregressive_codegen.yml')
+    parser.add_argument('-opt', type=str, help='Path to option YAML file.', default='../options/train_clip_text_to_voice.yml')
     parser.add_argument('--launcher', choices=['none', 'pytorch'], default='none', help='job launcher')
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
