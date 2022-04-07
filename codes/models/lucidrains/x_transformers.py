@@ -841,13 +841,16 @@ class AttentionLayers(nn.Module):
         self,
         x,
         context = None,
+        full_context = None,    # for passing a list of hidden states from an encoder
         mask = None,
         context_mask = None,
         attn_mask = None,
         mems = None,
         return_hiddens = False
     ):
-        assert not (self.cross_attend ^ exists(context)), 'context must be passed in if cross_attend is set to True'
+        
+        assert not (self.cross_attend ^ (exists(context) or exists(full_context))), 'context must be passed in if cross_attend is set to True'
+        assert context is None or full_context is None, 'only one of full_context or context can be provided'
 
         hiddens = []
         intermediates = []
@@ -861,9 +864,9 @@ class AttentionLayers(nn.Module):
             max_rotary_emb_length = max(list(map(lambda m: (m.shape[1] if exists(m) else 0) + x.shape[1], mems)))
             rotary_pos_emb = self.rotary_pos_emb(max_rotary_emb_length, x.device)
 
+        cross_attn_count = 0
         for ind, (layer_type, (norm, block, residual_fn)) in enumerate(zip(self.layer_types, self.layers)):
             if layer_type == 'a':
-                hiddens.append(x)
                 layer_mem = mems.pop(0) if mems else None
 
             residual = x
@@ -876,7 +879,10 @@ class AttentionLayers(nn.Module):
             if layer_type == 'a':
                 out, inter = checkpoint(block, x, None, mask, None, attn_mask, self.pia_pos_emb, rotary_pos_emb, prev_attn, layer_mem)
             elif layer_type == 'c':
-                out, inter = checkpoint(block, x, context, mask, context_mask, None, None, None, prev_attn)
+                if exists(full_context):
+                    out, inter = checkpoint(block, x, full_context[cross_attn_count], mask, context_mask, None, None, None, prev_attn)
+                else:
+                    out, inter = checkpoint(block, x, context, mask, context_mask, None, None, None, prev_attn)                    
             elif layer_type == 'f':
                 out = checkpoint(block, x)
 
@@ -895,6 +901,12 @@ class AttentionLayers(nn.Module):
 
             if exists(post_main_norm):
                 x = post_main_norm(x)
+
+            if layer_type == 'c':
+                cross_attn_count += 1
+
+            if layer_type == 'f':
+                hiddens.append(x)
 
         if return_hiddens:
             intermediates = LayerIntermediates(
@@ -1024,7 +1036,7 @@ class TransformerWrapper(nn.Module):
         x,
         return_embeddings = False,
         mask = None,
-        return_mems = False,
+        return_hiddens = False,
         return_attn = False,
         mems = None,
         **kwargs
@@ -1055,11 +1067,9 @@ class TransformerWrapper(nn.Module):
 
         out = self.to_logits(x) if not return_embeddings else x
 
-        if return_mems:
+        if return_hiddens:
             hiddens = intermediates.hiddens
-            new_mems = list(map(lambda pair: torch.cat(pair, dim = -2), zip(mems, hiddens))) if exists(mems) else hiddens
-            new_mems = list(map(lambda t: t[..., -self.max_mem_len:, :].detach(), new_mems))
-            return out, new_mems
+            return out, hiddens
 
         if return_attn:
             attn_maps = list(map(lambda t: t.post_softmax_attn, intermediates.attn_intermediates))

@@ -159,6 +159,7 @@ class ConditioningEncoder(nn.Module):
 class AutoregressiveCodegen(nn.Module):
     def __init__(self, model_dim, depth, num_text_tokens=256, num_mel_tokens=8194, dropout=.1):
         super().__init__()
+        assert depth >= 8  # This is the minimum bound to support the context interleaving that happens later.
 
         self.START_TOKEN=8192
         self.STOP_TOKEN=8193
@@ -170,7 +171,7 @@ class AutoregressiveCodegen(nn.Module):
                                   use_pos_emb=False,
                                   max_seq_len=-1,
                                   attn_layers = Encoder(
-                                      depth=depth//2,
+                                      depth=depth,
                                       heads=model_dim//64,
                                       dim=model_dim,
                                       attn_dropout=dropout,
@@ -181,7 +182,8 @@ class AutoregressiveCodegen(nn.Module):
                                       rotary_pos_emb=True,
                                       attn_rel_pos_bias=True,
                                   ))
-        self.encoder.to_logits = nn.Identity()  # This is unused.
+        self.encoder.norm = nn.Identity()  # This layer and the next are unused.
+        self.encoder.to_logits = nn.Identity()
         self.decoder = TransformerWrapper(
                                   num_tokens=num_mel_tokens,
                                   use_pos_emb=False,
@@ -224,12 +226,16 @@ class AutoregressiveCodegen(nn.Module):
         for i in range(conditioning_signal.shape[1]):
             cond_embs.append(self.mel_embedding(conditioning_signal[:, i]))
         cond_emb = torch.stack(cond_embs, dim=1).mean(dim=1, keepdim=True)
-        enc_text = self.encoder(text_codes, return_embeddings=True)
-        context = torch.cat([cond_emb, enc_text], dim=1)
+        _, enc_text = self.encoder(text_codes, return_hiddens=True)
+        # Interleave cond_emb into the first few contexts.
+        full_context = enc_text
+        full_context[1] = cond_emb
+        full_context[3] = cond_emb
+        full_context[6] = cond_emb
 
         # Execute the decoder
         dec_inputs = F.pad(mel_codes, (1,0), value=self.START_TOKEN)[:, :-1]
-        dec = self.decoder(dec_inputs, context=context)
+        dec = self.decoder(dec_inputs, full_context=full_context)
         if not return_loss:
             return dec
         loss_mel = F.cross_entropy(dec.permute(0,2,1), mel_codes)
@@ -261,9 +267,9 @@ def register_autoregressive_codegen(opt_net, opt):
 
 
 if __name__ == '__main__':
-    codegen = AutoregressiveCodegen(512, 20)
+    codegen = AutoregressiveCodegen(256, 10)
     torch.save(codegen.state_dict(), 'sample.pth')
-    codegen.generate(torch.randn((1,80,120)), torch.randint(0,256,(1,200)))
+    #codegen.generate(torch.randn((1,80,120)), torch.randint(0,256,(1,200)))
     codegen(torch.randint(0,256, (2,200)),
             torch.randn(2,80,120),
             torch.randint(0,8192, (2,350)),
