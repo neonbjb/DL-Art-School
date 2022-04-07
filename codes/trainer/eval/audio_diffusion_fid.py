@@ -183,7 +183,6 @@ class AudioDiffusionFid(evaluator.Evaluator):
         gen_loss, real_loss = results
         return gen_loss - real_loss
 
-
     def compute_frechet_distance(self, proj1, proj2):
         # I really REALLY FUCKING HATE that this is going to numpy. Why does "pytorch_fid" operate in numpy land. WHY?
         proj1 = proj1.cpu().numpy()
@@ -264,13 +263,14 @@ if __name__ == '__main__':
 
 if __name__ == '__main__':
     from utils.util import load_model_from_config
-
+    # 34k; no conditioning_free: {'frechet_distance': tensor(1.4559, device='cuda:0', dtype=torch.float64), 'intelligibility_loss': tensor(151.9112, device='cuda:0')}
+    # 34k; conditioning_free:    {'frechet_distance': tensor(1.4059, device='cuda:0', dtype=torch.float64), 'intelligibility_loss': tensor(118.3377, device='cuda:0')}
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts_mel_flat.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_diffusion_tts_mel_flat0\\models\\12000_generator_ema.pth').cuda()
+                                       load_path='X:\\dlas\\experiments\\train_diffusion_tts_mel_flat0\\models\\34000_generator_ema.pth').cuda()
     opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-brief-w2v.tsv', 'diffusion_steps': 100,
-                'conditioning_free': False, 'conditioning_free_k': 1,
+                'conditioning_free': True, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'tts9_mel'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 558, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 560, 'device': 'cuda', 'opt': {}}
     eval = AudioDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())

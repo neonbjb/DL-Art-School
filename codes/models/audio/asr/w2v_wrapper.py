@@ -43,7 +43,8 @@ class Wav2VecWrapper(nn.Module):
     """
     def __init__(self, vocab_size=148, basis_model='facebook/wav2vec2-large', freeze_transformer=False, output_wer=True,
                  checkpointing_enabled=True, provide_attention_mask=False, spec_augment=True,
-                 remove_feature_extractor=False, ramp_dropout_mode=False, ramp_dropout_end=20000, ramp_dropout_min=.1, ramp_dropout_max=.5):
+                 remove_feature_extractor=False, ramp_dropout_mode=False, ramp_dropout_end=20000, ramp_dropout_min=.1,
+                 ramp_dropout_max=.5, layer_drop_pct=.1):
         super().__init__()
         self.provide_attention_mask = provide_attention_mask
         
@@ -55,6 +56,7 @@ class Wav2VecWrapper(nn.Module):
         self.w2v.config.pad_token_id = 0
         self.w2v.config.ctc_loss_reduction = 'sum'
         self.w2v.config.apply_spec_augment = spec_augment
+        self.w2v.config.layerdrop = layer_drop_pct
         self.remove_feature_extractor = remove_feature_extractor
 
         # This is a provision for distilling by ramping up dropout.
