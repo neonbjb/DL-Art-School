@@ -18,12 +18,6 @@ def create_loss(opt_loss, env):
     elif 'stylegan2_' in type:
         from models.image_generation.stylegan import create_stylegan2_loss
         return create_stylegan2_loss(opt_loss, env)
-    elif 'style_sr_' in type:
-        from models.styled_sr import create_stylesr_loss
-        return create_stylesr_loss(opt_loss, env)
-    elif 'lightweight_gan_divergence' == type:
-        from models.image_generation.lightweight_gan import LightweightGanDivergenceLoss
-        return LightweightGanDivergenceLoss(opt_loss, env)
     elif type == 'crossentropy' or type == 'cross_entropy':
         return CrossEntropy(opt_loss, env)
     elif type == 'distillation':
