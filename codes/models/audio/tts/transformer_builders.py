@@ -33,7 +33,7 @@ def null_position_embeddings(range, dim):
 
 
 class LearnedPositionEmbeddings(nn.Module):
-    def __init__(self, seq_len, model_dim, init=.02, relative=True):
+    def __init__(self, seq_len, model_dim, init=.02, relative=False):
         super().__init__()
         self.emb = nn.Embedding(seq_len, model_dim)
         # Initializing this way is standard for GPT-2
