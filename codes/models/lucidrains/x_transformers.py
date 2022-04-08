@@ -319,6 +319,23 @@ class RMSNorm(nn.Module):
         norm = torch.norm(x, dim = -1, keepdim = True) * self.scale
         return x / norm.clamp(min = self.eps) * self.g
 
+class RMSScaleShiftNorm(nn.Module):
+    def __init__(self, dim, eps = 1e-8):
+        super().__init__()
+        self.scale = dim ** -0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(dim))
+        self.scale_shift_process = nn.Linear(dim*2, dim*2)
+
+    def forward(self, x, norm_scale_shift_inp):
+        norm = torch.norm(x, dim = -1, keepdim = True) * self.scale
+        norm = x / norm.clamp(min = self.eps) * self.g
+
+        ss_emb = self.scale_shift_process(norm_scale_shift_inp)
+        scale, shift = torch.chunk(ss_emb, 2, dim=1)
+        h = norm * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+        return h
+
 # residual and residual gates
 
 class Residual(nn.Module):
@@ -677,6 +694,7 @@ class AttentionLayers(nn.Module):
         cross_attend = False,
         only_cross = False,
         use_scalenorm = False,
+        use_rms_scaleshift_norm = False,
         use_rmsnorm = False,
         use_rezero = False,
         alibi_pos_bias = False,
@@ -738,6 +756,7 @@ class AttentionLayers(nn.Module):
 
         norm_class = ScaleNorm if use_scalenorm else nn.LayerNorm
         norm_class = RMSNorm if use_rmsnorm else norm_class
+        norm_class = RMSScaleShiftNorm if use_rms_scaleshift_norm else norm_class
         norm_fn = partial(norm_class, dim)
 
         norm_fn = nn.Identity if use_rezero else norm_fn
@@ -846,7 +865,8 @@ class AttentionLayers(nn.Module):
         context_mask = None,
         attn_mask = None,
         mems = None,
-        return_hiddens = False
+        return_hiddens = False,
+        norm_scale_shift_inp = None,
     ):
         
         assert not (self.cross_attend ^ (exists(context) or exists(full_context))), 'context must be passed in if cross_attend is set to True'
@@ -858,6 +878,9 @@ class AttentionLayers(nn.Module):
         prev_cross_attn = None
 
         mems = mems.copy() if exists(mems) else [None] * self.num_attn_layers
+        norm_args = {}
+        if exists(norm_scale_shift_inp):
+            norm_args['norm_scale_shift_inp'] = norm_scale_shift_inp
 
         rotary_pos_emb = None
         if exists(self.rotary_pos_emb):
@@ -874,7 +897,7 @@ class AttentionLayers(nn.Module):
             pre_branch_norm, post_branch_norm, post_main_norm = norm
 
             if exists(pre_branch_norm):
-                x = pre_branch_norm(x)
+                x = pre_branch_norm(x, **norm_args)
 
             if layer_type == 'a':
                 out, inter = checkpoint(block, x, None, mask, None, attn_mask, self.pia_pos_emb, rotary_pos_emb, prev_attn, layer_mem)
@@ -887,7 +910,7 @@ class AttentionLayers(nn.Module):
                 out = checkpoint(block, x)
 
             if exists(post_branch_norm):
-                out = post_branch_norm(out)
+                out = post_branch_norm(out, **norm_args)
 
             x = residual_fn(out, residual)
 
@@ -900,7 +923,7 @@ class AttentionLayers(nn.Module):
                 prev_cross_attn = inter.pre_softmax_attn
 
             if exists(post_main_norm):
-                x = post_main_norm(x)
+                x = post_main_norm(x, **norm_args)
 
             if layer_type == 'c':
                 cross_attn_count += 1
