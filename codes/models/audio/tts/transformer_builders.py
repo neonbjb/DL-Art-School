@@ -59,8 +59,8 @@ def build_hf_gpt_transformer(layers, model_dim, heads, max_mel_seq_len, max_text
     """
     from transformers import GPT2Config, GPT2Model
     gpt_config = GPT2Config(vocab_size=256,  # Unused.
-                             n_positions=max_mel_seq_len+max_text_seq_len,
-                             n_ctx=max_mel_seq_len+max_text_seq_len,
+                             n_positions=1,
+                             n_ctx=1,
                              n_embd=model_dim,
                              n_layer=layers,
                              n_head=heads,
@@ -72,8 +72,10 @@ def build_hf_gpt_transformer(layers, model_dim, heads, max_mel_seq_len, max_text
     gpt.wpe = functools.partial(null_position_embeddings, dim=model_dim)
     # Built-in token embeddings are unused.
     del gpt.wte
-    return gpt, LearnedPositionEmbeddings(max_mel_seq_len, model_dim), LearnedPositionEmbeddings(max_text_seq_len, model_dim),\
-           None, None
+
+    mel_pos_emb = LearnedPositionEmbeddings(max_mel_seq_len, model_dim) if max_mel_seq_len != -1 else functools.partial(null_position_embeddings, dim=model_dim)
+    text_pos_emb = LearnedPositionEmbeddings(max_text_seq_len, model_dim) if max_mel_seq_len != -1 else functools.partial(null_position_embeddings, dim=model_dim)
+    return gpt, mel_pos_emb, text_pos_emb, None, None
 
 
 def build_lr_performer(layers, model_dim, heads, max_mel_seq_len, max_text_seq_len, checkpointing):
