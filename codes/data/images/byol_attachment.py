@@ -1,11 +1,13 @@
 import random
 from time import time
+
+import kornia
 import numpy as np
 
 import torch
 import torchvision
 from torch.utils.data import Dataset
-from kornia import augmentation as augs, kornia, Resample
+from kornia import augmentation as augs, geometry
 from kornia import filters
 import torch.nn as nn
 import torch.nn.functional as F
@@ -235,7 +237,7 @@ class RandomSharedRegionCrop(nn.Module):
         should_flip = random.random() < .5
         if should_flip:
             should_flip = 1
-            p2_resized = kornia.geometry.transform.hflip(p2_resized)
+            p2_resized = geometry.transform.hflip(p2_resized)
         else:
             should_flip = 0
 
