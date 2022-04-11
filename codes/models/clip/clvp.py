@@ -92,7 +92,7 @@ class CLVP(nn.Module):
         return {
             'conditioning': list(self.conditioning_transformer.parameters()),
             'text': list(self.text_transformer.parameters()),
-            'speech': list(self.speech_transformer.parameters()) + list(self.mel_head.parameters()),
+            'speech': list(self.speech_transformer.parameters()),
         }
 
     def forward(
