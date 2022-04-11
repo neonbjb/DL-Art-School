@@ -174,7 +174,7 @@ class GptVoiceLatentInjector(Injector):
     def forward(self, state):
         with torch.no_grad():
             mel_inputs = self.to_mel(state[self.input])
-            state_cond = pad_or_truncate(state[self.conditioning_key], 88000)
+            state_cond = pad_or_truncate(state[self.conditioning_key], 132300)
             mel_conds = []
             for k in range(state_cond.shape[1]):
                 mel_conds.append(self.to_mel(state_cond[:, k]))
@@ -184,9 +184,9 @@ class GptVoiceLatentInjector(Injector):
                 self.dvae = self.dvae.to(mel_inputs.device)
                 self.gpt = self.gpt.to(mel_inputs.device)
             codes = self.dvae.get_codebook_indices(mel_inputs)
-            latents = self.gpt.forward(mel_conds, state[self.text_input_key],
-                                       state[self.text_lengths_key], codes, state[self.input_lengths_key],
-                                       text_first=True, raw_mels=None, return_attentions=False, return_latent=True,
-                                       clip_inputs=False)
+            latents = self.gpt(mel_conds, state[self.text_input_key],
+                               state[self.text_lengths_key], codes, state[self.input_lengths_key],
+                               text_first=True, raw_mels=None, return_attentions=False, return_latent=True,
+                               clip_inputs=False)
             assert latents.shape[1] == codes.shape[1]
             return {self.output: latents}
