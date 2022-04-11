@@ -18,8 +18,7 @@ from models.audio.tts.tacotron2 import text_to_sequence
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel, load_speech_dvae, \
     convert_mel_to_codes, load_univnet_vocoder, wav_to_univnet_mel
 from trainer.injectors.audio_injectors import denormalize_tacotron_mel
-from utils.util import ceil_multiple, opt_get
-
+from utils.util import ceil_multiple, opt_get, load_model_from_config
 
 class AudioDiffusionFid(evaluator.Evaluator):
     """
@@ -280,7 +279,6 @@ if __name__ == '__main__':
 
 
 if __name__ == '__main__':
-    from utils.util import load_model_from_config
     # 34k; no conditioning_free: {'frechet_distance': tensor(1.4559, device='cuda:0', dtype=torch.float64), 'intelligibility_loss': tensor(151.9112, device='cuda:0')}
     # 34k; conditioning_free:    {'frechet_distance': tensor(1.4059, device='cuda:0', dtype=torch.float64), 'intelligibility_loss': tensor(118.3377, device='cuda:0')}
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_diffusion_tts_mel_flat_autoregressive_inputs.yml', 'generator',
