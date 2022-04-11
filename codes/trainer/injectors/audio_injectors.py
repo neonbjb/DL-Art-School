@@ -159,6 +159,7 @@ class GptVoiceLatentInjector(Injector):
         pretrained_path = opt['gpt_path']
         self.gpt = load_model_from_config(cfg, model_name=model_name,
                                           also_load_savepoint=False, load_path=pretrained_path).cuda().eval()
+        self.needs_move = True
         # Mel converter
         self.mel_inj = TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_norm_file': '../experiments/clips_mel_norms.pth'},{})
         # Aux input keys.
@@ -179,10 +180,13 @@ class GptVoiceLatentInjector(Injector):
                 mel_conds.append(self.to_mel(state_cond[:, k]))
             mel_conds = torch.stack(mel_conds, dim=1)
 
-            self.dvae = self.dvae.to(mel_inputs.device)
+            if self.needs_move:
+                self.dvae = self.dvae.to(mel_inputs.device)
+                self.gpt = self.gpt.to(mel_inputs.device)
             codes = self.dvae.get_codebook_indices(mel_inputs)
-            self.gpt = self.gpt.to(codes.device)
             latents = self.gpt.forward(mel_conds, state[self.text_input_key],
                                        state[self.text_lengths_key], codes, state[self.input_lengths_key],
-                                       text_first=True, raw_mels=None, return_attentions=False, return_latent=True)
+                                       text_first=True, raw_mels=None, return_attentions=False, return_latent=True,
+                                       clip_inputs=False)
+            assert latents.shape[1] == codes.shape[1]
             return {self.output: latents}
