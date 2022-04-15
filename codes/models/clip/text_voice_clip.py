@@ -1,3 +1,5 @@
+from random import randint
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -46,6 +48,8 @@ class VoiceCLIP(nn.Module):
             voice_mask_percentage=0,
             wav_token_compression=1024,
             use_xformers=False,
+            clip_mels=False,
+            min_mel_size=10,  # Default is approximately .5sec with default mel specs.
     ):
         super().__init__()
         self.text_emb = nn.Embedding(num_text_tokens, dim_text)
@@ -59,7 +63,6 @@ class VoiceCLIP(nn.Module):
                 needs_permute=False,
                 exit_permute=False,
                 max_seq_len=-1,
-                use_pos_emb=False,
                 attn_layers=Encoder(
                     dim=dim_text,
                     depth=text_enc_depth,
@@ -75,7 +78,6 @@ class VoiceCLIP(nn.Module):
                 needs_permute=False,
                 exit_permute=False,
                 max_seq_len=-1,
-                use_pos_emb=False,
                 attn_layers=Encoder(
                     dim=dim_speech,
                     depth=speech_enc_depth,
@@ -98,6 +100,8 @@ class VoiceCLIP(nn.Module):
         self.voice_mask_percentage = voice_mask_percentage
         self.wav_token_compression = wav_token_compression
         self.xformers = use_xformers
+        self.clip_mels = clip_mels
+        self.min_mel_size = min_mel_size
         if not use_xformers:
             self.text_pos_emb = nn.Embedding(text_seq_len, dim_text)
             self.speech_pos_emb = nn.Embedding(num_speech_tokens, dim_speech)
@@ -110,8 +114,13 @@ class VoiceCLIP(nn.Module):
     ):
         b, device = text.shape[0], text.device
         if self.training:
+            if self.clip_mels:
+                margin = speech_tokens.shape[-1] - self.min_mel_size
+                speech_tokens = speech_tokens[:, :self.min_mel_size+randint(0,margin)]
+                voice_mask = torch.ones_like(speech_tokens.float()).bool()  # Disable voice masking in this case.
+            else:
+                voice_mask = torch.rand_like(speech_tokens.float()) > self.voice_mask_percentage
             text_mask = torch.rand_like(text.float()) > self.text_mask_percentage
-            voice_mask = torch.rand_like(speech_tokens.float()) > self.voice_mask_percentage
         else:
             text_mask = torch.ones_like(text.float()).bool()
             voice_mask = torch.ones_like(speech_tokens.float()).bool()
