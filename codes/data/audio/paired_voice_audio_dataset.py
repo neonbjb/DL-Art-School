@@ -207,7 +207,7 @@ class TextWavLoader(torch.utils.data.Dataset):
             return self[(index+1) % len(self)]
 
         if self.load_aligned_codes:
-            aligned_codes = self.audiopaths_and_text[index][2]
+            aligned_codes = self.audiopaths_and_text[index][3]
 
         actually_skipped_items = self.skipped_items
         self.skipped_items = 0
@@ -285,8 +285,8 @@ if __name__ == '__main__':
     batch_sz = 8
     params = {
         'mode': 'paired_voice_audio',
-        'path': ['Y:\\clips\\books1\\transcribed-oco.tsv'],
-        'fetcher_mode': ['tsv'],
+        'path': ['Y:\\libritts/test-clean_list.txt'],
+        'fetcher_mode': ['libritts'],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
@@ -297,7 +297,7 @@ if __name__ == '__main__':
         'num_conditioning_candidates': 2,
         'conditioning_length': 44000,
         'use_bpe_tokenizer': True,
-        'load_aligned_codes': True,
+        'load_aligned_codes': False,
     }
     from data import create_dataset, create_dataloader
 
