@@ -9,9 +9,26 @@ import torchaudio
 from tqdm import tqdm
 
 from data.audio.unsupervised_audio_dataset import load_audio, load_similar_clips
-from models.audio.tts.tacotron2 import load_filepaths_and_text
+from models.audio.tts.tacotron2 import load_filepaths_and_text, load_filepaths_and_text_type
 from models.audio.tts.tacotron2 import text_to_sequence, sequence_to_text
 from utils.util import opt_get
+
+
+def load_tsv_type(filename, type):
+    with open(filename, encoding='utf-8') as f:
+        filepaths_and_text = []
+        base = os.path.dirname(filename)
+        bad_lines = 0
+        for line in f:
+            components = line.strip().split('\t')
+            if len(components) < 2:
+                bad_lines += 1
+                if bad_lines > 1000:
+                    print(f'{filename} contains 1000+ bad entries. Failing. Sample last entry: {line}')
+                    raise ValueError
+                continue
+            filepaths_and_text.append([os.path.join(base, f'{components[1]}'), components[0]] + [type])
+    return filepaths_and_text
 
 
 def load_tsv(filename):
@@ -40,6 +57,23 @@ def convert_string_list_to_tensor(strlist):
     return torch.tensor(as_ints)
 
 
+def load_tsv_aligned_codes_type(filename, type):
+    with open(filename, encoding='utf-8') as f:
+        filepaths_and_text = []
+        base = os.path.dirname(filename)
+        bad_lines = 0
+        for line in f:
+            components = line.strip().split('\t')
+            if len(components) < 3:
+                bad_lines += 1
+                if bad_lines > 1000:
+                    print(f'{filename} contains 1000+ bad entries. Failing. Sample last entry: {line}')
+                    raise ValueError
+                continue
+            filepaths_and_text.append([os.path.join(base, f'{components[1]}'), components[0], convert_string_list_to_tensor(components[2])] + [type])
+    return filepaths_and_text
+
+
 def load_tsv_aligned_codes(filename):
     with open(filename, encoding='utf-8') as f:
         filepaths_and_text = []
@@ -57,15 +91,15 @@ def load_tsv_aligned_codes(filename):
     return filepaths_and_text
 
 
-def load_mozilla_cv(filename):
+def load_mozilla_cv(filename, type):
     with open(filename, encoding='utf-8') as f:
         components = [line.strip().split('\t') for line in f][1:]  # First line is the header
         base = os.path.dirname(filename)
-        filepaths_and_text = [[os.path.join(base, f'clips/{component[1]}'), component[2]] for component in components]
+        filepaths_and_text = [[os.path.join(base, f'clips/{component[1]}'), component[2], type] for component in components]
     return filepaths_and_text
 
 
-def load_voxpopuli(filename):
+def load_voxpopuli(filename, type):
     with open(filename, encoding='utf-8') as f:
         lines = [line.strip().split('\t') for line in f][1:]  # First line is the header
         base = os.path.dirname(filename)
@@ -75,7 +109,7 @@ def load_voxpopuli(filename):
                 continue
             file, raw_text, norm_text, speaker_id, split, gender = line
             year = file[:4]
-            filepaths_and_text.append([os.path.join(base, year, f'{file}.ogg.wav'), raw_text])
+            filepaths_and_text.append([os.path.join(base, year, f'{file}.ogg.wav'), raw_text, type])
     return filepaths_and_text
 
 
@@ -92,6 +126,7 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.path = hparams['path']
         if not isinstance(self.path, list):
             self.path = [self.path]
+        self.types = opt_get(hparams, ['types'], [0 for _ in self.path])
 
         fetcher_mode = opt_get(hparams, ['fetcher_mode'], 'lj')
         if not isinstance(fetcher_mode, list):
@@ -105,11 +140,11 @@ class TextWavLoader(torch.utils.data.Dataset):
         self.load_aligned_codes = opt_get(hparams, ['load_aligned_codes'], False)
         self.aligned_codes_to_audio_ratio = opt_get(hparams, ['aligned_codes_ratio'], 443)
         self.audiopaths_and_text = []
-        for p, fm in zip(self.path, fetcher_mode):
+        for p, fm, type in zip(self.path, fetcher_mode, self.types):
             if fm == 'lj' or fm == 'libritts':
-                fetcher_fn = load_filepaths_and_text
+                fetcher_fn = load_filepaths_and_text_type
             elif fm == 'tsv':
-                fetcher_fn = load_tsv_aligned_codes if self.load_aligned_codes else load_tsv
+                fetcher_fn = load_tsv_aligned_codes_type if self.load_aligned_codes else load_tsv_type
             elif fm == 'mozilla_cv':
                 assert not self.load_conditioning  # Conditioning inputs are incompatible with mozilla_cv
                 fetcher_fn = load_mozilla_cv
@@ -118,7 +153,7 @@ class TextWavLoader(torch.utils.data.Dataset):
                 fetcher_fn = load_voxpopuli
             else:
                 raise NotImplementedError()
-            self.audiopaths_and_text.extend(fetcher_fn(p))
+            self.audiopaths_and_text.extend(fetcher_fn(p, type))
         self.text_cleaners = hparams.text_cleaners
         self.sample_rate = hparams.sample_rate
         random.seed(hparams.seed)
@@ -138,10 +173,10 @@ class TextWavLoader(torch.utils.data.Dataset):
 
     def get_wav_text_pair(self, audiopath_and_text):
         # separate filename and text
-        audiopath, text = audiopath_and_text[0], audiopath_and_text[1]
+        audiopath, text, type = audiopath_and_text[0], audiopath_and_text[1], audiopath_and_text[2]
         text_seq = self.get_text(text)
         wav = load_audio(audiopath, self.sample_rate)
-        return (text_seq, wav, text, audiopath_and_text[0])
+        return (text_seq, wav, text, audiopath_and_text[0], type)
 
     def get_text(self, text):
         tokens = self.tokenizer.encode(text)
@@ -156,7 +191,7 @@ class TextWavLoader(torch.utils.data.Dataset):
     def __getitem__(self, index):
         self.skipped_items += 1
         try:
-            tseq, wav, text, path = self.get_wav_text_pair(self.audiopaths_and_text[index])
+            tseq, wav, text, path, type = self.get_wav_text_pair(self.audiopaths_and_text[index])
             if text is None or len(text.strip()) == 0:
                 raise ValueError
             if wav is None or wav.shape[-1] < (.6 * self.sample_rate):
@@ -202,6 +237,7 @@ class TextWavLoader(torch.utils.data.Dataset):
             'wav_lengths': torch.tensor(orig_output, dtype=torch.long),
             'filenames': path,
             'skipped_items': actually_skipped_items,
+            'type': type,
         }
         if self.load_conditioning:
             res['conditioning'] = cond
@@ -249,7 +285,7 @@ if __name__ == '__main__':
     batch_sz = 8
     params = {
         'mode': 'paired_voice_audio',
-        'path': ['Y:\\clips\\books1\\transcribed-w2v.tsv'],
+        'path': ['Y:\\clips\\books1\\transcribed-oco.tsv'],
         'fetcher_mode': ['tsv'],
         'phase': 'train',
         'n_workers': 0,

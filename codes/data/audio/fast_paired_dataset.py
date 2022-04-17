@@ -48,6 +48,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             self.paths = [self.paths]
         self.paths_size_bytes = [os.path.getsize(p) for p in self.paths]
         self.total_size_bytes = sum(self.paths_size_bytes)
+        self.types = opt_get(hparams, ['types'], [0 for _ in self.paths])
 
         self.load_conditioning = opt_get(hparams, ['load_conditioning'], False)
         self.conditioning_candidates = opt_get(hparams, ['num_conditioning_candidates'], 1)
@@ -101,22 +102,23 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             else:
                 rand_offset -= self.paths_size_bytes[i]
         path = self.paths[i]
+        type = self.types[i]
         with open(path, 'r', encoding='utf-8') as f:
             f.seek(rand_offset)
             # Read the rest of the line we seeked to, then the line after that.
             try:  # This can fail when seeking to a UTF-8 escape byte.
                 f.readline()
             except:
-                return self.load_random_line(depth=depth + 1)  # On failure, just recurse and try again.
+                return self.load_random_line(depth=depth + 1), type  # On failure, just recurse and try again.
             l2 = f.readline()
 
         if l2:
             try:
                 base_path = os.path.dirname(path)
-                return parse_tsv_aligned_codes(l2, base_path)
+                return parse_tsv_aligned_codes(l2, base_path), type
             except:
                 print(f"error parsing random offset: {sys.exc_info()}")
-        return self.load_random_line(depth=depth+1)  # On failure, just recurse and try again.
+        return self.load_random_line(depth=depth+1), type  # On failure, just recurse and try again.
 
     def get_ctc_metadata(self, codes):
         grouped = groupby(codes.tolist())
@@ -155,7 +157,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         start = time.time()
         self.skipped_items += 1
-        apt = self.load_random_line()
+        apt, type = self.load_random_line()
         try:
             tseq, wav, text, path = self.get_wav_text_pair(apt)
             if text is None or len(text.strip()) == 0:
@@ -204,7 +206,8 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             'wav_lengths': torch.tensor(orig_output, dtype=torch.long),
             'filenames': path,
             'skipped_items': actually_skipped_items,
-            'load_time': self.load_times.mean()
+            'load_time': self.load_times.mean(),
+            'type': type,
         }
         if self.load_conditioning:
             res['conditioning'] = cond
@@ -266,10 +269,11 @@ if __name__ == '__main__':
         'path': ['y:/libritts/train-other-500/transcribed-oco.tsv',
            'y:/libritts/train-clean-100/transcribed-oco.tsv',
            'y:/libritts/train-clean-360/transcribed-oco.tsv',
-           'y:/clips/books1/transcribed-w2v.tsv',
-           'y:/clips/books2/transcribed-w2v.tsv',
-	       'y:/bigasr_dataset/hifi_tts/transcribed-w2v.tsv',
+           'y:/clips/books1/transcribed-oco.tsv',
+           'y:/clips/books2/transcribed-oco.tsv',
+	       'y:/bigasr_dataset/hifi_tts/transcribed-oco.tsv',
 	       'y:/clips/podcasts-1/transcribed-oco.tsv',],
+        'types': [0,1,1,1,2,2,0],
         'phase': 'train',
         'n_workers': 0,
         'batch_size': batch_sz,
