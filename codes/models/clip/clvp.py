@@ -86,7 +86,6 @@ class CLVP(nn.Module):
             speech_enc_depth=6,
             speech_mask_percentage=0,
             latent_multiplier=4,
-            is_distributed=False,
     ):
         super().__init__()
         latent_dim = latent_multiplier*model_dim
@@ -101,8 +100,6 @@ class CLVP(nn.Module):
         self.text_emb = nn.Embedding(num_text_tokens, model_dim)
         self.text_transformer = CollapsingTransformer(model_dim, latent_dim, transformer_heads, dropout, text_enc_depth, text_mask_percentage, use_rms_scaleshift_norm=True)
         self.to_text_latent = nn.Linear(latent_dim, latent_dim, bias=False)
-
-        self.distributed = is_distributed
 
         if mel_codes is None:
             self.speech_emb = nn.Conv1d(mel_channels, model_dim, kernel_size=5, padding=2)
@@ -143,16 +140,6 @@ class CLVP(nn.Module):
 
         text_latents = self.to_text_latent(enc_text)
         speech_latents = self.to_speech_latent(enc_speech)
-        if self.distributed:
-            ws = get_world_size()
-            text_gather_cells = [torch.zeros_like(text_latents) for _ in range(ws)]
-            speech_gather_cells = [torch.zeros_like(speech_latents) for _ in range(ws)]
-            distributed.all_gather(text_gather_cells, text_latents)
-            text_gather_cells[distributed.get_rank()] = text_latents  # Propagate gradients in this way.
-            text_latents = torch.cat(text_gather_cells, dim=0)
-            distributed.all_gather(speech_gather_cells, speech_latents)
-            speech_gather_cells[distributed.get_rank()] = speech_latents
-            speech_latents = torch.cat(speech_gather_cells, dim=0)
 
         text_latents, speech_latents = map(lambda t: F.normalize(t, p=2, dim=-1), (text_latents, speech_latents))
         temp = self.temperature.exp()

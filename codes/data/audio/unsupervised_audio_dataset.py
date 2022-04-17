@@ -176,15 +176,15 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio',
-        'path': ['\\\\192.168.5.3\\rtx3080_audio\\split\\cleaned\\books0'],
-        'cache_path': 'E:\\audio\\remote-cache3.pth',
+        'path': ['Y:\\split\\yt-music'],
+        'cache_path': 'Y:\\split\\yt-music\\cache-windows.pth',
         'sampling_rate': 22050,
-        'pad_to_samples': 40960,
+        'pad_to_samples': 22050,
         'phase': 'train',
         'n_workers': 1,
         'batch_size': 16,
         'extra_samples': 4,
-        'resample_clip': True,
+        'resample_clip': False,
     }
     from data import create_dataset, create_dataloader
 
@@ -195,5 +195,5 @@ if __name__ == '__main__':
         for b_ in range(b['clip'].shape[0]):
             #pass
             torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
-            torchaudio.save(f'{i}_resampled_clip_{b_}.wav', b['resampled_clip'][b_], ds.sampling_rate)
+            #torchaudio.save(f'{i}_resampled_clip_{b_}.wav', b['resampled_clip'][b_], ds.sampling_rate)
             i += 1
