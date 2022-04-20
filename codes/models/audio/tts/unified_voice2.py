@@ -239,7 +239,7 @@ class MelEncoder(nn.Module):
 class UnifiedVoice(nn.Module):
     def __init__(self, layers=8, model_dim=512, heads=8, max_text_tokens=120, max_mel_tokens=250, max_conditioning_inputs=1,
                  mel_length_compression=1024, number_text_tokens=256, number_mel_codes=8194, start_mel_token=8192,
-                 stop_mel_token=8193, train_solo_embeddings=False, use_mel_codes_as_input=True,
+                 stop_mel_token=8193, train_solo_embeddings=False, use_mel_codes_as_input=True, start_text_token=None,
                  checkpointing=True, average_conditioning_embeddings=False, freeze_everything_but_position_embeddings=False,
                  types=1):
         """
@@ -264,7 +264,7 @@ class UnifiedVoice(nn.Module):
         super().__init__()
 
         self.number_text_tokens = number_text_tokens
-        self.start_text_token = number_text_tokens * types
+        self.start_text_token = number_text_tokens * types if start_text_token is None else start_text_token
         self.stop_text_token = 0
         self.number_mel_codes = number_mel_codes
         self.start_mel_token = start_mel_token
