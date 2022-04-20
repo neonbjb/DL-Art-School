@@ -140,6 +140,7 @@ class ResBlockSimple(nn.Module):
 
     def _forward(self, x):
         h = self.in_layers(x)
+        h = self.out_layers(h)
         return self.skip_connection(x) + h
 
 
