@@ -52,7 +52,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         self.local_modules = {}
         if mode == 'standard':
             self.diffusion_fn = self.perform_diffusion_standard
-        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 120, 'mel_fmax': 11000, 'in': 'in', 'out': 'out'}, {})
+        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 128, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
     def load_data(self, path):
         return list(glob(f'{path}/*.wav'))
@@ -141,8 +141,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen\\models\\36000_generator_ema.pth').cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 50,
+                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen_r3\\models\\11200_generator_ema.pth').cuda()
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 500,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'standard'}
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 1, 'device': 'cuda', 'opt': {}}

@@ -190,3 +190,26 @@ class GptVoiceLatentInjector(Injector):
                                clip_inputs=False)
             assert latents.shape[1] == codes.shape[1]
             return {self.output: latents}
+
+
+class ReverseUnivnetInjector(Injector):
+    """
+    This injector specifically builds inputs and labels for a univnet detector.g
+    """
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        from scripts.audio.gen.speech_synthesis_utils import load_univnet_vocoder
+        self.univnet = load_univnet_vocoder().cuda()
+        self.mel_input_key = opt['mel']
+        self.label_output_key = opt['labels']
+
+    def forward(self, state):
+        with torch.no_grad():
+            original_audio = state[self.input]
+            mel = state[self.mel_input_key]
+            decoded_mel = self.univnet.inference(mel)[:,:,:original_audio.shape[-1]]
+
+            labels = (torch.rand(mel.shape[0], 1, 1, device=mel.device) > .5)
+            output = torch.where(labels, original_audio, decoded_mel)
+
+            return {self.output: output, self.label_output_key: labels[:,0,0].long()}

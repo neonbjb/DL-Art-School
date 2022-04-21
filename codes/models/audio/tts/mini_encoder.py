@@ -135,11 +135,12 @@ class AudioMiniEncoder(nn.Module):
 
 
 class AudioMiniEncoderWithClassifierHead(nn.Module):
-    def __init__(self, classes, **kwargs):
+    def __init__(self, classes, distribute_zero_label=True, **kwargs):
         super().__init__()
         self.enc = AudioMiniEncoder(**kwargs)
         self.head = nn.Linear(self.enc.dim, classes)
         self.num_classes = classes
+        self.distribute_zero_label = distribute_zero_label
 
     def forward(self, x, labels=None):
         h = self.enc(x)
@@ -147,13 +148,16 @@ class AudioMiniEncoderWithClassifierHead(nn.Module):
         if labels is None:
             return logits
         else:
-            oh_labels = nn.functional.one_hot(labels, num_classes=self.num_classes)
-            zeros_indices = (labels == 0).unsqueeze(-1)
-            # Distribute 20% of the probability mass on all classes when zero is specified, to compensate for dataset noise.
-            zero_extra_mass = torch.full_like(oh_labels, dtype=torch.float, fill_value=.2/(self.num_classes-1))
-            zero_extra_mass[:, 0] = -.2
-            zero_extra_mass = zero_extra_mass * zeros_indices
-            oh_labels = oh_labels + zero_extra_mass
+            if self.distribute_zero_label:
+                oh_labels = nn.functional.one_hot(labels, num_classes=self.num_classes)
+                zeros_indices = (labels == 0).unsqueeze(-1)
+                # Distribute 20% of the probability mass on all classes when zero is specified, to compensate for dataset noise.
+                zero_extra_mass = torch.full_like(oh_labels, dtype=torch.float, fill_value=.2/(self.num_classes-1))
+                zero_extra_mass[:, 0] = -.2
+                zero_extra_mass = zero_extra_mass * zeros_indices
+                oh_labels = oh_labels + zero_extra_mass
+            else:
+                oh_labels = labels
             loss = nn.functional.cross_entropy(logits, oh_labels)
             return loss
 
