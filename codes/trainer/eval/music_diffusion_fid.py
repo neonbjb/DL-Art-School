@@ -62,9 +62,11 @@ class MusicDiffusionFid(evaluator.Evaluator):
             real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
         else:
             real_resampled = audio
-        mel = self.spec_fn({'in': real_resampled})['out']
-        output_shape = (1, 1, mel.shape[-1] * 256)
-        gen = self.diffuser.p_sample_loop(self.model, output_shape, model_kwargs={'aligned_conditioning': mel})
+        audio = audio.unsqueeze(0)
+        output_shape = audio.shape
+        gen = self.diffuser.p_sample_loop(self.model, output_shape, model_kwargs={'conditioning': audio,
+                                                                                  'return_surrogate': False})
+        #_, surrogate = self.model(audio, torch.tensor([0], device=audio.device), audio)
         return gen, real_resampled, sample_rate
 
     def load_projector(self):
@@ -139,9 +141,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen2.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen_r3\\models\\11200_generator_ema.pth').cuda()
+                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen2\\models\\59000_generator_ema.pth').cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 500,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'standard'}
