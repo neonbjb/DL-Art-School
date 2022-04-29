@@ -107,7 +107,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', type=str, help='Path to the options YAML file used to train the CLIP model', default='../options/train_voice_voice_clip.yml')
     parser.add_argument('--num_workers', type=int, help='Number concurrent processes to use', default=4)
-    parser.add_argument('--root_path', type=str, help='Root path to search for audio directories from', default='Y:\\clips\\red_rising_filtered')
+    parser.add_argument('--path', type=str, help='Root path to search for audio directories from', default='Y:\\clips\\red_rising_filtered')
     parser.add_argument('--clip_size', type=int, help='Amount of audio samples to pull from each file', default=22050)
     args = parser.parse_args()
 
@@ -115,7 +115,7 @@ if __name__ == '__main__':
         opt = yaml.load(f, Loader=Loader)
 
     print("Finding applicable files..")
-    all_files = recursively_find_audio_directories(args.root_path)
+    all_files = recursively_find_audio_directories(args.path)
     print(f"Found {len(all_files)}. Processing.")
     fn = functools.partial(process_subdir, options=opt, clip_sz=args.clip_size)
     if args.num_workers > 1:

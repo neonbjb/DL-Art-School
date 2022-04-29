@@ -47,10 +47,10 @@ def process_file(file, base_path, output_path, progress_file):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\clips\\red_rising')
-    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\clips\\red_rising\\already_processed.txt')
-    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\clips\\red_rising_split')
-    parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=4)
+    parser.add_argument('--path', type=str, help='Path to search for files', default='Y:\\clips\\red_rising')
+    parser.add_argument('--progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\clips\\red_rising\\already_processed.txt')
+    parser.add_argument('--output_path', type=str, help='Path for output files', default='Y:\\clips\\red_rising_split')
+    parser.add_argument('--num_threads', type=int, help='Number of concurrent workers processing files.', default=4)
     args = parser.parse_args()
 
     processed_files = set()
