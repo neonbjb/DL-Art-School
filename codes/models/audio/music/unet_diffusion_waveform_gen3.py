@@ -144,45 +144,7 @@ class ResBlockSimple(nn.Module):
         return self.skip_connection(x) + h
 
 
-class AudioVAE(nn.Module):
-    def __init__(self, channels, dropout):
-        super().__init__()
-        #                  1, 4, 16, 64, 256
-        level_resblocks = [1, 1,  2,  2,   2]
-        level_ch_mult =    [1, 2,  4,  6,   8]
-        levels = []
-        for i, (resblks, chdiv) in enumerate(zip(level_resblocks, level_ch_mult)):
-            blocks = [ResBlockSimple(channels*chdiv, dropout=dropout, kernel_size=5) for _ in range(resblks)]
-            if i != len(level_ch_mult)-1:
-                blocks.append(nn.Conv1d(channels*chdiv, channels*level_ch_mult[i+1], kernel_size=5, padding=2, stride=4))
-            levels.append(nn.Sequential(*blocks))
-        self.down_levels = nn.ModuleList(levels)
-
-        levels = []
-        lastdiv = None
-        for resblks, chdiv in reversed(list(zip(level_resblocks, level_ch_mult))):
-            if lastdiv is not None:
-                blocks = [nn.Conv1d(channels*lastdiv, channels*chdiv, kernel_size=5, padding=2)]
-            else:
-                blocks = []
-            blocks.extend([ResBlockSimple(channels*chdiv, dropout=dropout, kernel_size=5) for _ in range(resblks)])
-            levels.append(nn.Sequential(*blocks))
-            lastdiv = chdiv
-        self.up_levels = nn.ModuleList(levels)
-
-    def forward(self, x):
-        h = x
-        for level in self.down_levels:
-            h = level(h)
-
-        for k, level in enumerate(self.up_levels):
-            h = level(h)
-            if k != len(self.up_levels)-1:
-                h = F.interpolate(h, scale_factor=4, mode='linear')
-        return h
-
-
-class Diffusion(nn.Module):
+class DiffusionTts(nn.Module):
     """
     The full UNet model with attention and timestep embedding.
 
@@ -194,10 +156,20 @@ class Diffusion(nn.Module):
     :param model_channels: base channel count for the model.
     :param out_channels: channels in the output Tensor.
     :param num_res_blocks: number of residual blocks per downsample.
+    :param attention_resolutions: a collection of downsample rates at which
+        attention will take place. May be a set, list, or tuple.
+        For example, if this contains 4, then at 4x downsampling, attention
+        will be used.
     :param dropout: the dropout probability.
     :param channel_mult: channel multiplier for each level of the UNet.
     :param conv_resample: if True, use learned convolutions for upsampling and
         downsampling.
+    :param dims: determines if the signal is 1D, 2D, or 3D.
+    :param num_heads: the number of attention heads in each attention layer.
+    :param num_heads_channels: if specified, ignore num_heads and instead use
+                               a fixed channel width per attention head.
+    :param num_heads_upsample: works with num_heads to set a different number
+                               of heads for upsampling. Deprecated.
     :param use_scale_shift_norm: use a FiLM-like conditioning mechanism.
     :param resblock_updown: use residual blocks for up/downsampling.
     :param use_new_attention_order: use a different attention pattern for potentially
@@ -208,6 +180,10 @@ class Diffusion(nn.Module):
             self,
             model_channels,
             in_channels=1,
+            in_latent_channels=1024,
+            in_mel_channels=120,
+            conditioning_dim_factor=8,
+            conditioning_expansion=4,
             out_channels=2,  # mean and variance
             dropout=0,
             # res           1, 2, 4, 8,16,32,64,128,256,512, 1K, 2K
@@ -215,19 +191,25 @@ class Diffusion(nn.Module):
             num_res_blocks=(1, 1, 1, 1, 1, 2, 2, 2,   2,  2,  2,  2),
             # spec_cond:    1, 0, 0, 1, 0, 0, 1, 0,   0,  1,  0,  0)
             # attn:         0, 0, 0, 0, 0, 0, 0, 0,   0,  1,  1,  1
+            token_conditioning_resolutions=(1,16,),
             conv_resample=True,
             dims=1,
             use_fp16=False,
+            num_heads=1,
+            num_head_channels=-1,
+            num_heads_upsample=-1,
             kernel_size=3,
             scale_factor=2,
             time_embed_dim_multiplier=4,
             efficient_convs=True,  # Uses kernels with width of 1 in several places rather than 3.
             use_scale_shift_norm=True,
-            freeze_main=False,
             # Parameters for regularization.
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
     ):
         super().__init__()
+
+        if num_heads_upsample == -1:
+            num_heads_upsample = num_heads
 
         self.in_channels = in_channels
         self.model_channels = model_channels
@@ -235,10 +217,14 @@ class Diffusion(nn.Module):
         self.dropout = dropout
         self.channel_mult = channel_mult
         self.conv_resample = conv_resample
+        self.num_heads = num_heads
+        self.num_head_channels = num_head_channels
+        self.num_heads_upsample = num_heads_upsample
         self.dims = dims
         self.unconditioned_percentage = unconditioned_percentage
         self.enable_fp16 = use_fp16
-        self.alignment_size = max(2 ** (len(channel_mult)+1), 256)
+        self.alignment_size = 2 ** (len(channel_mult)+1)
+        self.in_mel_channels = in_mel_channels
         padding = 1 if kernel_size == 3 else 2
         down_kernel = 1 if efficient_convs else 3
 
@@ -249,26 +235,44 @@ class Diffusion(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        self.structural_cond_input = nn.Conv1d(in_channels, model_channels, kernel_size=5, padding=2)
-        self.aligned_latent_padding_embedding = nn.Parameter(torch.zeros(1,in_channels,1))
-        self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,1))
-        self.structural_processor = AudioVAE(model_channels, dropout)
-        self.surrogate_head = nn.Conv1d(model_channels, in_channels, 1)
+        conditioning_dim = model_channels * conditioning_dim_factor
+        # Either code_converter or latent_converter is used, depending on what type of conditioning data is fed.
+        # This model is meant to be able to be trained on both for efficiency purposes - it is far less computationally
+        # complex to generate tokens, while generating latents will normally mean propagating through a deep autoregressive
+        # transformer network.
+        self.mel_converter = nn.Sequential(
+            nn.Conv1d(in_mel_channels, conditioning_dim, 3, padding=1),
+            ResBlockSimple(conditioning_dim, dropout, efficient_config=False),
+            ResBlockSimple(conditioning_dim, dropout, efficient_config=False),
+            ResBlockSimple(conditioning_dim, dropout, efficient_config=False),
+            ResBlockSimple(conditioning_dim, dropout, efficient_config=False),
+            ResBlockSimple(conditioning_dim, dropout, efficient_config=False)
+        )
+        self.latent_converter = nn.Conv1d(in_latent_channels, conditioning_dim, 1)
+        self.aligned_latent_padding_embedding = nn.Parameter(torch.randn(1,in_latent_channels,1))
+        self.unconditioned_embedding = nn.Parameter(torch.randn(1,conditioning_dim,1))
+        self.conditioning_expansion = conditioning_expansion
 
-        self.input_block = conv_nd(dims, in_channels, model_channels, kernel_size, padding=padding)
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, model_channels*2, model_channels, 1)
+                    conv_nd(dims, in_channels, model_channels, kernel_size, padding=padding)
                 )
             ]
         )
+        token_conditioning_blocks = []
         self._feature_size = model_channels
         input_block_chans = [model_channels]
         ch = model_channels
         ds = 1
 
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
+            if ds in token_conditioning_resolutions:
+                token_conditioning_block = nn.Conv1d(conditioning_dim, ch, 1)
+                token_conditioning_block.weight.data *= .02
+                self.input_blocks.append(token_conditioning_block)
+                token_conditioning_blocks.append(token_conditioning_block)
+
             for _ in range(num_blocks):
                 layers = [
                     ResBlock(
@@ -301,6 +305,15 @@ class Diffusion(nn.Module):
                 self._feature_size += ch
 
         self.middle_block = TimestepEmbedSequential(
+            ResBlock(
+                ch,
+                time_embed_dim,
+                dropout,
+                dims=dims,
+                kernel_size=kernel_size,
+                efficient_config=efficient_convs,
+                use_scale_shift_norm=use_scale_shift_norm,
+            ),
             ResBlock(
                 ch,
                 time_embed_dim,
@@ -345,24 +358,16 @@ class Diffusion(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
 
-        if freeze_main:
-            for p in self.parameters():
-                p.DO_NOT_TRAIN = True
-                p.requires_grad = False
-            for m in [self.structural_processor, self.structural_cond_input, self.surrogate_head]:
-                for p in m.parameters():
-                    del p.DO_NOT_TRAIN
-                    p.requires_grad = True
-
-
     def get_grad_norm_parameter_groups(self):
         groups = {
             'input_blocks': list(self.input_blocks.parameters()),
             'output_blocks': list(self.output_blocks.parameters()),
             'middle_transformer': list(self.middle_block.parameters()),
-            'structural_processor': list(self.structural_processor.parameters()),
         }
         return groups
+
+    def is_latent(self, t):
+        return t.shape[1] != self.in_mel_channels
 
     def fix_alignment(self, x, aligned_conditioning):
         """
@@ -373,50 +378,63 @@ class Diffusion(nn.Module):
         if cm != 0:
             pc = (cm-x.shape[-1])/x.shape[-1]
             x = F.pad(x, (0,cm-x.shape[-1]))
-            aligned_conditioning = F.pad(aligned_conditioning, (0,int(pc*aligned_conditioning.shape[-1])))
+            # Also fix aligned_latent, which is aligned to x.
+            if self.is_latent(aligned_conditioning):
+                aligned_conditioning = torch.cat([aligned_conditioning,
+                                                  self.aligned_latent_padding_embedding.repeat(x.shape[0], 1, int(pc * aligned_conditioning.shape[-1]))], dim=-1)
+            else:
+                aligned_conditioning = F.pad(aligned_conditioning, (0,int(pc*aligned_conditioning.shape[-1])))
         return x, aligned_conditioning
 
-    def forward(self, x, timesteps, conditioning, return_surrogate=True, conditioning_free=False):
+    def forward(self, x, timesteps, aligned_conditioning, conditioning_free=False):
         """
         Apply the model to an input batch.
 
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
-        :param conditioning: should just be the truth value. produces a latent through an autoencoder, then uses diffusion to decode that latent.
-                             at inference, only the latent is passed in.
+        :param aligned_conditioning: an aligned latent or sequence of tokens providing useful data about the sample to be produced.
         :param conditioning_free: When set, all conditioning inputs (including tokens and conditioning_input) will not be considered.
         :return: an [N x C x ...] Tensor of outputs.
         """
 
+        # Shuffle aligned_latent to BxCxS format
+        if self.is_latent(aligned_conditioning):
+            aligned_conditioning = aligned_conditioning.permute(0, 2, 1)
+
         # Fix input size to the proper multiple of 2 so we don't get alignment errors going down and back up the U-net.
         orig_x_shape = x.shape[-1]
-        x, aligned_conditioning = self.fix_alignment(x, conditioning)
+        x, aligned_conditioning = self.fix_alignment(x, aligned_conditioning)
 
         with autocast(x.device.type, enabled=self.enable_fp16):
+
+            hs = []
+            time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
             # Note: this block does not need to repeated on inference, since it is not timestep-dependent.
             if conditioning_free:
                 code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, 1)
-                surrogate = torch.zeros_like(x)
             else:
-                code_emb = self.structural_cond_input(aligned_conditioning)
-                code_emb = self.structural_processor(code_emb)
-                code_emb = F.interpolate(code_emb, size=(x.shape[-1],), mode='linear')
-                surrogate = self.surrogate_head(code_emb)
-
-            x = self.input_block(x)
-            x = torch.cat([x, code_emb], dim=1)
+                if self.is_latent(aligned_conditioning):
+                    code_emb = self.latent_converter(aligned_conditioning)
+                else:
+                    code_emb = self.mel_converter(aligned_conditioning)
 
             # Everything after this comment is timestep dependent.
-            hs = []
-            time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+            code_emb = torch.repeat_interleave(code_emb, self.conditioning_expansion, dim=-1)
+
+            first = True
             time_emb = time_emb.float()
             h = x
             for k, module in enumerate(self.input_blocks):
-                with autocast(x.device.type, enabled=self.enable_fp16 and not first):
-                    # First block has autocast disabled to allow a high precision signal to be properly vectorized.
-                    h = module(h, time_emb)
-                hs.append(h)
+                if isinstance(module, nn.Conv1d):
+                    h_tok = F.interpolate(module(code_emb), size=(h.shape[-1]), mode='nearest')
+                    h = h + h_tok
+                else:
+                    with autocast(x.device.type, enabled=self.enable_fp16 and not first):
+                        # First block has autocast disabled to allow a high precision signal to be properly vectorized.
+                        h = module(h, time_emb)
+                    hs.append(h)
+                first = False
             h = self.middle_block(h, time_emb)
             for module in self.output_blocks:
                 h = torch.cat([h, hs.pop()], dim=1)
@@ -428,33 +446,35 @@ class Diffusion(nn.Module):
 
         # Involve probabilistic or possibly unused parameters in loss so we don't get DDP errors.
         extraneous_addition = 0
-        params = [self.aligned_latent_padding_embedding, self.unconditioned_embedding]
+        params = [self.aligned_latent_padding_embedding, self.unconditioned_embedding] + list(self.latent_converter.parameters())
         for p in params:
             extraneous_addition = extraneous_addition + p.mean()
         out = out + extraneous_addition * 0
 
-        if return_surrogate:
-            return out[:, :, :orig_x_shape], surrogate[:, :, :orig_x_shape]
-        else:
-            return out[:, :, :orig_x_shape]
+        return out[:, :, :orig_x_shape]
 
 
 @register_model
-def register_unet_diffusion_waveform_gen2(opt_net, opt):
-    return Diffusion(**opt_net['kwargs'])
+def register_unet_diffusion_waveform_gen3(opt_net, opt):
+    return DiffusionTts(**opt_net['kwargs'])
 
 
 if __name__ == '__main__':
     clip = torch.randn(2, 1, 32868)
-    aligned_sequence = torch.randn(2,1,32868)
+    aligned_latent = torch.randn(2,388,1024)
+    aligned_sequence = torch.randn(2,120,220)
     ts = torch.LongTensor([600, 600])
-    model = Diffusion(128,
-                      channel_mult=[1,1.5,2, 3, 4, 6, 8],
-                      num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
-                      kernel_size=3,
-                      scale_factor=2,
-                      time_embed_dim_multiplier=4,
-                      efficient_convs=False)
+    model = DiffusionTts(128,
+                         channel_mult=[1,1.5,2, 3, 4, 6, 8],
+                         num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
+                         token_conditioning_resolutions=[1,4,16,64],
+                         num_heads=8,
+                         kernel_size=3,
+                         scale_factor=2,
+                         time_embed_dim_multiplier=4,
+                         efficient_convs=False)
+    # Test with latent aligned conditioning
+    o = model(clip, ts, aligned_latent)
     # Test with sequence aligned conditioning
     o = model(clip, ts, aligned_sequence)
 
