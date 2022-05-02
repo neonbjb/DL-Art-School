@@ -121,7 +121,7 @@ class Trainer:
                     shuffle = True
                 self.train_loader = create_dataloader(self.train_set, dataset_opt, opt, self.train_sampler, collate_fn=collate_fn, shuffle=shuffle)
                 if self.rank <= 0:
-                    self.logger.info('Number of train images: {:,d}, iters: {:,d}'.format(
+                    self.logger.info('Number of training data elements: {:,d}, iters: {:,d}'.format(
                         len(self.train_set), train_size))
                     self.logger.info('Total epochs needed: {:d} for iters {:,d}'.format(
                         self.total_epochs, total_iters))

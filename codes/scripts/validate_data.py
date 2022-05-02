@@ -46,7 +46,7 @@ def main():
             dataset_opt['n_workers'] = 0  # Force num_workers=0 to make dataloader work in process.
             train_loader = create_dataloader(train_set, dataset_opt, opt, None)
             if rank <= 0:
-                print('Number of train images: {:,d}, iters: {:,d}'.format(
+                print('Number of training data elements: {:,d}, iters: {:,d}'.format(
                     len(train_set), train_size))
     assert train_loader is not None
 
