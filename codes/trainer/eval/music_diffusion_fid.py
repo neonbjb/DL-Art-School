@@ -4,6 +4,7 @@ from glob import glob
 
 import torch
 import torchaudio
+import torchvision
 from pytorch_fid.fid_score import calculate_frechet_distance
 from torch import distributed
 from tqdm import tqdm
@@ -52,7 +53,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         self.local_modules = {}
         if mode == 'standard':
             self.diffusion_fn = self.perform_diffusion_standard
-        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 128, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
+        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
     def load_data(self, path):
         return list(glob(f'{path}/*.wav'))
@@ -64,9 +65,10 @@ class MusicDiffusionFid(evaluator.Evaluator):
             real_resampled = audio
         audio = audio.unsqueeze(0)
         output_shape = audio.shape
-        gen = self.diffuser.p_sample_loop(self.model, output_shape, model_kwargs={'conditioning': audio,
-                                                                                  'return_surrogate': False})
-        #_, surrogate = self.model(audio, torch.tensor([0], device=audio.device), audio)
+        mel = self.spec_fn({'in': audio})['out']
+        gen = self.diffuser.p_sample_loop(self.model, output_shape, noise=torch.zeros(*output_shape, device=audio.device),
+                                          model_kwargs={'aligned_conditioning': mel})
+        real_resampled = real_resampled + torch.FloatTensor(real_resampled.shape).uniform_(0.0, 1e-5).to(real_resampled.device)
         return gen, real_resampled, sample_rate
 
     def load_projector(self):
@@ -113,6 +115,10 @@ class MusicDiffusionFid(evaluator.Evaluator):
             for i in tqdm(list(range(0, len(self.data), self.skip))):
                 path = self.data[i + self.env['rank']]
                 audio = load_audio(path, 22050).to(self.dev)
+                mel = self.spec_fn({'in': audio})['out']
+                mel_norm = (mel + mel.min().abs())
+                mel_norm = mel_norm / mel_norm.max(dim=-1, keepdim=True).values
+                torchvision.utils.save_image(mel_norm.unsqueeze(1), 'mel.png')
                 sample, ref, sample_rate = self.diffusion_fn(audio)
 
                 #gen_projections.append(self.project(projector, sample, sample_rate).cpu())  # Store on CPU to avoid wasting GPU memory.
@@ -141,10 +147,10 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen2.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen3.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen2\\models\\59000_generator_ema.pth').cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 500,
+                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen3_r0\\models\\15400_generator_ema.pth').cuda()
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'standard'}
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 1, 'device': 'cuda', 'opt': {}}
