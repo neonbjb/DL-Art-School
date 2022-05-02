@@ -376,6 +376,7 @@ class UnifiedVoice(nn.Module):
             conds = conds.mean(dim=1).unsqueeze(1)
         return conds
 
+
     def forward(self, speech_conditioning_input, text_inputs, text_lengths, mel_codes, wav_lengths, types=None, text_first=True, raw_mels=None, return_attentions=False,
                 return_latent=False, clip_inputs=True):
         """

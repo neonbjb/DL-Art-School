@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 
+from models.audio.tts.unet_diffusion_tts_flat import DiffusionTtsFlat
 from trainer.inject import Injector
 from utils.util import opt_get, load_model_from_config, pad_or_truncate
 
@@ -230,3 +231,49 @@ class ReverseUnivnetInjector(Injector):
             output = torch.where(labels, original_audio, decoded_mel)
 
             return {self.output: output, self.label_output_key: labels[:,0,0].long()}
+
+
+class ConditioningLatentDistributionDivergenceInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        if 'gpt_config' in opt.keys():
+            # The unified_voice model.
+            cfg = opt_get(opt, ['gpt_config'], "../experiments/train_gpt_tts_unified.yml")
+            model_name = opt_get(opt, ['gpt_name'], 'gpt')
+            pretrained_path = opt['gpt_path']
+            self.latent_producer = load_model_from_config(cfg, model_name=model_name,
+                                                          also_load_savepoint=False, load_path=pretrained_path).eval()
+            self.mel_inj = TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_norm_file': '../experiments/clips_mel_norms.pth'},{})
+        else:
+            self.latent_producer = DiffusionTtsFlat(model_channels=1024, num_layers=10, in_channels=100, out_channels=200,
+                                          in_latent_channels=1024, in_tokens=8193, dropout=0, use_fp16=False,
+                                          num_heads=16, layer_drop=0, unconditioned_percentage=0).eval()
+            self.latent_producer.load_state_dict(torch.load(opt['diffusion_path']))
+            self.mel_inj = TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_fmax': 12000, 'sampling_rate': 24000, 'n_mel_channels': 100},{})
+        self.needs_move = True
+        # Aux input keys.
+        self.conditioning_key = opt['conditioning_clip']
+        # Output keys
+        self.var_loss_key = opt['var_loss']
+
+    def to_mel(self, t):
+        return self.mel_inj({'wav': t})['mel']
+
+    def forward(self, state):
+        with torch.no_grad():
+            state_preds = state[self.input]
+            state_cond = pad_or_truncate(state[self.conditioning_key], 132300)
+            mel_conds = []
+            for k in range(state_cond.shape[1]):
+                mel_conds.append(self.to_mel(state_cond[:, k]))
+            mel_conds = torch.stack(mel_conds, dim=1)
+
+            if self.needs_move:
+                self.latent_producer = self.latent_producer.to(mel_conds.device)
+            latents = self.latent_producer.get_conditioning_latent(mel_conds)
+
+        sp_means, sp_vars = state_preds.mean(dim=0), state_preds.var(dim=0)
+        tr_means, tr_vars = latents.mean(dim=0), latents.var(dim=0)
+        mean_loss = F.mse_loss(sp_means, tr_means)
+        var_loss = F.mse_loss(sp_vars, tr_vars)
+        return {self.output: mean_loss, self.var_loss_key: var_loss}

@@ -300,6 +300,14 @@ class DiffusionTtsFlat(nn.Module):
             return out, mel_pred
         return out
 
+    def get_conditioning_latent(self, conditioning_input):
+        speech_conditioning_input = conditioning_input.unsqueeze(1) if len(
+            conditioning_input.shape) == 3 else conditioning_input
+        conds = []
+        for j in range(speech_conditioning_input.shape[1]):
+            conds.append(self.contextual_embedder(speech_conditioning_input[:, j]))
+        conds = torch.cat(conds, dim=-1)
+        return conds.mean(dim=-1)
 
 @register_model
 def register_diffusion_tts_flat(opt_net, opt):
