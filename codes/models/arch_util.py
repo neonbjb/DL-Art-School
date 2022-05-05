@@ -378,7 +378,6 @@ class ResBlock(nn.Module):
         dropout,
         out_channels=None,
         use_conv=False,
-        use_scale_shift_norm=False,
         dims=2,
         up=False,
         down=False,
@@ -389,7 +388,6 @@ class ResBlock(nn.Module):
         self.dropout = dropout
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
-        self.use_scale_shift_norm = use_scale_shift_norm
         padding = 1 if kernel_size == 3 else 2
 
         self.in_layers = nn.Sequential(
@@ -427,7 +425,7 @@ class ResBlock(nn.Module):
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
-    def forward(self, x, emb):
+    def forward(self, x):
         """
         Apply the block to a Tensor, conditioned on a timestep embedding.
 
@@ -435,7 +433,7 @@ class ResBlock(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         return checkpoint(
-            self._forward, x, emb
+            self._forward, x
         )
 
     def _forward(self, x):

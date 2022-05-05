@@ -22,7 +22,7 @@ from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.respace import space_timesteps, SpacedDiffusion
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel, load_speech_dvae, \
     convert_mel_to_codes, load_univnet_vocoder, wav_to_univnet_mel
-from trainer.injectors.audio_injectors import denormalize_tacotron_mel, TorchMelSpectrogramInjector
+from trainer.injectors.audio_injectors import denormalize_tacotron_mel, TorchMelSpectrogramInjector, pixel_shuffle_1d
 from utils.util import ceil_multiple, opt_get, load_model_from_config, pad_or_truncate
 
 
@@ -64,10 +64,11 @@ class MusicDiffusionFid(evaluator.Evaluator):
         else:
             real_resampled = audio
         audio = audio.unsqueeze(0)
-        output_shape = audio.shape
+        output_shape = (1, 16, audio.shape[-1] // 16)
         mel = self.spec_fn({'in': audio})['out']
         gen = self.diffuser.p_sample_loop(self.model, output_shape, noise=torch.zeros(*output_shape, device=audio.device),
                                           model_kwargs={'aligned_conditioning': mel})
+        gen = pixel_shuffle_1d(gen, 16)
         real_resampled = real_resampled + torch.FloatTensor(real_resampled.shape).uniform_(0.0, 1e-5).to(real_resampled.device)
         return gen, real_resampled, sample_rate
 
@@ -149,8 +150,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen3.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen3_r0\\models\\15400_generator_ema.pth').cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
+                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen3_r1\\models\\10000_generator_ema.pth').cuda()
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 50,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'standard'}
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 1, 'device': 'cuda', 'opt': {}}
