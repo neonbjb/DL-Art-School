@@ -11,10 +11,10 @@ from utils.util import opt_get, load_model_from_config, pad_or_truncate
 TACOTRON_MEL_MAX = 2.3143386840820312
 TACOTRON_MEL_MIN = -11.512925148010254
 
-def normalize_tacotron_mel(mel):
+def normalize_mel(mel):
     return 2 * ((mel - TACOTRON_MEL_MIN) / (TACOTRON_MEL_MAX - TACOTRON_MEL_MIN)) - 1
 
-def denormalize_tacotron_mel(norm_mel):
+def denormalize_mel(norm_mel):
     return ((norm_mel+1)/2)*(TACOTRON_MEL_MAX-TACOTRON_MEL_MIN)+TACOTRON_MEL_MIN
 
 class MelSpectrogramInjector(Injector):
@@ -40,7 +40,7 @@ class MelSpectrogramInjector(Injector):
         self.stft = self.stft.to(inp.device)
         mel = self.stft.mel_spectrogram(inp)
         if self.do_normalization:
-            mel = normalize_tacotron_mel(mel)
+            mel = normalize_mel(mel)
         return {self.output: mel}
 
 
@@ -56,6 +56,7 @@ class TorchMelSpectrogramInjector(Injector):
         self.mel_fmax = opt_get(opt, ['mel_fmax'], 8000)
         self.sampling_rate = opt_get(opt, ['sampling_rate'], 22050)
         norm = opt_get(opt, ['normalize'], False)
+        self.true_norm = opt_get(opt, ['true_normalization'], False)
         self.mel_stft = torchaudio.transforms.MelSpectrogram(n_fft=self.filter_length, hop_length=self.hop_length,
                                                              win_length=self.win_length, power=2, normalized=norm,
                                                              sample_rate=self.sampling_rate, f_min=self.mel_fmin,
@@ -79,6 +80,8 @@ class TorchMelSpectrogramInjector(Injector):
         if self.mel_norms is not None:
             self.mel_norms = self.mel_norms.to(mel.device)
             mel = mel / self.mel_norms.unsqueeze(0).unsqueeze(-1)
+        if self.true_norm:
+            mel = normalize_mel(mel)
         return {self.output: mel}
 
 
