@@ -17,7 +17,7 @@ from models.clip.mel_text_clip import MelTextCLIP
 from models.audio.tts.tacotron2 import text_to_sequence
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel, load_speech_dvae, \
     convert_mel_to_codes, load_univnet_vocoder, wav_to_univnet_mel
-from trainer.injectors.audio_injectors import denormalize_tacotron_mel
+from trainer.injectors.audio_injectors import denormalize_mel
 from utils.util import ceil_multiple, opt_get, load_model_from_config, pad_or_truncate
 
 
@@ -161,7 +161,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
                                     model_kwargs={'aligned_conditioning': mel_codes,
                                                   'conditioning_input': univnet_mel})
         # denormalize mel
-        gen_mel = denormalize_tacotron_mel(gen_mel)
+        gen_mel = denormalize_mel(gen_mel)
 
         gen_wav = self.local_modules['vocoder'].inference(gen_mel)
         real_dec = self.local_modules['vocoder'].inference(univnet_mel)

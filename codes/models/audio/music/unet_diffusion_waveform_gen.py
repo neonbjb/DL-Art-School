@@ -95,7 +95,7 @@ class ResBlock(TimestepBlock):
             h = self.out_layers(h)
         return self.skip_connection(x) + h
 
-class DiffusionTts(nn.Module):
+class DiffusionWaveformGen(nn.Module):
     """
     The full UNet model with attention and timestep embedding.
 
@@ -465,7 +465,7 @@ class DiffusionTts(nn.Module):
 
 @register_model
 def register_unet_diffusion_waveform_gen(opt_net, opt):
-    return DiffusionTts(**opt_net['kwargs'])
+    return DiffusionWaveformGen(**opt_net['kwargs'])
 
 
 if __name__ == '__main__':
@@ -473,17 +473,17 @@ if __name__ == '__main__':
     aligned_latent = torch.randn(2,388,1024)
     aligned_sequence = torch.randn(2,120,220)
     ts = torch.LongTensor([600, 600])
-    model = DiffusionTts(128,
-                         channel_mult=[1,1.5,2, 3, 4, 6, 8],
-                         num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
-                         token_conditioning_resolutions=[1,4,16,64],
-                         attention_resolutions=[],
-                         num_heads=8,
-                         kernel_size=3,
-                         scale_factor=2,
-                         time_embed_dim_multiplier=4,
-                         super_sampling=False,
-                         efficient_convs=False)
+    model = DiffusionWaveformGen(128,
+                                 channel_mult=[1,1.5,2, 3, 4, 6, 8],
+                                 num_res_blocks=[2, 2, 2, 2, 2, 2, 1],
+                                 token_conditioning_resolutions=[1,4,16,64],
+                                 attention_resolutions=[],
+                                 num_heads=8,
+                                 kernel_size=3,
+                                 scale_factor=2,
+                                 time_embed_dim_multiplier=4,
+                                 super_sampling=False,
+                                 efficient_convs=False)
     # Test with latent aligned conditioning
     o = model(clip, ts, aligned_latent)
     # Test with sequence aligned conditioning

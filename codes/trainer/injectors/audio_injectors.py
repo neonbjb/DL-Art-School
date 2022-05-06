@@ -282,6 +282,20 @@ class ConditioningLatentDistributionDivergenceInjector(Injector):
         return {self.output: mean_loss, self.var_loss_key: var_loss}
 
 
+class RandomScaleInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.min_samples = opt['min_samples']
+
+    def forward(self, state):
+        inp = state[self.input]
+        if self.min_samples < inp.shape[-1]:
+            samples = random.randint(self.min_samples, inp.shape[-1])
+            start = random.randint(0, inp.shape[-1]-samples)
+            inp = inp[:, :, start:start+samples]
+        return {self.output: inp}
+
+
 def pixel_shuffle_1d(x, upscale_factor):
     batch_size, channels, steps = x.size()
     channels //= upscale_factor

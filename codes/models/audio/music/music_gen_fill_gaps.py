@@ -186,15 +186,14 @@ class MusicGenerator(nn.Module):
 
 
     def timestep_independent(self, truth, expected_seq_len, return_code_pred):
-        code_emb = self.conditioner(truth)
+        truth_emb = self.conditioner(truth)
         # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
         if self.training and self.unconditioned_percentage > 0:
-            unconditioned_batches = torch.rand((code_emb.shape[0], 1, 1),
-                                               device=code_emb.device) < self.unconditioned_percentage
-            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(truth.shape[0], 1, 1),
-                                   code_emb)
-        expanded_code_emb = F.interpolate(code_emb, size=expected_seq_len, mode='nearest')
-        return expanded_code_emb
+            unconditioned_batches = torch.rand((truth_emb.shape[0], 1, 1),
+                                               device=truth_emb.device) < self.unconditioned_percentage
+            truth_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(truth.shape[0], 1, 1),
+                                   truth_emb)
+        return truth_emb
 
 
     def forward(self, x, timesteps, truth=None, precomputed_aligned_embeddings=None, conditioning_free=False):
@@ -212,20 +211,21 @@ class MusicGenerator(nn.Module):
 
         unused_params = []
         if conditioning_free:
-            code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
+            truth_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
             unused_params.extend(list(self.conditioner.parameters()))
         else:
             if precomputed_aligned_embeddings is not None:
-                code_emb = precomputed_aligned_embeddings
+                truth_emb = precomputed_aligned_embeddings
             else:
-                truth = self.do_masking(truth)
-                code_emb = self.timestep_independent(truth, x.shape[-1], True)
+                if self.training:
+                    truth = self.do_masking(truth)
+                truth_emb = self.timestep_independent(truth, x.shape[-1], True)
             unused_params.append(self.unconditioned_embedding)
 
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-        code_emb = self.conditioning_timestep_integrator(code_emb, time_emb)
+        truth_emb = self.conditioning_timestep_integrator(truth_emb, time_emb)
         x = self.inp_block(x)
-        x = torch.cat([x, code_emb], dim=1)
+        x = torch.cat([x, truth_emb], dim=1)
         x = self.integrating_conv(x)
         for i, lyr in enumerate(self.layers):
             # Do layer drop where applicable. Do not drop first and last layers.
