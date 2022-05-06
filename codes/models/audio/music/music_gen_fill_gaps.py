@@ -151,7 +151,6 @@ class MusicGenerator(nn.Module):
             DiffusionLayer(model_channels, dropout, num_heads),
         )
         self.integrating_conv = nn.Conv1d(model_channels*2, model_channels, kernel_size=1)
-        self.mel_head = nn.Conv1d(model_channels, in_channels, kernel_size=3, padding=1)
         self.layers = nn.ModuleList([DiffusionLayer(model_channels, dropout, num_heads) for _ in range(num_layers)] +
                                     [ResBlock(model_channels, model_channels, dropout, dims=1, use_scale_shift_norm=True) for _ in range(3)])
 
