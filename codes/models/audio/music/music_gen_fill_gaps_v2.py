@@ -6,8 +6,10 @@ import torch.nn.functional as F
 from torch import autocast
 from torchaudio.transforms import TimeMasking, FrequencyMasking
 
+from models.audio.tts.unified_voice2 import ConditioningEncoder
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, TimestepBlock
+from models.lucidrains.x_transformers import Encoder
 from trainer.networks import register_model
 from utils.util import checkpoint
 
@@ -103,6 +105,25 @@ class DiffusionLayer(TimestepBlock):
         return self.attn(y)
 
 
+class ConditioningEncoder(nn.Module):
+    def __init__(self,
+                 spec_dim,
+                 embedding_dim,
+                 attn_blocks=6):
+        super().__init__()
+        attn = []
+        self.init = nn.Sequential(nn.Conv1d(spec_dim, embedding_dim//2, kernel_size=3, padding=1, stride=2),
+                                  nn.Conv1d(embedding_dim//2, embedding_dim, kernel_size=3, padding=1, stride=2))
+        self.attn = Encoder(dim=embedding_dim, depth=attn_blocks, use_scalenorm=True, rotary_pos_emb=True,
+                            heads=embedding_dim//64, ff_mult=1)
+        self.dim = embedding_dim
+
+    def forward(self, x):
+        h = self.init(x)
+        h = self.attn(h.permute(0,2,1))
+        return h.mean(dim=1)
+
+
 class MusicGenerator(nn.Module):
     def __init__(
             self,
@@ -117,8 +138,8 @@ class MusicGenerator(nn.Module):
             layer_drop=.1,
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
             # Masking parameters.
-            frequency_mask_percent_max=0,
-            time_mask_percent_max=0,
+            frequency_mask_percent_max=0.2,
+            time_mask_percent_max=0.2,
     ):
         super().__init__()
 
@@ -140,17 +161,8 @@ class MusicGenerator(nn.Module):
             linear(model_channels, model_channels),
         )
 
-        self.conditioner = nn.Sequential(
-            nn.Conv1d(in_channels, model_channels, 3, padding=1),
-            AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
-            AttentionBlock(model_channels, num_heads, relative_pos_embeddings=True),
-        )
-        self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,1))
-        self.conditioning_timestep_integrator = TimestepEmbedSequential(
-            DiffusionLayer(model_channels, dropout, num_heads),
-            DiffusionLayer(model_channels, dropout, num_heads),
-        )
-        self.integrating_conv = nn.Conv1d(model_channels*2, model_channels, kernel_size=1)
+        self.conditioner = ConditioningEncoder(in_channels, model_channels)
+        self.unconditioned_embedding = nn.Parameter(torch.randn(1, model_channels))
         self.layers = nn.ModuleList([DiffusionLayer(model_channels, dropout, num_heads) for _ in range(num_layers)] +
                                     [ResBlock(model_channels, model_channels, dropout, dims=1, use_scale_shift_norm=True) for _ in range(3)])
 
@@ -163,36 +175,33 @@ class MusicGenerator(nn.Module):
     def get_grad_norm_parameter_groups(self):
         groups = {
             'layers': list(self.layers.parameters()),
-            'conditioner': list(self.conditioner.parameters()) + list(self.conditioner.parameters()),
-            'timestep_integrator': list(self.conditioning_timestep_integrator.parameters()) + list(self.integrating_conv.parameters()),
+            'conditioner': list(self.conditioner.parameters()),
             'time_embed': list(self.time_embed.parameters()),
         }
         return groups
 
     def do_masking(self, truth):
         b, c, s = truth.shape
-        mask = torch.ones_like(truth)
-        if self.frequency_mask_percent_mask > 0:
-            # Frequency mask
-            cs = random.randint(0, c-10)
-            ce = min(c-1, cs+random.randint(1, int(self.frequency_mask_percent_mask*c)))
-            mask[:, cs:ce] = 0
-        else:
-            # Time mask
-            cs = random.randint(0, s-5)
-            ce = min(s-1, cs+random.randint(1, int(self.frequency_mask_percent_mask*s)))
-            mask[:, :, cs:ce] = 0
-        return truth * mask
+
+        # Frequency mask
+        mask_freq = torch.ones_like(truth)
+        cs = random.randint(0, c-10)
+        ce = min(c-1, cs+random.randint(1, int(self.frequency_mask_percent_mask*c)))
+        mask_freq[:, cs:ce] = 0
+
+        # Time mask
+        mask_time = torch.ones_like(truth)
+        cs = random.randint(0, s-5)
+        ce = min(s-1, cs+random.randint(1, int(self.frequency_mask_percent_mask*s)))
+        mask_time[:, :, cs:ce] = 0
+
+        return truth * mask_time * mask_freq
 
 
     def timestep_independent(self, truth):
+        if self.training:
+            truth = self.do_masking(truth)
         truth_emb = self.conditioner(truth)
-        # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
-        if self.training and self.unconditioned_percentage > 0:
-            unconditioned_batches = torch.rand((truth_emb.shape[0], 1, 1),
-                                               device=truth_emb.device) < self.unconditioned_percentage
-            truth_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(truth.shape[0], 1, 1),
-                                    truth_emb)
         return truth_emb
 
 
@@ -211,22 +220,17 @@ class MusicGenerator(nn.Module):
 
         unused_params = []
         if conditioning_free:
-            truth_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
+            truth_emb = self.unconditioned_embedding
             unused_params.extend(list(self.conditioner.parameters()))
         else:
             if precomputed_aligned_embeddings is not None:
                 truth_emb = precomputed_aligned_embeddings
             else:
-                if self.training:
-                    truth = self.do_masking(truth)
                 truth_emb = self.timestep_independent(truth)
             unused_params.append(self.unconditioned_embedding)
+        time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) + truth_emb
 
-        time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-        truth_emb = self.conditioning_timestep_integrator(truth_emb, time_emb)
         x = self.inp_block(x)
-        x = torch.cat([x, truth_emb], dim=1)
-        x = self.integrating_conv(x)
         for i, lyr in enumerate(self.layers):
             # Do layer drop where applicable. Do not drop first and last layers.
             if self.training and self.layer_drop > 0 and i != 0 and i != (len(self.layers)-1) and random.random() < self.layer_drop:
@@ -249,7 +253,7 @@ class MusicGenerator(nn.Module):
 
 
 @register_model
-def register_music_gap_gen(opt_net, opt):
+def register_music_gap_gen2(opt_net, opt):
     return MusicGenerator(**opt_net['kwargs'])
 
 
