@@ -117,8 +117,8 @@ class MusicGenerator(nn.Module):
             layer_drop=.1,
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
             # Masking parameters.
-            time_mask_percent_max=.4,
-            frequency_mask_percent_max=.4,
+            frequency_mask_percent_max=0,
+            time_mask_percent_max=0,
     ):
         super().__init__()
 
@@ -172,7 +172,7 @@ class MusicGenerator(nn.Module):
     def do_masking(self, truth):
         b, c, s = truth.shape
         mask = torch.ones_like(truth)
-        if random.random() < .5:
+        if self.frequency_mask_percent_mask > 0:
             # Frequency mask
             cs = random.randint(0, c-10)
             ce = min(c-1, cs+random.randint(1, int(self.frequency_mask_percent_mask*c)))

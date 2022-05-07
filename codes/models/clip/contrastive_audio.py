@@ -219,6 +219,12 @@ class ContrastiveAudio(nn.Module):
     def update_for_step(self, step, __):
         self.to_latent2.weight.data = self.to_latent2.weight.data * .99 + self.to_latent.weight.data * .01
 
+    def project(self, mel):
+        h1 = self.emb(mel).permute(0, 2, 1)
+        h1 = self.transformer(h1)
+        h1 = self.to_latent(h1)
+        return h1
+
     def forward(
             self,
             mel_input1,
