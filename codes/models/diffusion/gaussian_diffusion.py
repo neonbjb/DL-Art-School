@@ -546,6 +546,43 @@ class GaussianDiffusion:
                 yield out
                 img = out["sample"]
 
+    def p_sample_loop_with_guidance(
+        self,
+        model,
+        guidance_input,
+        mask,
+        noise=None,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        device=None,
+    ):
+        if device is None:
+            device = next(model.parameters()).device
+        shape = guidance_input.shape
+        if noise is None:
+            noise = th.randn(*shape, device=device)
+        indices = list(range(self.num_timesteps))[::-1]
+
+        img = noise
+        for i in tqdm(indices):
+            t = th.tensor([i] * shape[0], device=device)
+            with th.no_grad():
+                out = self.p_sample(
+                    model,
+                    img,
+                    t,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    cond_fn=cond_fn,
+                    model_kwargs=model_kwargs,
+                )
+                model_driven_out = out["sample"] * mask.logical_not()
+                guidance_driven_out = self.q_sample(guidance_input, t, noise=noise) * mask
+                img = model_driven_out + guidance_driven_out
+        return img
+
     def ddim_sample(
         self,
         model,
