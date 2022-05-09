@@ -153,7 +153,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
             for i in tqdm(list(range(0, len(self.data), self.skip))):
                 path = self.data[i + self.env['rank']]
                 audio = load_audio(path, 22050).to(self.dev)
-                #audio = audio[:, :22050*8]
+                audio = audio[:, :22050*10]
                 sample, ref, sample_mel, ref_mel, sample_rate = self.diffusion_fn(audio)
 
                 gen_projections.append(self.project(sample, sample_rate).cpu())  # Store on CPU to avoid wasting GPU memory.
@@ -188,6 +188,6 @@ if __name__ == '__main__':
     opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 50,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'gap_fill_time'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 2, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 3, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
