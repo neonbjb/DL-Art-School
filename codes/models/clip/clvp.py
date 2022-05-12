@@ -86,6 +86,7 @@ class CLVP(nn.Module):
             speech_enc_depth=6,
             speech_mask_percentage=0,
             latent_multiplier=4,
+            distributed_collect=False,
     ):
         super().__init__()
         latent_dim = latent_multiplier*model_dim
@@ -100,6 +101,7 @@ class CLVP(nn.Module):
         self.text_emb = nn.Embedding(num_text_tokens, model_dim)
         self.text_transformer = CollapsingTransformer(model_dim, latent_dim, transformer_heads, dropout, text_enc_depth, text_mask_percentage, use_rms_scaleshift_norm=True)
         self.to_text_latent = nn.Linear(latent_dim, latent_dim, bias=False)
+        self.distributed_collect = distributed_collect
 
         if mel_codes is None:
             self.speech_emb = nn.Conv1d(mel_channels, model_dim, kernel_size=5, padding=2)
@@ -143,6 +145,14 @@ class CLVP(nn.Module):
 
         text_latents, speech_latents = map(lambda t: F.normalize(t, p=2, dim=-1), (text_latents, speech_latents))
         temp = self.temperature.exp()
+
+        if self.distributed_collect:
+            collective = [torch.zeros_like(text_latents) for _ in range(torch.distributed.get_world_size())]
+            torch.all_gather(collective, text_latents)
+            text_latents = torch.cat(collective, dim=0)
+            collective = [torch.zeros_like(speech_latents) for _ in range(torch.distributed.get_world_size())]
+            torch.all_gather(collective, speech_latents)
+            speech_latents = torch.cat(collective, dim=0)
 
         if not return_loss:
             sim = einsum('n d, n d -> n', text_latents, speech_latents) * temp
