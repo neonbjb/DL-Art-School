@@ -81,6 +81,12 @@ def create_dataset(dataset_opt, return_collate=False):
         default_params = create_hparams()
         default_params.update(dataset_opt)
         dataset_opt = munchify(default_params)
+    elif mode == 'fast_paired_voice_audio_with_phonemes':
+        from data.audio.fast_paired_dataset_with_phonemes import FastPairedVoiceDataset as D
+        from models.audio.tts.tacotron2 import create_hparams
+        default_params = create_hparams()
+        default_params.update(dataset_opt)
+        dataset_opt = munchify(default_params)
     elif mode == 'gpt_tts':
         from data.audio.gpt_tts_dataset import GptTtsDataset as D
         from data.audio.gpt_tts_dataset import GptTtsCollater as C
