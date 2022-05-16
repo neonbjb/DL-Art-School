@@ -1,10 +1,12 @@
 import argparse
 
+import torch
 import torchaudio
 
 from data.audio.unsupervised_audio_dataset import load_audio
 from scripts.audio.gen.speech_synthesis_utils import do_spectrogram_diffusion, \
-    load_discrete_vocoder_diffuser, wav_to_mel, convert_mel_to_codes
+    load_discrete_vocoder_diffuser, wav_to_mel, convert_mel_to_codes, wav_to_univnet_mel, load_univnet_vocoder
+from trainer.injectors.audio_injectors import denormalize_mel
 from utils.audio import plot_spectrogram
 from utils.util import load_model_from_config
 
@@ -24,28 +26,30 @@ def roundtrip_vocoding(dvae, vocoder, diffuser, clip, cond=None, plot_spec=False
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-codes_file', type=str, help='Which discretes to decode. Should be a path to a pytorch pickle that simply contains the codes.')
+    parser.add_argument('-cond_file', type=str, help='Path to the input audio file.')
     parser.add_argument('-opt', type=str, help='Path to options YAML file used to train the diffusion model',
-                        default='X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level.yml')
+                        default='X:\\dlas\\experiments\\train_diffusion_tts_mel_flat0\\last_train.yml')
     parser.add_argument('-diffusion_model_name', type=str, help='Name of the diffusion model in opt.', default='generator')
-    parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_vocoder_22k_level\\models\\2500_generator.pth')
-    parser.add_argument('-dvae_model_name', type=str, help='Name of the DVAE model in opt.', default='dvae')
-    parser.add_argument('-input_file', type=str, help='Path to the input audio file.', default='Y:\\clips\\books1\\3_dchha04 Romancing The Tribes\\00036.wav')
-    parser.add_argument('-cond', type=str, help='Path to the conditioning input audio file.', default='Y:\\clips\\books1\\3042_18_Holden__000000000\\00037.wav')
+    parser.add_argument('-diffusion_model_path', type=str, help='Diffusion model checkpoint to load.', default='X:\\dlas\\experiments\\train_diffusion_tts_mel_flat0\\models\\114000_generator_ema.pth')
     args = parser.parse_args()
 
-    print("Loading DVAE..")
-    dvae = load_model_from_config(args.opt, args.dvae_model_name)
-    print("Loading Diffusion Model..")
-    diffusion = load_model_from_config(args.opt, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path)
-
     print("Loading data..")
-    diffuser = load_discrete_vocoder_diffuser()
-    inp = load_audio(args.input_file, 22050).cuda()
-    cond = inp if args.cond is None else load_audio(args.cond, 22050)
-    if cond.shape[-1] > 44100+10000:
-        cond = cond[:,10000:54100]
-    cond = cond.cuda()
+    codes = torch.load(args.codes_file)
+    conds = load_audio(args.cond_file, 24000)
+    conds = conds[:,:102400]
+    cond_mel = wav_to_univnet_mel(conds.to('cuda'), do_normalization=False)
+    output_shape = (1,100,codes.shape[-1]*4)
 
-    print("Performing inference..")
-    roundtripped = roundtrip_vocoding(dvae, diffusion, diffuser, inp, cond).cpu()
-    torchaudio.save('roundtrip_vocoded_output.wav', roundtripped.squeeze(0), 22050)
+    print("Loading Diffusion Model..")
+    diffusion = load_model_from_config(args.opt, args.diffusion_model_name, also_load_savepoint=False, load_path=args.diffusion_model_path, strict_load=False).cuda().eval()
+    diffuser = load_discrete_vocoder_diffuser(desired_diffusion_steps=50, schedule='linear', enable_conditioning_free_guidance=True, conditioning_free_k=1)
+    vocoder = load_univnet_vocoder().cuda()
+
+    with torch.no_grad():
+        print("Performing inference..")
+        for i in range(codes.shape[0]):
+            gen_mel = diffuser.p_sample_loop(diffusion, output_shape, model_kwargs={'aligned_conditioning': codes[i].unsqueeze(0), 'conditioning_input': cond_mel})
+            gen_mel = denormalize_mel(gen_mel)
+            genWav = vocoder.inference(gen_mel)
+            torchaudio.save(f'vocoded_{i}.wav', genWav.cpu().squeeze(0), 24000)

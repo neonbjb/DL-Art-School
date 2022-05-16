@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 from glob import glob
+from random import shuffle
 
 import numpy as np
 import torch
@@ -63,6 +64,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
                 self.gap_gen_fn = self.gen_freq_gap
             else:
                 self.gap_gen_fn = self.gen_time_gap
+        elif 'rerender' in mode:
+            self.diffusion_fn = self.perform_rerender
         self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
     def load_data(self, path):
@@ -80,7 +83,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                           model_kwargs={'aligned_conditioning': mel})
         gen = pixel_shuffle_1d(gen, 16)
 
-        return gen, real_resampled, self.spec_fn({'in': gen})['out'], mel, sample_rate
+        return gen, real_resampled, normalize_mel(self.spec_fn({'in': gen})['out']), normalize_mel(mel), sample_rate
 
     def gen_freq_gap(self, mel, band_range=(60,100)):
         gap_start, gap_end = band_range
@@ -107,6 +110,38 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         # Repair the MEL with the given model.
         spec = self.diffuser.p_sample_loop_with_guidance(self.model, mel, mask, model_kwargs={'truth': mel})
+        spec = denormalize_mel(spec)
+
+        # Re-convert the resulting MEL back into audio using the spectrogram decoder.
+        output_shape = (1, 16, audio.shape[-1] // 16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        # Cool fact: we can re-use the diffuser for the spectrogram diffuser since it has the same parametrization.
+        gen = self.diffuser.p_sample_loop(self.spec_decoder, output_shape, noise=torch.zeros(*output_shape, device=audio.device),
+                                          model_kwargs={'aligned_conditioning': spec})
+        gen = pixel_shuffle_1d(gen, 16)
+
+        return gen, real_resampled, normalize_mel(spec), mel, sample_rate
+
+    def perform_rerender(self, audio, sample_rate=22050):
+        if sample_rate != sample_rate:
+            real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
+        else:
+            real_resampled = audio
+        audio = audio.unsqueeze(0)
+
+        # Fetch the MEL and mask out the requested bands.
+        mel = self.spec_fn({'in': audio})['out']
+        mel = normalize_mel(mel)
+
+        segments = [(0,10),(10,25),(25,45),(45,60),(60,80),(80,100),(100,130),(130,170),(170,210),(210,256)]
+        shuffle(segments)
+        spec = mel
+        for i, segment in enumerate(segments):
+            mel, mask = self.gen_freq_gap(mel, band_range=segment)
+            # Repair the MEL with the given model.
+            spec = self.diffuser.p_sample_loop_with_guidance(self.model, spec, mask, model_kwargs={'truth': spec})
+            torchvision.utils.save_image((spec.unsqueeze(1) + 1) / 2, f"{i}_rerender.png")
+
         spec = denormalize_mel(spec)
 
         # Re-convert the resulting MEL back into audio using the spectrogram decoder.
@@ -182,12 +217,12 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_gap_filler.yml', 'generator',
+    diffusion = load_model_from_config('D:\\dlas\\options\\train_music_waveform_gen3.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_gap_filler2\\models\\20500_generator_ema.pth').cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 50,
+                                       load_path='D:\\dlas\\experiments\\train_music_waveform_gen\\models\\59000_generator_ema.pth').cuda()
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 400,
                 'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'gap_fill_time'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 3, 'device': 'cuda', 'opt': {}}
+                'diffusion_schedule': 'linear', 'diffusion_type': 'spec_decode'}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 20, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
