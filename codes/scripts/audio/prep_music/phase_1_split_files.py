@@ -46,15 +46,15 @@ def process_file(file, base_path, output_path, progress_file, duration_per_clip,
                 break
         if not passed_checks:
             continue
-        torchaudio.save(f'{outdir}/{i:05d}.wav', spl.unsqueeze(0), sampling_rate)
+        torchaudio.save(f'{outdir}/{i:05d}.wav', spl.unsqueeze(0), sampling_rate, encoding="PCM_S")
     report_progress(progress_file, file)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\sources\\yt-music-1')
+    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\sources\\music\\bt-music2')
     parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\sources\\yt-music-1\\already_processed.txt')
-    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\yt-music-1')
+    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\music\\bigdump')
     parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=8)
     parser.add_argument('-duration', type=int, help='Duration per clip in seconds', default=30)
     args = parser.parse_args()

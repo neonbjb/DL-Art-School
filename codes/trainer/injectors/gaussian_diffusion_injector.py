@@ -28,6 +28,12 @@ class GaussianDiffusionInjector(Injector):
         self.extra_model_output_keys = opt_get(opt, ['extra_model_output_keys'], [])
         self.deterministic_timesteps_every = opt_get(opt, ['deterministic_timesteps_every'], 0)
         self.deterministic_sampler = DeterministicSampler(self.diffusion, opt_get(opt, ['deterministic_sampler_expected_batch_size'], 2048), env)
+        self.recent_loss = 0
+
+    def extra_metrics(self):
+        return {
+            'exp_diffusion_loss': torch.exp(self.recent_loss.mean()),
+        }
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
@@ -52,6 +58,8 @@ class GaussianDiffusionInjector(Injector):
             out.update({self.output: diffusion_outputs['mse'],
                     self.output_variational_bounds_key: diffusion_outputs['vb'],
                     self.output_x_start_key: diffusion_outputs['x_start_predicted']})
+
+            self.recent_loss = diffusion_outputs['mse']
 
         return out
 

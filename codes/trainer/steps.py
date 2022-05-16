@@ -237,6 +237,11 @@ class ConfigurableStep(Module):
             local_state.update(injected)
             new_state.update(injected)
 
+            if hasattr(inj, 'extra_metrics'):
+                for n, v in inj.extra_metrics().items():
+                    # Doesn't really work for training setups where multiple of the same injector are used.
+                    loss_accumulator.add_loss(n, v)
+
         if len(self.losses) > 0:
             # Finally, compute the losses.
             total_loss = 0
