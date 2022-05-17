@@ -597,7 +597,7 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[], endswith=None):
             print(f"Excluded {before-len(output)} files.")
         if endswith is not None:
             before = len(output)
-            output = list(filter(lambda p: not p.endswith(endswith), output))
+            output = list(filter(lambda p: p.endswith(endswith), output))
             print(f"Excluded {before-len(output)} files with endswith mask. For total of {len(output)} files")
         print("Done.")
         torch.save(output, cache_path)
