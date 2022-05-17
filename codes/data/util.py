@@ -578,7 +578,7 @@ def imresize_np(img, scale, antialiasing=True):
     return out_2.numpy()
 
 
-def load_paths_from_cache(paths, cache_path, exclusion_list=[]):
+def load_paths_from_cache(paths, cache_path, exclusion_list=[], endswith=None):
     if not isinstance(paths, list):
         paths = [paths]
     if os.path.exists(cache_path):
@@ -595,6 +595,10 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[]):
             exclusion_set = set(exclusion_list)
             output = list(master_set - exclusion_set)
             print(f"Excluded {before-len(output)} files.")
+        if endswith is not None:
+            before = len(output)
+            output = list(filter(lambda p: not p.endswith(endswith), output))
+            print(f"Excluded {before-len(output)} files with endswith mask. For total of {len(output)} files")
         print("Done.")
         torch.save(output, cache_path)
     return output
