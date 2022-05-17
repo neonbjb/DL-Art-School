@@ -294,6 +294,11 @@ class ExtensibleTrainer(BaseModel):
             self.batch_size_optimizer.focus(net)
             for m in range(self.batch_factor):
                 ns = step.do_forward_backward(state, m, step_num, train=train_step, no_ddp_sync=(m+1 < self.batch_factor))
+                # Call into post-backward hooks.
+                for name, net in self.networks.items():
+                    if hasattr(net.module, "after_backward"):
+                        net.module.after_backward(it)
+
                 for k, v in ns.items():
                     if k not in new_states.keys():
                         new_states[k] = [v]
