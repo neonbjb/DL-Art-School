@@ -366,8 +366,9 @@ class Mel2Vec(nn.Module):
         self.input_blocks = nn.Sequential(nn.Conv1d(mel_input_channels, inner_dim//2, kernel_size=5, padding=2, stride=2),
                                           nn.GroupNorm(num_groups=8, num_channels=inner_dim//2, affine=True),
                                           nn.SiLU(),
-                                          nn.Conv1d(inner_dim//2, inner_dim,  kernel_size=3, padding=1, stride=2),
-                                          nn.GroupNorm(num_groups=8, num_channels=inner_dim, affine=True),
+                                          nn.Conv1d(inner_dim//2, inner_dim, kernel_size=3, padding=1, stride=2),
+                                          nn.SiLU(),
+                                          nn.Conv1d(inner_dim, inner_dim, kernel_size=3, padding=1),
                                           nn.SiLU(),
                                           )
         self.projector = Mel2Vec2FeatureProjection(inner_dim, dropout)
