@@ -10,6 +10,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from trainer.networks import register_model
 
@@ -51,6 +52,7 @@ class BasicBlock(nn.Module):
     def forward(self, x):
         return nn.ReLU(inplace=True)(self.residual_function(x) + self.shortcut(x))
 
+
 class BottleNeck(nn.Module):
     """Residual block for resnet over 50 layers
 
@@ -79,6 +81,7 @@ class BottleNeck(nn.Module):
 
     def forward(self, x):
         return nn.ReLU(inplace=True)(self.residual_function(x) + self.shortcut(x))
+
 
 class ResNet(nn.Module):
 
@@ -137,11 +140,81 @@ class ResNet(nn.Module):
 
         return output
 
+
+class SymbolicLoss:
+    def __init__(self, category_depths=[3,5,5,3], convergence_weighting=[1,.6,.3,.1], divergence_weighting=[.1,.3,.6,1]):
+        self.depths = category_depths
+        self.total_classes = 1
+        for c in category_depths:
+            self.total_classes *= c
+        self.elements_per_level = []
+        m = 1
+        for c in category_depths[1:]:
+            m *= c
+            self.elements_per_level.append(self.total_classes // m)
+        self.elements_per_level = self.elements_per_level + [1]
+        self.convergence_weighting = convergence_weighting
+        self.divergence_weighting = divergence_weighting
+        # TODO: improve the above logic, I'm sure it can be done better.
+
+    def __call__(self, logits, collaboratorLabels):
+        """
+        Computes the symbolic loss.
+        :param logits: Nested level scores for the network under training.
+        :param collaboratorLabels: level labels from the collaborator network.
+        :return: Convergence loss & divergence loss.
+        """
+        b, l = logits.shape
+        assert l == self.total_classes, f"Expected {self.total_classes} predictions, got {l}"
+
+        convergence_loss = 0
+        divergence_loss = 0
+        for epc, cw, dw in zip(self.elements_per_level, self.convergence_weighting, self.divergence_weighting):
+            level_logits = logits.view(b, l//epc, epc)
+            level_logits = level_logits.sum(dim=-1)
+            level_labels = collaboratorLabels.div(epc, rounding_mode='trunc')
+            # Convergence
+            convergence_loss = convergence_loss + F.cross_entropy(level_logits, level_labels) * cw
+            # Divergence
+            div_label_indices = level_logits.argmax(dim=-1)
+            # TODO: find the torch-y way of doing this.
+            dp = []
+            for bi, i in enumerate(div_label_indices):
+                dp.append(level_logits[:, i])
+            div_preds = torch.stack(dp, dim=0)
+            div_labels = torch.arange(0, b, device=logits.device)
+            divergence_loss = divergence_loss + F.cross_entropy(div_preds, div_labels)
+        return convergence_loss, divergence_loss
+
+
+if __name__ == '__main__':
+    sl = SymbolicLoss()
+    logits = torch.randn(5, sl.total_classes)
+    labels = torch.randint(0, sl.total_classes, (5,))
+    sl(logits, labels)
+
+
+class TwinnedCifar(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = SymbolicLoss()
+        self.netA = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=self.loss.total_classes)
+        self.netB = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=self.loss.total_classes)
+
+    def forward(self, x):
+        y1 = self.netA(x)
+        y2 = self.netB(x)
+        b = x.shape[0]
+        convergenceA, divergenceA = self.loss(y1[:b//2], y2.argmax(dim=-1)[:b//2])
+        convergenceB, divergenceB = self.loss(y2[b//2:], y1.argmax(dim=-1)[b//2:])
+        return convergenceA + convergenceB, divergenceA + divergenceB
+
+
 @register_model
-def register_cifar_resnet18(opt_net, opt):
+def register_twin_cifar(opt_net, opt):
     """ return a ResNet 18 object
     """
-    return ResNet(BasicBlock, [2, 2, 2, 2])
+    return TwinnedCifar()
 
 def resnet34():
     """ return a ResNet 34 object

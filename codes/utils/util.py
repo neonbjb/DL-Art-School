@@ -567,6 +567,10 @@ def load_audio(audiopath, sampling_rate, raw_data=None):
     else:
         if audiopath[-4:] == '.wav':
             audio, lsr = load_wav_to_torch(audiopath)
+        elif audiopath[-5:] == '.flac':
+            import soundfile as sf
+            audio, lsr = sf.read(audiopath)
+            audio = torch.FloatTensor(audio)
         else:
             audio, lsr = open_audio(audiopath)
             audio = torch.FloatTensor(audio)

@@ -540,7 +540,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
 
 class ContrastiveTrainingWrapper(nn.Module):
-    def __init__(self, inner_dim=1024, dropout=.1, mask_time_prob=.5, mask_time_length=6, num_negatives=100,
+    def __init__(self, inner_dim=1024, dropout=.1, mask_time_prob=.65, mask_time_length=6, num_negatives=100,
                  max_gumbel_temperature=2.0, min_gumbel_temperature=.5, gumbel_temperature_decay=.999995,
                  codebook_size=320, codebook_groups=2,
                  **kwargs):
