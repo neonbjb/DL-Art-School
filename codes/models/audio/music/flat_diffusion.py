@@ -183,7 +183,7 @@ class FlatDiffusion(nn.Module):
         groups = {
             'minicoder': list(self.contextual_embedder.parameters()),
             'layers': list(self.layers.parameters()),
-            'code_converters': list(self.embeddings.parameters())) + list(self.latent_conditioner.parameters()),
+            'code_converters': list(self.embeddings.parameters()) + list(self.latent_conditioner.parameters()),
             'timestep_integrator': list(self.conditioning_timestep_integrator.parameters()) + list(self.integrating_conv.parameters()),
             'time_embed': list(self.time_embed.parameters()),
         }
