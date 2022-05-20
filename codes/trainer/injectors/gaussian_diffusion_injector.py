@@ -38,6 +38,7 @@ class GaussianDiffusionInjector(Injector):
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
         hq = state[self.input]
+        assert hq.max() < 1.5 or hq.min() > -1.5, "Attempting to train gaussian diffusion on un-normalized inputs. This won't work, silly!"
 
         with autocast(enabled=self.env['opt']['fp16']):
             if not gen.training or (self.deterministic_timesteps_every != 0 and self.env['step'] % self.deterministic_timesteps_every == 0):
