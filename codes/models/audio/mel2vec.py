@@ -498,6 +498,17 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
+    def get_codes(self, hidden_states):
+        batch_size, sequence_length, hidden_size = hidden_states.shape
+
+        # project to codevector dim
+        hidden_states = self.weight_proj(hidden_states)
+        hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
+        codevector_idx = hidden_states.argmax(dim=-1)
+        idxs = codevector_idx.view(batch_size, sequence_length, self.num_groups)
+        return idxs
+
+
     def forward(self, hidden_states, mask_time_indices=None):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
@@ -595,6 +606,12 @@ class ContrastiveTrainingWrapper(nn.Module):
         }
         return groups
 
+    def get_codes(self, mel):
+        proj = self.m2v.input_blocks(mel).permute(0,2,1)
+        _, proj = self.m2v.projector(proj)
+        codes = self.quantizer.get_codes(proj)
+        return codes
+
     def forward(self, mel):
         mel = mel[:, :, :-1]  # The MEL computation always pads with 1, throwing off optimal tensor math.
 
@@ -651,24 +668,7 @@ class ContrastiveTrainingWrapper(nn.Module):
         num_codevectors = self.quantizer.num_codevectors
         diversity_loss = (num_codevectors - codevector_perplexity) / num_codevectors
 
-        """
-        num_losses = mask_time_indices.sum()
-        if distributed.is_initialized():
-            distributed.all_reduce(num_losses)
-            num_losses = num_losses / distributed.get_world_size()
-        self.num_losses_record = num_losses.detach()
-        """
-
         return contrastive_loss, diversity_loss
-
-    """
-    def after_backward(self, it):
-        if self.num_losses_record > 0:
-            # Unscale the grads by the total number of losses encountered.
-            for p in self.parameters():
-                if p.grad is not None:
-                    p.grad.data.div_(self.num_losses_record)
-    """
 
 
 @register_model
