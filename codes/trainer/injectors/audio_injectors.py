@@ -320,3 +320,26 @@ class AudioUnshuffleInjector(Injector):
     def forward(self, state):
         inp = state[self.input]
         return {self.output: pixel_unshuffle_1d(inp, self.compression)}
+
+
+class Mel2vecCodesInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        for_what = opt_get(opt, ['for'], 'music')
+
+        from models.audio.mel2vec import ContrastiveTrainingWrapper
+        self.m2v = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0,
+                                           mask_time_prob=0,
+                                           mask_time_length=6, num_negatives=100, codebook_size=8, codebook_groups=8,
+                                           disable_custom_linear_init=True)
+        self.m2v.load_state_dict(torch.load(f"../experiments/m2v_{for_what}.pth", map_location=torch.device('cpu')))
+        del self.m2v.m2v.encoder  # This is a big memory sink which will not get used.
+        self.needs_move = True
+
+    def forward(self, state):
+        mels = state[self.input]
+        with torch.no_grad():
+            if self.needs_move:
+                self.m2v = self.m2v.to(mels.device)
+            codes = self.m2v.get_codes(mels)
+            return {self.output: codes}

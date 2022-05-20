@@ -13,7 +13,7 @@ import torch
 import torchaudio
 from tqdm import tqdm
 
-from data.util import find_audio_files
+from data.util import find_audio_files, find_files_of_type
 from utils.util import load_audio
 
 
@@ -36,27 +36,16 @@ def process_file(file, base_path, output_path, progress_file, duration_per_clip,
     for i, spl in enumerate(splits):
         if spl.shape[-1] != duration_per_clip*sampling_rate:
             continue  # In general, this just means "skip the last item".
-        # Perform some checks on subclips within this clip.
-        passed_checks = True
-        for s in range(duration_per_clip // 2):
-            subclip = spl[s*2*sampling_rate:(s+1)*2*sampling_rate]
-            # Are significant parts of any of this clip just silence?
-            if subclip.var() < .001:
-                passed_checks=False
-            if not passed_checks:
-                break
-        if not passed_checks:
-            continue
         torchaudio.save(f'{outdir}/{i:05d}.wav', spl.unsqueeze(0), sampling_rate, encoding="PCM_S")
     report_progress(progress_file, file)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\\slakh2100_flac_redux')
-    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\\slakh2100_flac_redux\\already_processed.txt')
-    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\\slakh2100')
-    parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=8)
+    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\sources\\music\\bt-music4')
+    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\sources\\music\\bt-music4\\already_processed.txt')
+    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\flacced\\bt-music-4')
+    parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=6)
     parser.add_argument('-duration', type=int, help='Duration per clip in seconds', default=30)
     args = parser.parse_args()
 
@@ -66,7 +55,8 @@ if __name__ == '__main__':
             for line in f.readlines():
                 processed_files.add(line.strip())
 
-    files = set(find_audio_files(args.path, include_nonwav=True))
+    files = set(find_files_of_type(None, args.path, qualifier=lambda p: p.endswith('.flac'))[0])
+    #files = set(find_audio_files(args.path, include_nonwav=True))
     orig_len = len(files)
     files = files - processed_files
     print(f"Found {len(files)} files to process. Total processing is {100*(orig_len-len(files))/orig_len}% complete.")
