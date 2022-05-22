@@ -13,12 +13,14 @@ from tqdm import tqdm
 
 import trainer.eval.evaluator as evaluator
 from data.audio.unsupervised_audio_dataset import load_audio
+from models.audio.mel2vec import ContrastiveTrainingWrapper
 from models.audio.music.unet_diffusion_waveform_gen import DiffusionWaveformGen
 from models.clip.contrastive_audio import ContrastiveAudio
 from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.respace import space_timesteps, SpacedDiffusion
 from trainer.injectors.audio_injectors import denormalize_mel, TorchMelSpectrogramInjector, pixel_shuffle_1d, \
     normalize_mel
+from utils.music_utils import get_music_codegen, get_mel2wav_model
 from utils.util import opt_get, load_model_from_config
 
 
@@ -47,11 +49,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         self.dev = self.env['device']
         mode = opt_get(opt_eval, ['diffusion_type'], 'tts')
 
-        self.spec_decoder = DiffusionWaveformGen(model_channels=256, in_channels=16, in_mel_channels=256, out_channels=32,
-                                                 channel_mult=[1,2,3,4], num_res_blocks=[3,3,3,3], token_conditioning_resolutions=[1,4],
-                                                 num_heads=8,
-                                                 dropout=0, kernel_size=3, scale_factor=2, time_embed_dim_multiplier=4, unconditioned_percentage=0)
-        self.spec_decoder.load_state_dict(torch.load('../experiments/music_waveform_gen.pth', map_location=torch.device('cpu')))
+        self.spec_decoder = get_mel2wav_model()
         self.projector = ContrastiveAudio(model_dim=512, transformer_heads=8, dropout=0, encoder_depth=8, mel_channels=256)
         self.projector.load_state_dict(torch.load('../experiments/music_eval_projector.pth', map_location=torch.device('cpu')))
         self.local_modules = {'spec_decoder': self.spec_decoder, 'projector': self.projector}
@@ -66,6 +64,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
                 self.gap_gen_fn = self.gen_time_gap
         elif 'rerender' in mode:
             self.diffusion_fn = self.perform_rerender
+        elif 'from_codes' == mode:
+            self.diffusion_fn = self.perform_diffusion_from_codes
+            self.local_modules['codegen'] = get_music_codegen()
         self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
     def load_data(self, path):
@@ -154,6 +155,29 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         return gen, real_resampled, normalize_mel(spec), mel, sample_rate
 
+    def perform_diffusion_from_codes(self, audio, sample_rate=22050):
+        if sample_rate != sample_rate:
+            real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
+        else:
+            real_resampled = audio
+        audio = audio.unsqueeze(0)
+
+        # Fetch the MEL and mask out the requested bands.
+        mel = self.spec_fn({'in': audio})['out']
+        codegen = self.local_modules['codegen'].to(mel.device)
+        codes = codegen.get_codes(mel)
+        mel_norm = normalize_mel(mel)
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, model_kwargs={'aligned_conditioning': codes, 'conditioning_input': mel[:,:,:117]})
+
+        gen_mel_denorm = denormalize_mel(gen_mel)
+        output_shape = (1,16,audio.shape[-1]//16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape, model_kwargs={'aligned_conditioning': gen_mel_denorm})
+        gen_wav = pixel_shuffle_1d(gen_wav, 16)
+
+        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
+
+
     def project(self, sample, sample_rate):
         sample = torchaudio.functional.resample(sample, sample_rate, 22050)
         mel = self.spec_fn({'in': sample})['out']
@@ -217,12 +241,12 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('D:\\dlas\\options\\train_music_waveform_gen3.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_flat.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen\\models\\75500_generator_ema.pth').cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 400,
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_flat\\models\\26000_generator.pth').cuda()
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'spec_decode'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 23, 'device': 'cuda', 'opt': {}}
+                'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes'}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 25, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
