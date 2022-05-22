@@ -167,10 +167,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
         codegen = self.local_modules['codegen'].to(mel.device)
         codes = codegen.get_codes(mel)
         mel_norm = normalize_mel(mel)
-        precomputed_codes, precomputed_cond = self.model.timestep_independent(codes=codes, conditioning_input=mel_norm[:,:,:112],
-                                                      expected_seq_len=mel_norm.shape[-1], return_code_pred=False)
-        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, noise=torch.zeros_like(mel_norm),
-                                              model_kwargs={'precomputed_code_embeddings': precomputed_codes, 'precomputed_cond_embeddings': precomputed_cond})
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape,
+                                              model_kwargs={'aligned_conditioning': codes,
+                                                            'conditioning_input': mel_norm})
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
