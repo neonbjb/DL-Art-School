@@ -167,7 +167,10 @@ class MusicDiffusionFid(evaluator.Evaluator):
         codegen = self.local_modules['codegen'].to(mel.device)
         codes = codegen.get_codes(mel)
         mel_norm = normalize_mel(mel)
-        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, model_kwargs={'aligned_conditioning': codes, 'conditioning_input': mel[:,:,:117]})
+        precomputed = self.model.timestep_independent(aligned_conditioning=codes, conditioning_input=mel[:,:,:112],
+                                                      expected_seq_len=mel_norm.shape[-1], return_code_pred=False)
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, noise=torch.zeros_like(mel_norm),
+                                              model_kwargs={'precomputed_aligned_embeddings': precomputed})
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
@@ -243,7 +246,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_flat.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_flat\\models\\26000_generator.pth').cuda()
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_flat\\models\\33000_generator_ema.pth').cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes'}

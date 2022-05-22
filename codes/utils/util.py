@@ -561,6 +561,7 @@ def find_audio_files(base_path, globs=['*.wav', '*.mp3', '*.ogg', '*.flac']):
 
 
 def load_audio(audiopath, sampling_rate, raw_data=None):
+    audiopath = str(audiopath)
     if raw_data is not None:
         # Assume the data is wav format. SciPy's reader can read raw WAV data from a BytesIO wrapper.
         audio, lsr = load_wav_to_torch(raw_data)
