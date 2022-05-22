@@ -38,8 +38,8 @@ def load_audio(audiopath, sampling_rate):
         audio = torchaudio.functional.resample(audio, lsr, sampling_rate)
 
     # Check some assumptions about audio range. This should be automatically fixed in load_wav_to_torch, but might not be in some edge cases, where we should squawk.
-    # '2' is arbitrarily chosen since it seems like audio will often "overdrive" the [-1,1] bounds.
-    if torch.any(audio > 2) or not torch.any(audio < 0):
+    # '10' is arbitrarily chosen since it seems like audio will often "overdrive" the [-1,1] bounds.
+    if torch.any(audio > 10) or not torch.any(audio < 0):
         print(f"Error with {audiopath}. Max={audio.max()} min={audio.min()}")
     audio.clip_(-1, 1)
 
@@ -178,14 +178,16 @@ if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio',
         'path': ['Y:\\split\\yt-music'],
-        'cache_path': 'Y:\\split\\yt-music\\cache-windows.pth',
+        'cache_path': 'Y:\\separated\\no-vocals-cache-win.pth',
+        'endswith': 'no_vocals.wav',
         'sampling_rate': 22050,
-        'pad_to_samples': 22050,
+        'pad_to_samples': 200000,
+        'resample_clip': False,
+        'extra_samples': 1,
+        'extra_sample_length': 100000,
         'phase': 'train',
         'n_workers': 1,
         'batch_size': 16,
-        'extra_samples': 4,
-        'resample_clip': False,
     }
     from data import create_dataset, create_dataloader
 
@@ -196,5 +198,5 @@ if __name__ == '__main__':
         for b_ in range(b['clip'].shape[0]):
             #pass
             torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
-            #torchaudio.save(f'{i}_resampled_clip_{b_}.wav', b['resampled_clip'][b_], ds.sampling_rate)
+            torchaudio.save(f'{i}_alt_clip_{b_}.wav', b['alt_clips'][b_], ds.sampling_rate)
             i += 1
