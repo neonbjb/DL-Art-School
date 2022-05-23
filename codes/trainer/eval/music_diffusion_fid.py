@@ -68,7 +68,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
         self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
-        self.spec_100_fn = TorchMelSpectrogramInjector({'n_mel_channels': 100, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
     def load_data(self, path):
         return list(glob(f'{path}/*.wav'))
@@ -167,21 +166,20 @@ class MusicDiffusionFid(evaluator.Evaluator):
         mel = self.spec_fn({'in': audio})['out']
         codegen = self.local_modules['codegen'].to(mel.device)
         codes = codegen.get_codes(mel)
-        mel100 = self.spec_100_fn({'in': audio})['out']
-        mel100_norm = normalize_mel(mel100)
-        precomputed_codes, precomputed_cond = self.model.timestep_independent(codes=codes, conditioning_input=mel100_norm[:,:,:112],
-                                                      expected_seq_len=mel100_norm.shape[-1], return_code_pred=False)
-        gen_mel = self.diffuser.p_sample_loop(self.model, mel100_norm.shape,
-                                              model_kwargs={'precomputed_code_embeddings': precomputed_codes, 'precomputed_cond_embeddings': precomputed_cond})
+        mel_norm = normalize_mel(mel)
+        precomputed = self.model.timestep_independent(aligned_conditioning=codes, conditioning_input=mel[:,:,:112],
+                                                      expected_seq_len=mel_norm.shape[-1], return_code_pred=False)
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, noise=torch.zeros_like(mel_norm),
+                                              model_kwargs={'precomputed_aligned_embeddings': precomputed})
 
-        #gen_mel_denorm = denormalize_mel(gen_mel)
-        #output_shape = (1,16,audio.shape[-1]//16)
-        #self.spec_decoder = self.spec_decoder.to(audio.device)
-        #gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape, model_kwargs={'aligned_conditioning': gen_mel_denorm})
-        #gen_wav = pixel_shuffle_1d(gen_wav, 16)
+        gen_mel_denorm = denormalize_mel(gen_mel)
+        output_shape = (1,16,audio.shape[-1]//16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape, model_kwargs={'aligned_conditioning': gen_mel_denorm})
+        gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
-        #return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
-        return real_resampled.unsqueeze(0), real_resampled, gen_mel, mel100_norm, sample_rate
+        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
+
 
     def project(self, sample, sample_rate):
         sample = torchaudio.functional.resample(sample, sample_rate, 22050)
