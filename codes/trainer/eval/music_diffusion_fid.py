@@ -181,7 +181,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
         #return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
-        return real_resampled, real_resampled, gen_mel, mel100_norm, sample_rate
+        return real_resampled.unsqueeze(0), real_resampled, gen_mel, mel100_norm, sample_rate
 
     def project(self, sample, sample_rate):
         sample = torchaudio.functional.resample(sample, sample_rate, 22050)
