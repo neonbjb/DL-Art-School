@@ -139,7 +139,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         except:
             if self.debug_loading_failures:
                 print(f"Error loading audio for file {self.audiopaths[index]} {sys.exc_info()}")
-            return self[index+1]
+            return self[random.randint(0,len(self))]
 
         # When generating resampled clips, skew is a bias that tries to spread them out from each other, reducing their
         # influence on one another.
