@@ -35,7 +35,7 @@ def parse(opt_path, is_train=True):
     # path
     if 'path' in opt.keys():
         for key, path in opt['path'].items():
-            if path and key in opt['path'] and key != 'strict_load':
+            if path and key in opt['path'] and (key not in ['strict_load', 'optimizer_reset']):
                 opt['path'][key] = osp.expanduser(path)
     else:
         opt['path'] = {}
