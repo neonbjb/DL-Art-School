@@ -147,6 +147,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         # To increase variability, which skew is applied to the clip and resampled_clip is randomized.
         random.shuffle(skew)
         clips = []
+        prepad_length = min(audio_norm.shape[-1], self.pad_to)
         for sk in skew:
             if self.pad_to is not None:
                 if audio_norm.shape[-1] <= self.pad_to:
@@ -159,6 +160,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
                 clips.append(audio_norm)
 
         output = {
+            'prepad_length': prepad_length,
             'clip': clips[0],
             'clip_lengths': torch.tensor(audio_norm.shape[-1]),
             'path': filename,
