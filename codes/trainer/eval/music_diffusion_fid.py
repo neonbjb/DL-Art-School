@@ -68,7 +68,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         elif 'from_codes' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
-        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
+        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000,
+                                                    'normalize': True, 'do_normalization': True, 'in': 'in', 'out': 'out'}, {})
 
     def load_data(self, path):
         return list(glob(f'{path}/*.wav'))
@@ -85,7 +86,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                           model_kwargs={'aligned_conditioning': mel})
         gen = pixel_shuffle_1d(gen, 16)
 
-        return gen, real_resampled, normalize_mel(self.spec_fn({'in': gen})['out']), normalize_mel(mel), sample_rate
+        return gen, real_resampled, self.spec_fn({'in': gen})['out'], mel, sample_rate
 
     def gen_freq_gap(self, mel, band_range=(60,100)):
         gap_start, gap_end = band_range
@@ -118,7 +119,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         output_shape = (1, 16, audio.shape[-1] // 16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
         # Cool fact: we can re-use the diffuser for the spectrogram diffuser since it has the same parametrization.
-        gen = self.diffuser.p_sample_loop(self.spec_decoder, output_shape, noise=torch.zeros(*output_shape, device=audio.device),
+        gen = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
                                           model_kwargs={'aligned_conditioning': spec})
         gen = pixel_shuffle_1d(gen, 16)
 
