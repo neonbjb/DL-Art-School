@@ -282,19 +282,13 @@ class Upsample(nn.Module):
                  upsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None):
+    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=2):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.dims = dims
-        if factor is None:
-            if dims == 1:
-                self.factor = 4
-            else:
-                self.factor = 2
-        else:
-            self.factor = factor
+        self.factor = factor
         if use_conv:
             ksize = 3
             pad = 1
@@ -399,11 +393,11 @@ class ResBlock(nn.Module):
         self.updown = up or down
 
         if up:
-            self.h_upd = Upsample(channels, False, dims)
-            self.x_upd = Upsample(channels, False, dims)
+            self.h_upd = Upsample(channels, use_conv, dims)
+            self.x_upd = Upsample(channels, use_conv, dims)
         elif down:
-            self.h_upd = Downsample(channels, False, dims)
-            self.x_upd = Downsample(channels, False, dims)
+            self.h_upd = Downsample(channels, use_conv, dims)
+            self.x_upd = Downsample(channels, use_conv, dims)
         else:
             self.h_upd = self.x_upd = nn.Identity()
 
