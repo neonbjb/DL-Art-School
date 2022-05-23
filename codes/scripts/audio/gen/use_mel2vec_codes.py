@@ -32,6 +32,7 @@ if __name__ == '__main__':
     mel = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})({'in': wav.unsqueeze(0)})['out']
 
     codes = model.get_codes(mel)
+    codes2 = model.get_codes(mel)
 
     collapsed = collapse_codegroups(codes)
     recovered = recover_codegroups(collapsed, 8)
