@@ -2,6 +2,7 @@ import os
 import os.path as osp
 from glob import glob
 from random import shuffle
+from time import time
 
 import numpy as np
 import torch
@@ -67,7 +68,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         elif 'from_codes' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
-        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 22000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
+        self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000, 'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
     def load_data(self, path):
         return list(glob(f'{path}/*.wav'))
@@ -80,7 +81,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         audio = audio.unsqueeze(0)
         output_shape = (1, 16, audio.shape[-1] // 16)
         mel = self.spec_fn({'in': audio})['out']
-        gen = self.diffuser.p_sample_loop(self.model, output_shape, noise=torch.zeros(*output_shape, device=audio.device),
+        gen = self.diffuser.p_sample_loop(self.model, output_shape,
                                           model_kwargs={'aligned_conditioning': mel})
         gen = pixel_shuffle_1d(gen, 16)
 
@@ -246,7 +247,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_flat.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_flat\\models\\33000_generator_ema.pth').cuda()
+                                       #load_path='X:\\dlas\\experiments\\train_music_diffusion_flat\\models\\33000_generator_ema.pth'
+                                       ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes'}
