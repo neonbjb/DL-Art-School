@@ -24,6 +24,16 @@ def is_sequence(t):
     return t.dtype == torch.long
 
 
+class MultiGroupEmbedding(nn.Module):
+    def __init__(self, tokens, groups, dim):
+        super().__init__()
+        self.m = nn.ModuleList([nn.Embedding(tokens, dim // groups) for _ in range(groups)])
+
+    def forward(self, x):
+        h = [embedding(x[:, :, i]) for i, embedding in enumerate(self.m)]
+        return torch.cat(h, dim=-1)
+
+
 class TransformerDiffusion(nn.Module):
     """
     A diffusion model composed entirely of stacks of transformer layers. Why would you do it any other way?
@@ -35,13 +45,12 @@ class TransformerDiffusion(nn.Module):
             num_layers=8,
             in_channels=256,
             in_latent_channels=512,
-            in_vectors=8,
-            in_groups=8,
+            token_count=8,
+            in_groups=None,
             out_channels=512,  # mean and variance
             dropout=0,
             use_fp16=False,
             # Parameters for regularization.
-            layer_drop=.1,
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
     ):
         super().__init__()
@@ -52,7 +61,6 @@ class TransformerDiffusion(nn.Module):
         self.dropout = dropout
         self.unconditioned_percentage = unconditioned_percentage
         self.enable_fp16 = use_fp16
-        self.layer_drop = layer_drop
         heads = model_channels//64
 
         self.inp_block = conv_nd(1, in_channels, model_channels, 3, 1, 1)
@@ -79,7 +87,10 @@ class TransformerDiffusion(nn.Module):
         # This model is meant to be able to be trained on both for efficiency purposes - it is far less computationally
         # complex to generate tokens, while generating latents will normally mean propagating through a deep autoregressive
         # transformer network.
-        self.embeddings = nn.ModuleList([nn.Embedding(in_vectors, model_channels//in_groups) for _ in range(in_groups)])
+        if in_groups is None:
+            self.embeddings = nn.Embedding(token_count, model_channels)
+        else:
+            self.embeddings = MultiGroupEmbedding(token_count, in_groups, model_channels)
         self.latent_conditioner = nn.Sequential(
             nn.Conv1d(in_latent_channels, model_channels, 3, padding=1),
             Encoder(
@@ -142,8 +153,7 @@ class TransformerDiffusion(nn.Module):
         cond_emb = self.conditioning_embedder(conditioning_input).permute(0,2,1)
         cond_emb = self.conditioning_encoder(cond_emb)[:, 0]
 
-        code_emb = [embedding(codes[:, :, i]) for i, embedding in enumerate(self.embeddings)]
-        code_emb = torch.cat(code_emb, dim=-1)
+        code_emb = self.embeddings(codes)
         if prenet_latent is not None:
             latent_conditioning = self.latent_conditioner(prenet_latent)
             code_emb = code_emb + latent_conditioning * self.latent_fade
@@ -242,6 +252,7 @@ class TransformerDiffusion(nn.Module):
         conds = torch.cat(conds, dim=-1)
         return conds.mean(dim=-1)
 
+
 @register_model
 def register_transformer_diffusion(opt_net, opt):
     return TransformerDiffusion(**opt_net['kwargs'])
@@ -253,7 +264,7 @@ if __name__ == '__main__':
     aligned_sequence = torch.randint(0,8,(2,100,8))
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
-    model = TransformerDiffusion(512, layer_drop=.3, unconditioned_percentage=.5)
+    model = TransformerDiffusion(512, unconditioned_percentage=.5, in_groups=8)
     o = model(clip, ts, aligned_sequence, cond, return_code_pred=True)
     #o = model(clip, ts, aligned_sequence, cond, aligned_latent)
 
