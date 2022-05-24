@@ -213,8 +213,8 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             res['conditioning'] = cond
             res['conditioning_contains_self'] = cond_is_self
         if self.load_aligned_codes:
-            res['aligned_codes']: aligned_codes
-            res['aligned_codes_lengths']: orig_aligned_code_length
+            res['aligned_codes'] = aligned_codes
+            res['aligned_codes_lengths'] = orig_aligned_code_length
         if self.produce_ctc_metadata:
             res.update(self.get_ctc_metadata(raw_codes))
 
