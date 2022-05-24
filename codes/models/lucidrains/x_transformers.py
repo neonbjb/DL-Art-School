@@ -357,7 +357,7 @@ class RMSScaleShiftNorm(nn.Module):
         self.scale = dim ** -0.5
         self.eps = eps
         self.g = nn.Parameter(torch.ones(dim))
-        self.scale_shift_process = nn.Linear(dim * 2, dim * 2)
+        self.scale_shift_process = nn.Linear(dim, dim * 2)
 
     def forward(self, x, norm_scale_shift_inp):
         norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
@@ -372,9 +372,11 @@ class RMSScaleShiftNorm(nn.Module):
 # residual and residual gates
 
 class Residual(nn.Module):
-    def __init__(self, dim, scale_residual=False):
+    def __init__(self, dim, scale_residual=False, mask_residual=False):
         super().__init__()
         self.residual_scale = nn.Parameter(torch.ones(dim)) if scale_residual else None
+        if mask_residual:
+            self.residual_scale.data.zero_()
 
     def forward(self, x, residual):
         if exists(self.residual_scale):
