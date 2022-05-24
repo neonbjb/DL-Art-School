@@ -542,7 +542,6 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         idxs = codevector_idx.view(batch_size, sequence_length, self.num_groups)
         return idxs
 
-
     def forward(self, hidden_states, mask_time_indices=None):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
@@ -659,6 +658,14 @@ class ContrastiveTrainingWrapper(nn.Module):
         _, proj = self.m2v.projector(proj)
         codes = self.quantizer.get_codes(proj)
         return codes
+
+    def reconstruct(self, mel):
+        proj = self.m2v.input_blocks(mel).permute(0,2,1)
+        _, proj = self.m2v.projector(proj)
+        quantized_features, codevector_perplexity = self.quantizer(proj)
+        quantized_features = self.project_q(quantized_features)
+        reconstruction = self.reconstruction_net(quantized_features.permute(0,2,1))
+        return reconstruction
 
     def forward(self, mel, inp_lengths=None):
         mel = mel[:, :, :-1]  # The MEL computation always pads with 1, throwing off optimal tensor math.
