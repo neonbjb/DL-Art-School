@@ -42,7 +42,7 @@ def wav_to_univnet_mel(wav, do_normalization=False):
     """
     return MelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'sampling_rate': 24000,
                                    'n_mel_channels': 100, 'mel_fmax': 12000,
-                                   'do_normalizattion': do_normalization},{})({'wav': wav})['mel']
+                                   'do_normalization': do_normalization},{})({'wav': wav})['mel']
 
 
 def convert_mel_to_codes(dvae_model, mel):
