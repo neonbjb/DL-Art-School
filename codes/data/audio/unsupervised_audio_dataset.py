@@ -98,8 +98,11 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
             for exc in opt['exclusions']:
                 with open(exc, 'r') as f:
                     exclusions.extend(f.read().splitlines())
-        ew = opt_get(opt, ['endswith'])
-        self.audiopaths = load_paths_from_cache(path, cache_path, exclusions, ew)
+        ew = opt_get(opt, ['endswith'], [])
+        assert isinstance(ew, list)
+        not_ew = opt_get(opt, ['not_endswith'], [])
+        assert isinstance(not_ew, list)
+        self.audiopaths = load_paths_from_cache(path, cache_path, exclusions, endswith=ew, not_endswith=not_ew)
 
         # Parse options
         self.sampling_rate = opt_get(opt, ['sampling_rate'], 22050)
