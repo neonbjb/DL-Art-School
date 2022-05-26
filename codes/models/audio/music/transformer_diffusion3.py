@@ -151,9 +151,7 @@ class TransformerDiffusion(nn.Module):
     def get_grad_norm_parameter_groups(self):
         groups = {
             'contextual_embedder': list(self.conditioning_embedder.parameters()),
-            'top_layers': list(self.top_layers.parameters()) + list(self.inp_block.parameters()),
-            'mid_layers': list(self.mid_layers.parameters()),
-            'final_layers': list(self.final_layers.parameters()),
+            'layers': list(self.layers.parameters()) + list(self.inp_block.parameters()),
             'code_converters': list(self.embeddings.parameters()) + list(self.code_converter.parameters()) + list(self.latent_conditioner.parameters()),
             'time_embed': list(self.time_embed.parameters()),
         }
