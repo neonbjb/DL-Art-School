@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import torch.utils.data
 import torchaudio
 from tqdm import tqdm
+from transformers import Wav2Vec2CTCTokenizer
 
 from data.audio.paired_voice_audio_dataset import CharacterTokenizer
 from data.audio.unsupervised_audio_dataset import load_audio, load_similar_clips
@@ -147,6 +148,7 @@ class FastPairedVoiceDataset(torch.utils.data.Dataset):
             rcodes = rcodes[:self.max_text_len]
             repeats = rcodes[:self.max_text_len]
             seps = seps[:self.max_text_len]
+
         return {
             'ctc_raw_codes': rcodes,
             'ctc_separators': seps,
@@ -284,7 +286,8 @@ if __name__ == '__main__':
         'num_conditioning_candidates': 2,
         'conditioning_length': 102400,
         'use_bpe_tokenizer': True,
-        'load_aligned_codes': False,
+        'load_aligned_codes': True,
+        'produce_ctc_metadata': True,
     }
     from data import create_dataset, create_dataloader
 

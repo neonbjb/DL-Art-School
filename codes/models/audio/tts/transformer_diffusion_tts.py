@@ -101,7 +101,7 @@ class TransformerDiffusion(nn.Module):
                     rotary_pos_emb=True,
                 )
         self.clvp_encoder = nn.Linear(clvp_in_dim, model_channels)
-        self.type_embedding = nn.Embedding(types)
+        self.type_embedding = nn.Embedding(types, model_channels)
 
         # Either code_converter or latent_converter is used, depending on what type of conditioning data is fed.
         # This model is meant to be able to be trained on both for efficiency purposes - it is far less computationally
@@ -254,7 +254,8 @@ if __name__ == '__main__':
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
     clvp = torch.randn(2,768)
+    type = torch.LongTensor([0,1])
     model = TransformerDiffusion(512, unconditioned_percentage=.5, in_groups=8)
-    o = model(clip, ts, aligned_sequence, cond, clvp_input=clvp, return_code_pred=True)
+    o = model(clip, ts, aligned_sequence, cond, clvp_input=clvp, type=type, return_code_pred=True)
     #o = model(clip, ts, aligned_sequence, cond, aligned_latent)
 
