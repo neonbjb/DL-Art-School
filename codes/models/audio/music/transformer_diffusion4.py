@@ -138,7 +138,7 @@ class TransformerDiffusion(nn.Module):
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,1,model_channels))
         self.mel_head = nn.Conv1d(model_channels, in_channels, kernel_size=3, padding=1)
 
-        self.rotary_embeddings = RotaryEmbedding(rotary_emb_dim)
+        self.rotary_embeddings = None if rotary_emb_dim is None else RotaryEmbedding(rotary_emb_dim)
         self.layers = SpecialSequential(*[AttentionBlock(model_channels, model_channels // 64, dropout) for _ in range(num_layers)])
 
         self.out = nn.Sequential(
@@ -217,7 +217,7 @@ class TransformerDiffusion(nn.Module):
         blk_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) + cond_emb
         x = self.inp_block(x).permute(0,2,1)
 
-        rotary_pos_emb = self.rotary_embeddings(x.shape[1], x.device)
+        rotary_pos_emb = None if self.rotary_embeddings is None else self.rotary_embeddings(x.shape[1], x.device)
         x = self.layers(x, code_emb, blk_emb, rotary_pos_emb)
 
         x = x.float().permute(0,2,1)
