@@ -57,14 +57,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         if mode == 'spec_decode':
             self.diffusion_fn = self.perform_diffusion_spec_decode
-        elif 'gap_fill_' in mode:
-            self.diffusion_fn = self.perform_diffusion_gap_fill
-            if '_freq' in mode:
-                self.gap_gen_fn = self.gen_freq_gap
-            else:
-                self.gap_gen_fn = self.gen_time_gap
-        elif 'rerender' in mode:
-            self.diffusion_fn = self.perform_rerender
         elif 'from_codes' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
@@ -88,75 +80,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         return gen, real_resampled, normalize_mel(self.spec_fn({'in': gen})['out']), normalize_mel(mel), sample_rate
 
-    def gen_freq_gap(self, mel, band_range=(60,100)):
-        gap_start, gap_end = band_range
-        mask = torch.ones_like(mel)
-        mask[:, gap_start:gap_end] = 0
-        return mel * mask, mask
-
-    def gen_time_gap(self, mel):
-        mask = torch.ones_like(mel)
-        mask[:, :, 86*4:86*6] = 0
-        return mel * mask, mask
-
-    def perform_diffusion_gap_fill(self, audio, sample_rate=22050):
-        if sample_rate != sample_rate:
-            real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
-        else:
-            real_resampled = audio
-        audio = audio.unsqueeze(0)
-
-        # Fetch the MEL and mask out the requested bands.
-        mel = self.spec_fn({'in': audio})['out']
-        mel = normalize_mel(mel)
-        mel, mask = self.gap_gen_fn(mel)
-
-        # Repair the MEL with the given model.
-        spec = self.diffuser.p_sample_loop_with_guidance(self.model, mel, mask, model_kwargs={'truth': mel})
-        spec = denormalize_mel(spec)
-
-        # Re-convert the resulting MEL back into audio using the spectrogram decoder.
-        output_shape = (1, 16, audio.shape[-1] // 16)
-        self.spec_decoder = self.spec_decoder.to(audio.device)
-        # Cool fact: we can re-use the diffuser for the spectrogram diffuser since it has the same parametrization.
-        gen = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                          model_kwargs={'aligned_conditioning': spec})
-        gen = pixel_shuffle_1d(gen, 16)
-
-        return gen, real_resampled, normalize_mel(spec), mel, sample_rate
-
-    def perform_rerender(self, audio, sample_rate=22050):
-        if sample_rate != sample_rate:
-            real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
-        else:
-            real_resampled = audio
-        audio = audio.unsqueeze(0)
-
-        # Fetch the MEL and mask out the requested bands.
-        mel = self.spec_fn({'in': audio})['out']
-        mel = normalize_mel(mel)
-
-        segments = [(0,10),(10,25),(25,45),(45,60),(60,80),(80,100),(100,130),(130,170),(170,210),(210,256)]
-        shuffle(segments)
-        spec = mel
-        for i, segment in enumerate(segments):
-            mel, mask = self.gen_freq_gap(mel, band_range=segment)
-            # Repair the MEL with the given model.
-            spec = self.diffuser.p_sample_loop_with_guidance(self.model, spec, mask, model_kwargs={'truth': spec})
-            torchvision.utils.save_image((spec.unsqueeze(1) + 1) / 2, f"{i}_rerender.png")
-
-        spec = denormalize_mel(spec)
-
-        # Re-convert the resulting MEL back into audio using the spectrogram decoder.
-        output_shape = (1, 16, audio.shape[-1] // 16)
-        self.spec_decoder = self.spec_decoder.to(audio.device)
-        # Cool fact: we can re-use the diffuser for the spectrogram diffuser since it has the same parametrization.
-        gen = self.diffuser.p_sample_loop(self.spec_decoder, output_shape, noise=torch.zeros(*output_shape, device=audio.device),
-                                          model_kwargs={'aligned_conditioning': spec})
-        gen = pixel_shuffle_1d(gen, 16)
-
-        return gen, real_resampled, normalize_mel(spec), mel, sample_rate
-
     def perform_diffusion_from_codes(self, audio, sample_rate=22050):
         if sample_rate != sample_rate:
             real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
@@ -164,15 +87,12 @@ class MusicDiffusionFid(evaluator.Evaluator):
             real_resampled = audio
         audio = audio.unsqueeze(0)
 
-        # Fetch the MEL and mask out the requested bands.
         mel = self.spec_fn({'in': audio})['out']
         codegen = self.local_modules['codegen'].to(mel.device)
         codes = codegen.get_codes(mel)
         mel_norm = normalize_mel(mel)
-        precomputed = self.model.timestep_independent(aligned_conditioning=codes, conditioning_input=mel[:,:,:112],
-                                                      expected_seq_len=mel_norm.shape[-1], return_code_pred=False)
-        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, noise=torch.zeros_like(mel_norm),
-                                              model_kwargs={'precomputed_aligned_embeddings': precomputed})
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape,
+                                              model_kwargs={'codes': codes, 'conditioning_input': mel_norm[:,:,:140]})
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)

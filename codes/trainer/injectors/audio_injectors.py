@@ -6,6 +6,7 @@ import torchaudio
 
 from models.audio.tts.unet_diffusion_tts_flat import DiffusionTtsFlat
 from trainer.inject import Injector
+from utils.music_utils import get_music_codegen
 from utils.util import opt_get, load_model_from_config, pad_or_truncate
 
 TACOTRON_MEL_MAX = 2.3143386840820312
@@ -326,15 +327,7 @@ class AudioUnshuffleInjector(Injector):
 class Mel2vecCodesInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
-        for_what = opt_get(opt, ['for'], 'music')
-
-        from models.audio.mel2vec import ContrastiveTrainingWrapper
-        self.m2v = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0,
-                                           mask_time_prob=0,
-                                           mask_time_length=6, num_negatives=100, codebook_size=16, codebook_groups=4,
-                                           disable_custom_linear_init=True, do_reconstruction_loss=True)
-        self.m2v.load_state_dict(torch.load(f"../experiments/m2v_{for_what}.pth", map_location=torch.device('cpu')))
-        self.m2v = self.m2v.eval()
+        self.m2v = get_music_codegen()
         del self.m2v.m2v.encoder  # This is a big memory sink which will not get used.
         self.needs_move = True
 
@@ -367,3 +360,13 @@ class ClvpTextInjector(Injector):
                 self.clvp = self.clvp.to(codes.device)
             latents = self.clvp.embed_text(codes)
             return {self.output: latents}
+
+
+class NormalizeMelInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+
+    def forward(self, state):
+        mel = state[self.input]
+        with torch.no_grad():
+            return {self.output: normalize_mel(mel)}

@@ -13,8 +13,10 @@ def get_mel2wav_model():
     return model
 
 def get_music_codegen():
-    model = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0, mask_time_prob=0,
-                                       mask_time_length=6, num_negatives=100, codebook_size=8, codebook_groups=8, disable_custom_linear_init=True)
-    model.load_state_dict(torch.load("../experiments/m2v_music.pth", map_location=torch.device('cpu')))
-    model.eval()
+    model = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0,
+                                           mask_time_prob=0,
+                                           mask_time_length=6, num_negatives=100, codebook_size=16, codebook_groups=4,
+                                           disable_custom_linear_init=True, do_reconstruction_loss=True)
+    model.load_state_dict(torch.load(f"../experiments/m2v_music.pth", map_location=torch.device('cpu')))
+    model = model.eval()
     return model
