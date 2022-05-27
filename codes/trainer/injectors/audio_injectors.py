@@ -343,13 +343,8 @@ class Mel2vecCodesInjector(Injector):
 class ClvpTextInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
-        from models.clip.text_voice_clip import VoiceCLIP
-        self.clvp = VoiceCLIP(dim_text=768, dim_speech=768, dim_latent=768, num_text_tokens=256, text_enc_depth=20,
-                              text_seq_len=350, text_heads=12, num_speech_tokens=8192, speech_enc_depth=20,
-                              speech_heads=12, speech_seq_len=430, text_mask_percentage=0, voice_mask_percentage=0,
-                              use_xformers=True)
-        self.clvp.load_state_dict(torch.load(f"../experiments/clvp_md.pth", map_location=torch.device('cpu')))
-        self.clvp = self.clvp.eval()
+        from scripts.audio.gen.speech_synthesis_utils import load_clvp
+        self.clvp = load_clvp()
         del self.clvp.speech_transformer  # We will only be using the text transformer.
         self.needs_move = True
 

@@ -29,6 +29,17 @@ def load_univnet_vocoder():
     return model
 
 
+def load_clvp():
+    from models.clip.text_voice_clip import VoiceCLIP
+    clvp = VoiceCLIP(dim_text=768, dim_speech=768, dim_latent=768, num_text_tokens=256, text_enc_depth=20,
+                          text_seq_len=350, text_heads=12, num_speech_tokens=8192, speech_enc_depth=20,
+                          speech_heads=12, speech_seq_len=430, text_mask_percentage=0, voice_mask_percentage=0,
+                          use_xformers=True)
+    clvp.load_state_dict(torch.load(f"../experiments/clvp_md.pth", map_location=torch.device('cpu')))
+    clvp = clvp.eval()
+    return clvp
+
+
 def wav_to_mel(wav, mel_norms_file='../experiments/clips_mel_norms.pth'):
     """
     Converts an audio clip into a MEL tensor that the vocoder, DVAE and GptTts models use whenever a MEL is called for.
