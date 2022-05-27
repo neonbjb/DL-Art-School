@@ -13,6 +13,7 @@ import trainer.networks as networks
 from trainer.base_model import BaseModel
 from trainer.batch_size_optimizer import create_batch_size_optimizer
 from trainer.inject import create_injector
+from trainer.injectors.audio_injectors import normalize_mel
 from trainer.steps import ConfigurableStep
 from trainer.experiments.experiments import get_experiment_for_name
 import torchvision.utils as utils
@@ -354,9 +355,9 @@ class ExtensibleTrainer(BaseModel):
         if 'visuals' in self.opt['logger'].keys() and self.rank <= 0 and it % self.opt['logger']['visual_debug_rate'] == 0:
             def fix_image(img):
                 if opt_get(self.opt, ['logger', 'is_mel_spectrogram'], False):
+                    if img.min() < -2:
+                        img = normalize_mel(img)
                     img = img.unsqueeze(dim=1)
-                    # Normalize so spectrogram is easier to view.
-                    img = (img - img.mean()) / img.std()
                 if img.shape[1] > 3:
                     img = img[:, :3, :, :]
                 if opt_get(self.opt, ['logger', 'reverse_n1_to_1'], False):

@@ -246,13 +246,13 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_flat.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen.yml', 'generator',
                                        also_load_savepoint=False,
-                                       #load_path='X:\\dlas\\experiments\\train_music_diffusion_flat\\models\\33000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen_reformed_mel\\models\\57500_generator_ema.pth'
                                        ).cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
-                'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 25, 'device': 'cuda', 'opt': {}}
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 500,
+                'conditioning_free': True, 'conditioning_free_k': 1,
+                'diffusion_schedule': 'linear', 'diffusion_type': 'spec_decode'}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 26, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())

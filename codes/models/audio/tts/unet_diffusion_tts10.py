@@ -261,13 +261,13 @@ class DiffusionTts(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
         )
 
-    def forward(self, x, timesteps, tokens, conditioning_input=None):
+    def forward(self, x, timesteps, codes, conditioning_input=None):
         """
         Apply the model to an input batch.
 
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
-        :param tokens: an aligned text input.
+        :param codes: an aligned text input.
         :return: an [N x C x ...] Tensor of outputs.
         """
         with autocast(x.device.type):
@@ -276,16 +276,16 @@ class DiffusionTts(nn.Module):
             if cm != 0:
                 pc = (cm-x.shape[-1])/x.shape[-1]
                 x = F.pad(x, (0,cm-x.shape[-1]))
-                tokens = F.pad(tokens, (0,int(pc*tokens.shape[-1])))
+                codes = F.pad(codes, (0, int(pc * codes.shape[-1])))
 
             hs = []
             time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
             # Mask out guidance tokens for un-guided diffusion.
             if self.training and self.nil_guidance_fwd_proportion > 0:
-                token_mask = torch.rand(tokens.shape, device=tokens.device) < self.nil_guidance_fwd_proportion
-                tokens = torch.where(token_mask, self.mask_token_id, tokens)
-            code_emb = self.code_embedding(tokens).permute(0,2,1)
+                token_mask = torch.rand(codes.shape, device=codes.device) < self.nil_guidance_fwd_proportion
+                codes = torch.where(token_mask, self.mask_token_id, codes)
+            code_emb = self.code_embedding(codes).permute(0, 2, 1)
             cond_emb = self.conditioning_embedder(conditioning_input).permute(0,2,1)
             cond_emb = self.conditioning_encoder(cond_emb)[:, 0]
             code_emb = self.codes_encoder(code_emb.permute(0,2,1), norm_scale_shift_inp=cond_emb).permute(0,2,1)

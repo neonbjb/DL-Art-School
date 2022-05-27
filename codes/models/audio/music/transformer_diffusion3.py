@@ -40,7 +40,7 @@ class AttentionBlock(TimestepBlock):
     def __init__(self, dim, heads, dropout):
         super().__init__()
         self.attn = Attention(dim, heads=heads, causal=False, dropout=dropout, zero_init_output=False)
-        self.ff = FeedForward(dim, mult=2, dropout=dropout, zero_init_output=True)
+        self.ff = FeedForward(dim, mult=1, dropout=dropout, zero_init_output=True)
         self.rms_scale_norm = RMSScaleShiftNorm(dim)
 
     def forward(self, x, timestep_emb, rotary_emb):
