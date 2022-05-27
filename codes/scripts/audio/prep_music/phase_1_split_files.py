@@ -42,9 +42,9 @@ def process_file(file, base_path, output_path, progress_file, duration_per_clip,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\sources\\music\\bt-music4')
-    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\sources\\music\\bt-music4\\already_processed.txt')
-    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\flacced\\bt-music-4')
+    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\sources\\silk')
+    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\sources\\silk\\already_processed.txt')
+    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\silk')
     parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=6)
     parser.add_argument('-duration', type=int, help='Duration per clip in seconds', default=30)
     args = parser.parse_args()
@@ -55,8 +55,7 @@ if __name__ == '__main__':
             for line in f.readlines():
                 processed_files.add(line.strip())
 
-    files = set(find_files_of_type(None, args.path, qualifier=lambda p: p.endswith('.flac'))[0])
-    #files = set(find_audio_files(args.path, include_nonwav=True))
+    files = set(find_audio_files(args.path, include_nonwav=True))
     orig_len = len(files)
     files = files - processed_files
     print(f"Found {len(files)} files to process. Total processing is {100*(orig_len-len(files))/orig_len}% complete.")

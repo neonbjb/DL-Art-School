@@ -5,4 +5,4 @@ https://github.com/neonbjb/demucs
 conda activate demucs
 python setup.py install
 CUDA_VISIBLE_DEVICES=0 python -m demucs /y/split/bt-music-5 --out=/y/separated/bt-music-5 --num_workers=2 --device cuda --two-stems=vocals
-```
+``
