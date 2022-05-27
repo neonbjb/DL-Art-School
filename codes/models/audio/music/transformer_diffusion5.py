@@ -60,6 +60,7 @@ class TransformerDiffusion(nn.Module):
             num_layers=8,
             in_channels=256,
             in_latent_channels=512,
+            clvp_in_dim=768,
             rotary_emb_dim=32,
             token_count=8,
             in_groups=None,
@@ -98,6 +99,7 @@ class TransformerDiffusion(nn.Module):
                     ff_glu=True,
                     rotary_pos_emb=True,
                 )
+        self.clvp_encoder = nn.Linear(clvp_in_dim, model_channels)
 
         # Either code_converter or latent_converter is used, depending on what type of conditioning data is fed.
         # This model is meant to be able to be trained on both for efficiency purposes - it is far less computationally
@@ -188,7 +190,7 @@ class TransformerDiffusion(nn.Module):
             return expanded_code_emb, cond_emb, mel_pred
 
 
-    def forward(self, x, timesteps, codes=None, conditioning_input=None, prenet_latent=None, precomputed_code_embeddings=None,
+    def forward(self, x, timesteps, codes=None, conditioning_input=None, clvp_input=None, prenet_latent=None, precomputed_code_embeddings=None,
                 precomputed_cond_embeddings=None, conditioning_free=False, return_code_pred=False):
         if precomputed_code_embeddings is not None:
             assert precomputed_cond_embeddings is not None, "Must specify both precomputed embeddings if one is specified"
@@ -212,7 +214,10 @@ class TransformerDiffusion(nn.Module):
                     unused_params.extend(list(self.latent_conditioner.parameters()) + [self.latent_fade])
             unused_params.append(self.unconditioned_embedding)
 
-        blk_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) + cond_emb
+        clvp_emb = torch.zeros_like(cond_emb) if clvp_input is None else self.clvp_encoder(clvp_input)
+        if clvp_input is None:
+            unused_params.extend(self.clvp_encoder.parameters())
+        blk_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) + cond_emb + clvp_emb
         x = self.inp_block(x).permute(0,2,1)
 
         rotary_pos_emb = self.rotary_embeddings(x.shape[1], x.device)
@@ -234,7 +239,7 @@ class TransformerDiffusion(nn.Module):
 
 
 @register_model
-def register_transformer_diffusion3(opt_net, opt):
+def register_transformer_diffusion5(opt_net, opt):
     return TransformerDiffusion(**opt_net['kwargs'])
 
 
@@ -244,7 +249,8 @@ if __name__ == '__main__':
     aligned_sequence = torch.randint(0,8,(2,100,8))
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
+    clvp = torch.randn(2,768)
     model = TransformerDiffusion(512, unconditioned_percentage=.5, in_groups=8)
-    o = model(clip, ts, aligned_sequence, cond, return_code_pred=True)
+    o = model(clip, ts, aligned_sequence, cond, clvp_input=clvp, return_code_pred=True)
     #o = model(clip, ts, aligned_sequence, cond, aligned_latent)
 

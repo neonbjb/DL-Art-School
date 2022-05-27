@@ -108,6 +108,14 @@ class VoiceCLIP(nn.Module):
             self.text_pos_emb = nn.Embedding(text_seq_len, dim_text)
             self.speech_pos_emb = nn.Embedding(num_speech_tokens, dim_speech)
 
+    def embed_text(self, text):
+        text_mask = torch.ones_like(text.float()).bool()
+        text_emb = self.text_emb(text)
+        enc_text = self.text_transformer(text_emb, mask=text_mask)
+        text_latents = masked_mean(enc_text, text_mask, dim=1)
+        text_latents = self.to_text_latent(text_latents)
+        return text_latents
+
     def forward(
             self,
             text,

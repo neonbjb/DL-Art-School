@@ -331,9 +331,10 @@ class Mel2vecCodesInjector(Injector):
         from models.audio.mel2vec import ContrastiveTrainingWrapper
         self.m2v = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0,
                                            mask_time_prob=0,
-                                           mask_time_length=6, num_negatives=100, codebook_size=8, codebook_groups=8,
-                                           disable_custom_linear_init=True)
+                                           mask_time_length=6, num_negatives=100, codebook_size=16, codebook_groups=4,
+                                           disable_custom_linear_init=True, do_reconstruction_loss=True)
         self.m2v.load_state_dict(torch.load(f"../experiments/m2v_{for_what}.pth", map_location=torch.device('cpu')))
+        self.m2v = self.m2v.eval()
         del self.m2v.m2v.encoder  # This is a big memory sink which will not get used.
         self.needs_move = True
 
@@ -344,3 +345,25 @@ class Mel2vecCodesInjector(Injector):
                 self.m2v = self.m2v.to(mels.device)
             codes = self.m2v.get_codes(mels)
             return {self.output: codes}
+
+
+class ClvpTextInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        from models.clip.text_voice_clip import VoiceCLIP
+        self.clvp = VoiceCLIP(dim_text=768, dim_speech=768, dim_latent=768, num_text_tokens=256, text_enc_depth=20,
+                              text_seq_len=350, text_heads=12, num_speech_tokens=8192, speech_enc_depth=20,
+                              speech_heads=12, speech_seq_len=430, text_mask_percentage=0, voice_mask_percentage=0,
+                              use_xformers=True)
+        self.clvp.load_state_dict(torch.load(f"../experiments/clvp_md.pth", map_location=torch.device('cpu')))
+        self.clvp = self.clvp.eval()
+        del self.clvp.speech_transformer  # We will only be using the text transformer.
+        self.needs_move = True
+
+    def forward(self, state):
+        codes = state[self.input]
+        with torch.no_grad():
+            if self.needs_move:
+                self.clvp = self.clvp.to(codes.device)
+            latents = self.clvp.embed_text(codes)
+            return {self.output: latents}
