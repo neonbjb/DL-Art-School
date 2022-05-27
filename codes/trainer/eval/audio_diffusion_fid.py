@@ -1,5 +1,7 @@
 import os
 import os.path as osp
+import random
+
 import torch
 import torchaudio
 import torchvision.utils
@@ -33,6 +35,13 @@ class AudioDiffusionFid(evaluator.Evaluator):
         super().__init__(model, opt_eval, env, uses_all_ddp=True)
         self.real_path = opt_eval['eval_tsv']
         self.data = load_tsv_aligned_codes(self.real_path)
+
+        # Deterministically shuffle the data.
+        ostate = random.getstate()
+        random.seed(5)
+        random.shuffle(self.data)
+        random.setstate(ostate)
+
         if 'clip_dataset' in opt_eval.keys():
             self.data = self.data[:opt_eval['clip_dataset']]
         if distributed.is_initialized() and distributed.get_world_size() > 1:
