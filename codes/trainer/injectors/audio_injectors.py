@@ -4,7 +4,6 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 
-from models.audio.tts.unet_diffusion_tts_flat import DiffusionTtsFlat
 from trainer.inject import Injector
 from utils.music_utils import get_music_codegen
 from utils.util import opt_get, load_model_from_config, pad_or_truncate
@@ -250,6 +249,7 @@ class ConditioningLatentDistributionDivergenceInjector(Injector):
                                                           also_load_savepoint=False, load_path=pretrained_path).eval()
             self.mel_inj = TorchMelSpectrogramInjector({'in': 'wav', 'out': 'mel', 'mel_norm_file': '../experiments/clips_mel_norms.pth'},{})
         else:
+            from models.audio.tts.unet_diffusion_tts_flat import DiffusionTtsFlat
             self.latent_producer = DiffusionTtsFlat(model_channels=1024, num_layers=10, in_channels=100, out_channels=200,
                                           in_latent_channels=1024, in_tokens=8193, dropout=0, use_fp16=False,
                                           num_heads=16, layer_drop=0, unconditioned_percentage=0).eval()
@@ -370,3 +370,7 @@ class NormalizeMelInjector(Injector):
         mel = state[self.input]
         with torch.no_grad():
             return {self.output: normalize_mel(mel)}
+
+
+if __name__ == '__main__':
+    print('hi')
