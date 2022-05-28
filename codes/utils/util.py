@@ -15,6 +15,8 @@ import cv2
 import torch
 import torchaudio
 from audio2numpy import open_audio
+from torch import nn
+from torch.nn.parallel import DistributedDataParallel
 from torchvision.utils import make_grid
 from shutil import get_terminal_size
 import scp
@@ -617,3 +619,17 @@ def load_wav_to_torch(full_path):
     else:
         raise NotImplemented(f"Provided data dtype not supported: {data.dtype}")
     return (torch.FloatTensor(data.astype(np.float32)) / norm_fix, sampling_rate)
+
+
+def get_network_description(network):
+    """Get the string and total parameters of the network"""
+    if isinstance(network, nn.DataParallel) or isinstance(network, DistributedDataParallel):
+        network = network.module
+    return str(network), sum(map(lambda x: x.numel(), network.parameters()))
+
+
+def print_network(net, name='some network'):
+    s, n = get_network_description(net)
+    net_struc_str = '{}'.format(net.__class__.__name__)
+    print('Network {} structure: {}, with parameters: {:,d}'.format(name, net_struc_str, n))
+    print(s)

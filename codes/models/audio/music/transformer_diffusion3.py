@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchsummary
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import TimestepEmbedSequential, TimestepBlock
+from models.diffusion.unet_diffusion import TimestepBlock
 from models.lucidrains.x_transformers import Encoder, Attention, FeedForward, RMSScaleShiftNorm, RotaryEmbedding
 from trainer.networks import register_model
 from utils.util import checkpoint, print_network
