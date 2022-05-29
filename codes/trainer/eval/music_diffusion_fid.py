@@ -89,7 +89,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         mel = self.spec_fn({'in': audio})['out']
         codegen = self.local_modules['codegen'].to(mel.device)
-        codes = codegen.get_codes(mel)
+        codes = codegen.get_codes(mel, project=True)
         mel_norm = normalize_mel(mel)
         gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape,
                                               model_kwargs={'codes': codes, 'conditioning_input': mel_norm[:,:,:140]})
