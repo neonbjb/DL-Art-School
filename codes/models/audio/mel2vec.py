@@ -653,11 +653,14 @@ class ContrastiveTrainingWrapper(nn.Module):
         }
         return groups
 
-    def get_codes(self, mel):
+    def get_codes(self, mel, project=False):
         proj = self.m2v.input_blocks(mel).permute(0,2,1)
         _, proj = self.m2v.projector(proj)
-        codes = self.quantizer.get_codes(proj)
-        return codes
+        if project:
+            proj, _ = self.quantizer(proj)
+            return proj
+        else:
+            return self.quantizer.get_codes(proj)
 
     def reconstruct(self, mel):
         proj = self.m2v.input_blocks(mel).permute(0,2,1)

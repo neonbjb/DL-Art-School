@@ -1,7 +1,7 @@
 import os
 
 if __name__ == '__main__':
-    basepath = 'Y:/clips/podcasts-0'
+    basepath = 'Y:\\bigasr_dataset\\hifi_tts'
 
     english_file = os.path.join(basepath, 'transcribed-oco-realtext.tsv')
     if not os.path.exists(english_file):

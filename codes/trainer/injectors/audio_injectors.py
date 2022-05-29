@@ -330,13 +330,14 @@ class Mel2vecCodesInjector(Injector):
         self.m2v = get_music_codegen()
         del self.m2v.m2v.encoder  # This is a big memory sink which will not get used.
         self.needs_move = True
+        self.inj_vector = opt_get(opt, ['vector'], False)
 
     def forward(self, state):
         mels = state[self.input]
         with torch.no_grad():
             if self.needs_move:
                 self.m2v = self.m2v.to(mels.device)
-            codes = self.m2v.get_codes(mels)
+            codes = self.m2v.get_codes(mels, project=self.inj_vector)
             return {self.output: codes}
 
 
