@@ -50,7 +50,7 @@ class AttentionBlock(TimestepBlock):
         return h + x
 
 
-class TransformerDiffusion(nn.Module):
+class TransformerDiffusionTTS(nn.Module):
     """
     A diffusion model composed entirely of stacks of transformer layers. Why would you do it any other way?
     """
@@ -244,7 +244,7 @@ class TransformerDiffusion(nn.Module):
 
 @register_model
 def register_transformer_diffusion_tts(opt_net, opt):
-    return TransformerDiffusion(**opt_net['kwargs'])
+    return TransformerDiffusionTTS(**opt_net['kwargs'])
 
 
 if __name__ == '__main__':
@@ -255,7 +255,7 @@ if __name__ == '__main__':
     ts = torch.LongTensor([600, 600])
     clvp = torch.randn(2,768)
     type = torch.LongTensor([0,1])
-    model = TransformerDiffusion(512, unconditioned_percentage=.5, in_groups=8)
+    model = TransformerDiffusionTTS(512, unconditioned_percentage=.5, in_groups=8)
     o = model(clip, ts, aligned_sequence, cond, clvp_input=clvp, type=type, return_code_pred=True)
     #o = model(clip, ts, aligned_sequence, cond, aligned_latent)
 

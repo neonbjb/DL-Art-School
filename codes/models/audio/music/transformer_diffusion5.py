@@ -64,8 +64,7 @@ class TransformerDiffusion(nn.Module):
             num_layers=8,
             in_channels=256,
             rotary_emb_dim=32,
-            token_count=8,
-            in_groups=None,
+            input_vec_dim=512,
             out_channels=512,  # mean and variance
             dropout=0,
             use_fp16=False,
@@ -105,14 +104,7 @@ class TransformerDiffusion(nn.Module):
                     ff_mult=1,
                 )
 
-        # Either code_converter or latent_converter is used, depending on what type of conditioning data is fed.
-        # This model is meant to be able to be trained on both for efficiency purposes - it is far less computationally
-        # complex to generate tokens, while generating latents will normally mean propagating through a deep autoregressive
-        # transformer network.
-        if in_groups is None:
-            self.embeddings = nn.Embedding(token_count, prenet_channels)
-        else:
-            self.embeddings = MultiGroupEmbedding(token_count, in_groups, prenet_channels)
+        self.input_converter = nn.Linear(input_vec_dim, prenet_channels)
         self.code_converter = Encoder(
                     dim=prenet_channels,
                     depth=3,
@@ -152,8 +144,7 @@ class TransformerDiffusion(nn.Module):
     def timestep_independent(self, codes, conditioning_input, expected_seq_len):
         cond_emb = self.conditioning_embedder(conditioning_input).permute(0,2,1)
         cond_emb = self.conditioning_encoder(cond_emb)[:, 0]
-
-        code_emb = self.embeddings(codes)
+        code_emb = self.input_converter(codes)
 
         # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
         if self.training and self.unconditioned_percentage > 0:
@@ -211,10 +202,10 @@ def register_transformer_diffusion4(opt_net, opt):
 
 if __name__ == '__main__':
     clip = torch.randn(2, 256, 400)
-    aligned_sequence = torch.randint(0,8,(2,100,8))
+    aligned_sequence = torch.randn(2,100,512)
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
-    model = TransformerDiffusion(model_channels=3072, block_channels=1536, prenet_channels=1536, num_layers=16, in_groups=8)
+    model = TransformerDiffusion(model_channels=3072, block_channels=1536, prenet_channels=1536)
     torch.save(model, 'sample.pth')
     print_network(model)
     o = model(clip, ts, aligned_sequence, cond)
