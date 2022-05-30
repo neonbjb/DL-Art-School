@@ -218,6 +218,7 @@ class TransformerDiffusionWithQuantizer(nn.Module):
         del self.m2v.m2v.projector.projection
         del self.m2v.project_hid
         del self.m2v.project_q
+        del self.m2v.m2v.masked_spec_embed
 
     def update_for_step(self, step, *args):
         self.internal_step = step
