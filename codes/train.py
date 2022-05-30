@@ -245,9 +245,9 @@ class Trainer:
                     else:
                         wandb_logs[k] = v
                 if opt_get(opt, ['wandb_progress_use_raw_steps'], False):
-                    wandb.log(logs, step=self.current_step)
+                    wandb.log(wandb_logs, step=self.current_step)
                 else:
-                    wandb.log(logs, step=self.total_training_data_encountered)
+                    wandb.log(wandb_logs, step=self.total_training_data_encountered)
             self.logger.info(message)
 
         #### save models and training states
