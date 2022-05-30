@@ -164,8 +164,10 @@ class TransformerDiffusion(nn.Module):
 
         unused_params = []
         if conditioning_free:
-            code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
-            unused_params.extend(list(self.code_converter.parameters()) + list(self.code_embedding.parameters()))
+            code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1)
+            cond_emb = self.conditioning_embedder(conditioning_input).permute(0,2,1)
+            cond_emb = self.conditioning_encoder(cond_emb)[:, 0]
+            unused_params.extend(list(self.code_converter.parameters()))
         else:
             if precomputed_code_embeddings is not None:
                 code_emb = precomputed_code_embeddings
@@ -195,11 +197,70 @@ class TransformerDiffusion(nn.Module):
         return out
 
 
+class TransformerDiffusionWithQuantizer(nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+        self.diff = TransformerDiffusion(**kwargs)
+        from models.audio.mel2vec import ContrastiveTrainingWrapper
+        self.m2v = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0.1,
+                                           mask_time_prob=0, mask_time_length=6, num_negatives=100, codebook_size=16, codebook_groups=4,
+                                           disable_custom_linear_init=True, do_reconstruction_loss=True)
+        self.m2v.quantizer.temperature = self.m2v.min_gumbel_temperature
+
+        self.codes = torch.zeros((3000000,), dtype=torch.long)
+        self.internal_step = 0
+        self.code_ind = 0
+        self.total_codes = 0
+
+        del self.m2v.m2v.encoder
+
+    def update_for_step(self, step, *args):
+        self.internal_step = step
+        self.m2v.quantizer.temperature = max(
+                    self.m2v.max_gumbel_temperature * self.m2v.gumbel_temperature_decay**step,
+                    self.m2v.min_gumbel_temperature,
+                )
+
+    def forward(self, x, timesteps, truth_mel, conditioning_input, conditioning_free=False):
+        proj = self.m2v.m2v.input_blocks(truth_mel).permute(0,2,1)
+        _, proj = self.m2v.m2v.projector(proj)
+        vectors, _, probs = self.m2v.quantizer(proj, return_probs=True)
+        self.log_codes(probs)
+        return self.diff(x, timesteps, codes=vectors, conditioning_input=conditioning_input, conditioning_free=conditioning_free)
+
+    def log_codes(self, codes):
+        if self.internal_step % 5 == 0:
+            codes = torch.argmax(codes, dim=-1)
+            codes = codes[:,:,0] + codes[:,:,1] * 16 + codes[:,:,2] * 16 ** 2 + codes[:,:,3] * 16 ** 3
+            codes = codes.flatten()
+            l = codes.shape[0]
+            i = self.code_ind if (self.codes.shape[0] - self.code_ind) > l else self.codes.shape[0] - l
+            self.codes[i:i+l] = codes.cpu()
+            self.code_ind = self.code_ind + l
+            if self.code_ind >= self.codes.shape[0]:
+                self.code_ind = 0
+            self.total_codes += 1
+
+    def get_debug_values(self, step, __):
+        if self.total_codes > 0:
+            return {'histogram_codes': self.codes[:self.total_codes]}
+        else:
+            return {}
+
+
 @register_model
 def register_transformer_diffusion5(opt_net, opt):
     return TransformerDiffusion(**opt_net['kwargs'])
 
 
+@register_model
+def register_transformer_diffusion5_with_quantizer(opt_net, opt):
+    return TransformerDiffusionWithQuantizer(**opt_net['kwargs'])
+
+
+"""
+# For TFD5
 if __name__ == '__main__':
     clip = torch.randn(2, 256, 400)
     aligned_sequence = torch.randn(2,100,512)
@@ -209,4 +270,20 @@ if __name__ == '__main__':
     torch.save(model, 'sample.pth')
     print_network(model)
     o = model(clip, ts, aligned_sequence, cond)
+"""
+
+if __name__ == '__main__':
+    clip = torch.randn(2, 256, 400)
+    cond = torch.randn(2, 256, 400)
+    ts = torch.LongTensor([600, 600])
+    model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024, num_layers=16)
+
+    quant_weights = torch.load('../experiments/m2v_music.pth')
+    diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_tfd5\\models\\48000_generator_ema.pth')
+    model.m2v.load_state_dict(quant_weights, strict=False)
+    model.diff.load_state_dict(diff_weights)
+
+    torch.save(model.state_dict(), 'sample.pth')
+    print_network(model)
+    o = model(clip, ts, clip, cond)
 

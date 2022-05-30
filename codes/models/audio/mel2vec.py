@@ -542,7 +542,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         idxs = codevector_idx.view(batch_size, sequence_length, self.num_groups)
         return idxs
 
-    def forward(self, hidden_states, mask_time_indices=None):
+    def forward(self, hidden_states, mask_time_indices=None, return_probs=False):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -580,6 +580,8 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             .view(batch_size, sequence_length, -1)
         )
 
+        if return_probs:
+            return codevectors, perplexity, codevector_probs.view(batch_size, sequence_length, self.num_groups, self.num_vars)
         return codevectors, perplexity
 
 

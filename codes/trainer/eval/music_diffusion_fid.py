@@ -60,6 +60,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         elif 'from_codes' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
+        elif 'from_codes_quant' == mode:
+            self.diffusion_fn = self.perform_diffusion_from_codes_quant
         self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000,
                                                     'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
@@ -92,12 +94,35 @@ class MusicDiffusionFid(evaluator.Evaluator):
         codes = codegen.get_codes(mel, project=True)
         mel_norm = normalize_mel(mel)
         gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape,
-                                              model_kwargs={'codes': codes, 'conditioning_input': mel_norm[:,:,:140]})
+                                              model_kwargs={'codes': codes, 'conditioning_input': torch.zeros_like(mel_norm[:,:,:390])})
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape, model_kwargs={'aligned_conditioning': gen_mel_denorm})
+        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'aligned_conditioning': gen_mel_denorm})
+        gen_wav = pixel_shuffle_1d(gen_wav, 16)
+
+        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
+
+    def perform_diffusion_from_codes_quant(self, audio, sample_rate=22050):
+        if sample_rate != sample_rate:
+            real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
+        else:
+            real_resampled = audio
+        audio = audio.unsqueeze(0)
+
+        mel = self.spec_fn({'in': audio})['out']
+        mel_norm = normalize_mel(mel)
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape,
+                                              model_kwargs={'truth_mel': mel,
+                                                            'conditioning_input': torch.zeros_like(mel_norm[:,:,:390])})
+
+        gen_mel_denorm = denormalize_mel(gen_mel)
+        output_shape = (1,16,audio.shape[-1]//16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'aligned_conditioning': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
         return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
@@ -164,18 +189,19 @@ class MusicDiffusionFid(evaluator.Evaluator):
         # Put modules used for evaluation back into CPU memory.
         for k, mod in self.local_modules.items():
             self.local_modules[k] = mod.cpu()
+        self.spec_decoder = self.spec_decoder.cpu()
 
         return {"frechet_distance": frechet_distance}
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd_quant.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd\\models\\3000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\music_tfd5_with_quantizer_basis.pth'
                                        ).cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 500,
-                'conditioning_free': True, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 26, 'device': 'cuda', 'opt': {}}
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
+                'conditioning_free': False, 'conditioning_free_k': 2,
+                'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes_quant'}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 558, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
