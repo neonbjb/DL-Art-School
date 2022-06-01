@@ -194,7 +194,7 @@ class MusicQuantizer(nn.Module):
         else:
             return self.quantizer.get_codes(proj)
 
-    def forward(self, mel):
+    def forward(self, mel, return_decoder_latent=False):
         orig_mel = mel
         cm = ceil_multiple(mel.shape[-1], 4)
         if cm != 0:
@@ -204,15 +204,16 @@ class MusicQuantizer(nn.Module):
         h = self.encoder(h)
         h = self.enc_norm(h.permute(0,2,1))
         codevectors, perplexity, codes = self.quantizer(h, return_probs=True)
+        self.log_codes(codes)
         h = self.decoder(codevectors.permute(0,2,1))
-        reconstructed = self.up(h)
+        if return_decoder_latent:
+            return h
 
+        reconstructed = self.up(h)
         reconstructed = reconstructed[:, :, :orig_mel.shape[-1]]
+
         mse = F.mse_loss(reconstructed, orig_mel)
         diversity = (self.quantizer.num_codevectors - perplexity) / self.quantizer.num_codevectors
-
-        self.log_codes(codes)
-
         return mse, diversity
 
     def log_codes(self, codes):
