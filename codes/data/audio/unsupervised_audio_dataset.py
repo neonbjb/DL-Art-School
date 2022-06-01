@@ -182,9 +182,12 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
 if __name__ == '__main__':
     params = {
         'mode': 'unsupervised_audio',
-        'path': ['Y:\\split\\yt-music'],
+        'path': ['Y:\\separated\\yt-music-0', 'Y:\\separated\\yt-music-1',
+                 'Y:\\separated\\bt-music-1', 'Y:\\separated\\bt-music-2',
+                 'Y:\\separated\\bt-music-3', 'Y:\\separated\\bt-music-4',
+                 'Y:\\separated\\bt-music-5'],
         'cache_path': 'Y:\\separated\\no-vocals-cache-win.pth',
-        'endswith': 'no_vocals.wav',
+        'endswith': ['no_vocals.wav'],
         'sampling_rate': 22050,
         'pad_to_samples': 200000,
         'resample_clip': False,
@@ -202,6 +205,6 @@ if __name__ == '__main__':
     for b in tqdm(dl):
         for b_ in range(b['clip'].shape[0]):
             #pass
-            torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
-            torchaudio.save(f'{i}_alt_clip_{b_}.wav', b['alt_clips'][b_], ds.sampling_rate)
+            #torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
+            #torchaudio.save(f'{i}_alt_clip_{b_}.wav', b['alt_clips'][b_], ds.sampling_rate)
             i += 1

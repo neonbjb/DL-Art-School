@@ -599,7 +599,7 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[], endswith=[], not
             before = len(output)
             def filter_fn(p):
                 for e in endswith:
-                    if not p.endswith(endswith):
+                    if not p.endswith(e):
                         return False
                 for e in not_endswith:
                     if p.endswith(e):
