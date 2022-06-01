@@ -217,7 +217,7 @@ class TransformerDiffusionWithQuantizer(nn.Module):
                     self.m2v.min_gumbel_temperature,
                 )
 
-    def forward(self, x, timesteps, truth_mel, conditioning_input, conditioning_free=False):
+    def forward(self, x, timesteps, truth_mel, conditioning_input, disable_diversity=False, conditioning_free=False):
         quant_grad_enabled = self.internal_step > self.freeze_quantizer_until
         with torch.set_grad_enabled(quant_grad_enabled):
             proj, diversity_loss = self.m2v(truth_mel, return_decoder_latent=True)
@@ -231,8 +231,10 @@ class TransformerDiffusionWithQuantizer(nn.Module):
             proj = proj + unused
             diversity_loss = diversity_loss * 0
 
-        return self.diff(x, timesteps, codes=proj, conditioning_input=conditioning_input,
-                         conditioning_free=conditioning_free), diversity_loss
+        diff = self.diff(x, timesteps, codes=proj, conditioning_input=conditioning_input, conditioning_free=conditioning_free)
+        if disable_diversity:
+            return diff
+        return diff, diversity_loss
 
     def get_debug_values(self, step, __):
         if self.m2v.total_codes > 0:

@@ -227,12 +227,17 @@ class TransformerDiffusionWithQuantizer(nn.Module):
                     self.m2v.min_gumbel_temperature,
                 )
 
-    def forward(self, x, timesteps, truth_mel, conditioning_input, conditioning_free=False):
+    def forward(self, x, timesteps, truth_mel, conditioning_input, disable_diversity=False, conditioning_free=False):
         proj = self.m2v.m2v.input_blocks(truth_mel).permute(0,2,1)
         proj = self.m2v.m2v.projector.layer_norm(proj)
-        vectors, _, probs = self.m2v.quantizer(proj, return_probs=True)
+        vectors, perplexity, probs = self.m2v.quantizer(proj, return_probs=True)
+        diversity = (self.m2v.quantizer.num_codevectors - perplexity) / self.m2v.quantizer.num_codevectors
         self.log_codes(probs)
-        return self.diff(x, timesteps, codes=vectors, conditioning_input=conditioning_input, conditioning_free=conditioning_free)
+        diff = self.diff(x, timesteps, codes=vectors, conditioning_input=conditioning_input, conditioning_free=conditioning_free)
+        if disable_diversity:
+            return diff
+        else:
+            return diff, diversity
 
     def log_codes(self, codes):
         if self.internal_step % 5 == 0:
