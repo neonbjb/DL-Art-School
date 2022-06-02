@@ -60,6 +60,7 @@ class TransformerDiffusion(nn.Module):
     def __init__(
             self,
             prenet_channels=256,
+            prenet_layers=3,
             model_channels=512,
             block_channels=256,
             num_layers=8,
@@ -108,7 +109,7 @@ class TransformerDiffusion(nn.Module):
         self.input_converter = nn.Linear(input_vec_dim, prenet_channels)
         self.code_converter = Encoder(
                     dim=prenet_channels,
-                    depth=3,
+                    depth=prenet_layers,
                     heads=prenet_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
@@ -205,7 +206,7 @@ class TransformerDiffusionWithQuantizer(nn.Module):
         self.internal_step = 0
         self.freeze_quantizer_until = freeze_quantizer_until
         self.diff = TransformerDiffusion(**kwargs)
-        self.m2v = MusicQuantizer(inp_channels=256, inner_dim=2048, codevector_dim=1024)
+        self.m2v = MusicQuantizer(inp_channels=256, inner_dim=[1024,1024,512], codevector_dim=1024, codebook_size=512, codebook_groups=2)
         self.m2v.quantizer.temperature = self.m2v.min_gumbel_temperature
         del self.m2v.up
 
@@ -270,14 +271,14 @@ if __name__ == '__main__':
     clip = torch.randn(2, 256, 400)
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
-    model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024, input_vec_dim=2048, num_layers=16)
+    model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024, input_vec_dim=1024, num_layers=16, prenet_layers=6)
 
-    #quant_weights = torch.load('X:\\dlas\\experiments\\train_music_quant\\models\\1000_generator.pth')
+    quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant\\models\\18000_generator_ema.pth')
     #diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_tfd5\\models\\48000_generator_ema.pth')
-    #model.m2v.load_state_dict(quant_weights, strict=False)
+    model.m2v.load_state_dict(quant_weights, strict=False)
     #model.diff.load_state_dict(diff_weights)
 
-    #torch.save(model.state_dict(), 'sample.pth')
+    torch.save(model.state_dict(), 'sample.pth')
     print_network(model)
     o = model(clip, ts, clip, cond)
 
