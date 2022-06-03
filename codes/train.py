@@ -179,7 +179,8 @@ class Trainer:
         else:
             self.val_freq = int(opt['train']['val_freq_megasamples'] * 1000000)
 
-        self.next_eval_step = self.total_training_data_encountered + self.val_freq        
+        self.next_eval_step = self.total_training_data_encountered + self.val_freq
+        del resume_state  # For whatever reason, this relieves a memory burden on the first GPU for some training sessions.
 
     def do_step(self, train_data):
         if self._profile:
