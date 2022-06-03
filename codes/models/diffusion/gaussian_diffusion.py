@@ -790,7 +790,7 @@ class GaussianDiffusion:
         output = th.where((t == 0), decoder_nll, kl)
         return {"output": output, "pred_xstart": out["pred_xstart"]}
 
-    def training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
+    def training_losses(self, model, x_start, t, model_kwargs=None, noise=None, channel_balancing_fn=None):
         """
         Compute training losses for a single timestep.
 
@@ -867,7 +867,10 @@ class GaussianDiffusion:
             else:
                 raise NotImplementedError(self.model_mean_type)
             assert model_output.shape == target.shape == x_start.shape
-            terms["mse"] = mean_flat((target - model_output) ** 2)
+            s_err = (target - model_output) ** 2
+            if channel_balancing_fn is not None:
+                s_err = channel_balancing_fn(s_err)
+            terms["mse"] = mean_flat(s_err)
             terms["x_start_predicted"] = x_start_pred
             if "vb" in terms:
                 terms["loss"] = terms["mse"] + terms["vb"]
