@@ -114,12 +114,12 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         mel = self.spec_fn({'in': audio})['out']
         mel_norm = normalize_mel(mel)
-        def denoising_fn(x):
-            q9 = torch.quantile(x, q=.95, dim=-1).unsqueeze(-1)
-            s = q9.clamp(1, 9999999999)
-            x = x.clamp(-s, s) / s
-            return x
-        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, denoised_fn=denoising_fn, clip_denoised=False,
+        #def denoising_fn(x):
+        #    q9 = torch.quantile(x, q=.95, dim=-1).unsqueeze(-1)
+        #    s = q9.clamp(1, 9999999999)
+        #    x = x.clamp(-s, s) / s
+        #    return x
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, #denoised_fn=denoising_fn, clip_denoised=False,
                                               model_kwargs={'truth_mel': mel,
                                                             'conditioning_input': torch.zeros_like(mel_norm[:,:,:390]),
                                                             'disable_diversity': True})
@@ -201,9 +201,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd5_quant\\train.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd5_quant\\train_music_diffusion_tfd5_quant.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd5_quant\\models\\27000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd5_quant\\models\\40500_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
                 'conditioning_free': True, 'conditioning_free_k': 1,
