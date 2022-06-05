@@ -46,17 +46,12 @@ class DietAttentionBlock(TimestepBlock):
         self.rms_scale_norm = RMSScaleShiftNorm(in_dim)
         self.proj = nn.Linear(in_dim, dim)
         self.attn = Attention(dim, heads=heads, causal=False, dropout=dropout)
-        self.res = ResBlock(channels=dim, dropout=dropout, out_channels=dim, dims=1)
-        self.ff = nn.Sequential(nn.LayerNorm(dim),
-                                nn.GELU(),
-                                FeedForward(dim, in_dim, mult=1, dropout=dropout, zero_init_output=True))
+        self.ff = FeedForward(dim, in_dim, mult=1, dropout=dropout, zero_init_output=True)
 
     def forward(self, x, timestep_emb, rotary_emb):
         h = self.rms_scale_norm(x, norm_scale_shift_inp=timestep_emb)
         h = self.proj(h)
-        k, _, _, _ = checkpoint(self.attn, h, None, None, None, None, None, rotary_emb)
-        h = k + h
-        h = checkpoint(self.res, h.permute(0,2,1)).permute(0,2,1)
+        h, _, _, _ = checkpoint(self.attn, h, None, None, None, None, None, rotary_emb)
         h = checkpoint(self.ff, h)
         return h + x
 
@@ -232,7 +227,6 @@ class TransformerDiffusionWithQuantizer(nn.Module):
     def get_grad_norm_parameter_groups(self):
         groups = {
             'attention_layers': list(itertools.chain.from_iterable([lyr.attn.parameters() for lyr in self.diff.layers])),
-            'res_layers': list(itertools.chain.from_iterable([lyr.res.parameters() for lyr in self.diff.layers])),
             'ff_layers': list(itertools.chain.from_iterable([lyr.ff.parameters() for lyr in self.diff.layers])),
             'quantizer_encoder': list(self.quantizer.encoder.parameters()),
             'quant_codebook': [self.quantizer.quantizer.codevectors],
