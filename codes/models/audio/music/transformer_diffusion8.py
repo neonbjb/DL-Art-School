@@ -224,8 +224,8 @@ class TransformerDiffusionWithQuantizer(nn.Module):
 
     def get_grad_norm_parameter_groups(self):
         groups = {
-            'attention_layers': [lyr.attn for lyr in self.diff.layers],
-            'ff_layers': [lyr.ff for lyr in self.diff.layers],
+            'attention_layers': [lyr.attn.parameters() for lyr in self.diff.layers],
+            'ff_layers': [lyr.ff.parameters() for lyr in self.diff.layers],
             'quantizer_encoder': list(self.quantizer.encoder.parameters()),
             'quant_codebook': [self.quantizer.quantizer.codevectors],
             'rotary_embeddings': list(self.diff.rotary_embeddings.parameters()),
@@ -268,9 +268,9 @@ if __name__ == '__main__':
     model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024, input_vec_dim=1024, num_layers=16, prenet_layers=6)
     model.get_grad_norm_parameter_groups()
 
-    #quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant\\models\\18000_generator_ema.pth')
+    quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant_r4\\models\\5000_generator.pth')
     #diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_tfd5\\models\\48000_generator_ema.pth')
-    #model.quantizer.load_state_dict(quant_weights, strict=False)
+    model.quantizer.load_state_dict(quant_weights, strict=False)
     #model.diff.load_state_dict(diff_weights)
 
     torch.save(model.state_dict(), 'sample.pth')
