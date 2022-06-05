@@ -89,23 +89,9 @@ class TransformerDiffusion(nn.Module):
         self.time_embed = nn.Sequential(
             linear(prenet_channels, prenet_channels),
             nn.SiLU(),
-            linear(prenet_channels, prenet_channels),
+            linear(prenet_channels, model_channels),
         )
         prenet_heads = prenet_channels//64
-        self.conditioning_embedder = nn.Sequential(nn.Conv1d(in_channels, prenet_channels // 2, 3, padding=1, stride=2),
-                                                   nn.Conv1d(prenet_channels//2, prenet_channels,3,padding=1,stride=2))
-        self.conditioning_encoder = Encoder(
-                    dim=prenet_channels,
-                    depth=4,
-                    heads=prenet_heads,
-                    ff_dropout=dropout,
-                    attn_dropout=dropout,
-                    use_rmsnorm=True,
-                    ff_glu=True,
-                    rotary_pos_emb=True,
-                    zero_init_branch_output=True,
-                    ff_mult=1,
-                )
 
         self.input_converter = nn.Linear(input_vec_dim, prenet_channels)
         self.code_converter = Encoder(
@@ -123,7 +109,6 @@ class TransformerDiffusion(nn.Module):
 
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,1,prenet_channels))
         self.rotary_embeddings = RotaryEmbedding(rotary_emb_dim)
-        self.cond_intg = nn.Linear(prenet_channels*2, model_channels)
         self.intg = nn.Linear(prenet_channels*2, model_channels)
         self.layers = TimestepRotaryEmbedSequential(*[DietAttentionBlock(model_channels, block_channels, block_channels // 64, dropout) for _ in range(num_layers)])
 
@@ -137,16 +122,13 @@ class TransformerDiffusion(nn.Module):
 
     def get_grad_norm_parameter_groups(self):
         groups = {
-            'contextual_embedder': list(self.conditioning_embedder.parameters()),
             'layers': list(self.layers.parameters()) + list(self.inp_block.parameters()),
             'code_converters': list(self.input_converter.parameters()) + list(self.code_converter.parameters()),
             'time_embed': list(self.time_embed.parameters()),
         }
         return groups
 
-    def timestep_independent(self, codes, conditioning_input, expected_seq_len):
-        cond_emb = self.conditioning_embedder(conditioning_input).permute(0,2,1)
-        cond_emb = self.conditioning_encoder(cond_emb)[:, 0]
+    def timestep_independent(self, codes, expected_seq_len):
         code_emb = self.input_converter(codes)
 
         # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
@@ -158,29 +140,24 @@ class TransformerDiffusion(nn.Module):
         code_emb = self.code_converter(code_emb)
 
         expanded_code_emb = F.interpolate(code_emb.permute(0,2,1), size=expected_seq_len, mode='nearest').permute(0,2,1)
-        return expanded_code_emb, cond_emb
+        return expanded_code_emb
 
-    def forward(self, x, timesteps, codes=None, conditioning_input=None, precomputed_code_embeddings=None,
-                precomputed_cond_embeddings=None, conditioning_free=False):
+    def forward(self, x, timesteps, codes=None, conditioning_input=None, precomputed_code_embeddings=None, conditioning_free=False):
         if precomputed_code_embeddings is not None:
             assert codes is None and conditioning_input is None, "Do not provide precomputed embeddings and the other parameters. It is unclear what you want me to do here."
 
         unused_params = []
         if conditioning_free:
             code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1)
-            cond_emb = self.conditioning_embedder(conditioning_input).permute(0,2,1)
-            cond_emb = self.conditioning_encoder(cond_emb)[:, 0]
             unused_params.extend(list(self.code_converter.parameters()))
         else:
             if precomputed_code_embeddings is not None:
                 code_emb = precomputed_code_embeddings
-                cond_emb = precomputed_cond_embeddings
             else:
-                code_emb, cond_emb = self.timestep_independent(codes, conditioning_input, x.shape[-1])
+                code_emb = self.timestep_independent(codes, x.shape[-1])
             unused_params.append(self.unconditioned_embedding)
 
-        blk_emb = torch.cat([self.time_embed(timestep_embedding(timesteps, self.prenet_channels)), cond_emb], dim=-1)
-        blk_emb = self.cond_intg(blk_emb)
+        blk_emb = self.time_embed(timestep_embedding(timesteps, self.prenet_channels))
         x = self.inp_block(x).permute(0,2,1)
 
         rotary_pos_emb = self.rotary_embeddings(x.shape[1], x.device)
@@ -245,6 +222,21 @@ class TransformerDiffusionWithQuantizer(nn.Module):
         else:
             return {}
 
+    def get_grad_norm_parameter_groups(self):
+        groups = {
+            'attention_layers': [lyr.attn for lyr in self.diff.layers],
+            'ff_layers': [lyr.ff for lyr in self.diff.layers],
+            'quantizer_encoder': list(self.quantizer.encoder.parameters()),
+            'quant_codebook': [self.quantizer.quantizer.codevectors],
+            'rotary_embeddings': list(self.diff.rotary_embeddings.parameters()),
+            'out': list(self.diff.out.parameters()),
+            'x_proj': list(self.diff.inp_block.parameters()),
+            'layers': list(self.diff.layers.parameters()),
+            'code_converters': list(self.diff.input_converter.parameters()) + list(self.diff.code_converter.parameters()),
+            'time_embed': list(self.diff.time_embed.parameters()),
+        }
+        return groups
+
 
 @register_model
 def register_transformer_diffusion8(opt_net, opt):
@@ -274,6 +266,7 @@ if __name__ == '__main__':
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
     model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024, input_vec_dim=1024, num_layers=16, prenet_layers=6)
+    model.get_grad_norm_parameter_groups()
 
     #quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant\\models\\18000_generator_ema.pth')
     #diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_tfd5\\models\\48000_generator_ema.pth')
