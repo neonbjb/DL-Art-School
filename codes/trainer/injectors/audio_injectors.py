@@ -328,7 +328,7 @@ class Mel2vecCodesInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
         self.m2v = get_music_codegen()
-        del self.m2v.m2v.encoder  # This is a big memory sink which will not get used.
+        del self.m2v.quantizer.encoder  # This is a big memory sink which will not get used.
         self.needs_move = True
         self.inj_vector = opt_get(opt, ['vector'], False)
 

@@ -150,24 +150,19 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-class MusicQuantizer(nn.Module):
+class MusicQuantizer2(nn.Module):
     def __init__(self, inp_channels=256, inner_dim=1024, codevector_dim=1024, down_steps=2,
                  max_gumbel_temperature=2.0, min_gumbel_temperature=.5, gumbel_temperature_decay=.999995,
-                 codebook_size=16, codebook_groups=4, use_vqvae_quantizer=False):
+                 codebook_size=16, codebook_groups=4):
         super().__init__()
         if not isinstance(inner_dim, list):
             inner_dim = [inner_dim // 2 ** x for x in range(down_steps+1)]
         self.max_gumbel_temperature = max_gumbel_temperature
         self.min_gumbel_temperature = min_gumbel_temperature
         self.gumbel_temperature_decay = gumbel_temperature_decay
-        self.use_vqvae_quantizer = use_vqvae_quantizer
-        if use_vqvae_quantizer:
-            self.quantizer = Quantize(inner_dim[0], codebook_size)
-            assert codevector_dim == inner_dim[0]  # Because this quantizer doesn't support different sizes.
-        else:
-            self.quantizer = Wav2Vec2GumbelVectorQuantizer(inner_dim[0], codevector_dim=codevector_dim,
-                                                           num_codevector_groups=codebook_groups,
-                                                           num_codevectors_per_group=codebook_size)
+        self.quantizer = Wav2Vec2GumbelVectorQuantizer(inner_dim[0], codevector_dim=codevector_dim,
+                                                       num_codevector_groups=codebook_groups,
+                                                       num_codevectors_per_group=codebook_size)
         self.codebook_size = codebook_size
         self.codebook_groups = codebook_groups
         self.num_losses_record = []
@@ -177,11 +172,9 @@ class MusicQuantizer(nn.Module):
             self.up = nn.Conv1d(inner_dim[0], inp_channels, kernel_size=3, padding=1)
         elif down_steps == 2:
             self.down = nn.Sequential(nn.Conv1d(inp_channels, inner_dim[-1], kernel_size=3, padding=1),
-                                      Downsample(inner_dim[-1], inner_dim[-2]),
-                                      Downsample(inner_dim[-2], inner_dim[-3]))
-            self.up = nn.Sequential(Upsample(inner_dim[-3], inner_dim[-2]),
-                                    Upsample(inner_dim[-2], inner_dim[-1]),
-                                    nn.Conv1d(inner_dim[-1], inp_channels, kernel_size=3, padding=1))
+                                      *[Downsample(inner_dim[-i], inner_dim[-i-1]) for i in range(1,len(inner_dim))])
+            self.up = nn.Sequential(*[Upsample(inner_dim[i], inner_dim[i+1]) for i in range(len(inner_dim)-1)] +
+                                    [nn.Conv1d(inner_dim[-1], inp_channels, kernel_size=3, padding=1)])
 
         self.encoder = nn.Sequential(ResBlock(inner_dim[0]),
                                      ResBlock(inner_dim[0]),
@@ -197,26 +190,26 @@ class MusicQuantizer(nn.Module):
         self.code_ind = 0
         self.total_codes = 0
 
-    def get_codes(self, mel):
-        h = self.down(mel)
-        h = self.encoder(h)
-        h = self.enc_norm(h.permute(0,2,1))
-        return self.quantizer.get_codes(h)
+    def get_codes(self, mel, project=False):
+        proj = self.m2v.input_blocks(mel).permute(0,2,1)
+        _, proj = self.m2v.projector(proj)
+        if project:
+            proj, _ = self.quantizer(proj)
+            return proj
+        else:
+            return self.quantizer.get_codes(proj)
 
     def forward(self, mel, return_decoder_latent=False):
         orig_mel = mel
-        cm = ceil_multiple(mel.shape[-1], 4)
+        cm = ceil_multiple(mel.shape[-1], 2 ** (len(self.down)-1))
         if cm != 0:
             mel = F.pad(mel, (0,cm-mel.shape[-1]))
 
         h = self.down(mel)
         h = self.encoder(h)
         h = self.enc_norm(h.permute(0,2,1))
-        if self.use_vqvae_quantizer:
-            codevectors, diversity, codes = self.quantizer(h)
-        else:
-            codevectors, perplexity, codes = self.quantizer(h, return_probs=True)
-            diversity = (self.quantizer.num_codevectors - perplexity) / self.quantizer.num_codevectors
+        codevectors, perplexity, codes = self.quantizer(h, return_probs=True)
+        diversity = (self.quantizer.num_codevectors - perplexity) / self.quantizer.num_codevectors
         self.log_codes(codes)
         h = self.decoder(codevectors.permute(0,2,1))
         if return_decoder_latent:
@@ -230,12 +223,11 @@ class MusicQuantizer(nn.Module):
 
     def log_codes(self, codes):
         if self.internal_step % 5 == 0:
-            if not self.use_vqvae_quantizer:
-                codes = torch.argmax(codes, dim=-1)
-                ccodes = codes[:,:,0]
-                for j in range(1,codes.shape[-1]):
-                    ccodes += codes[:,:,j] * self.codebook_size ** j
-                codes = ccodes
+            codes = torch.argmax(codes, dim=-1)
+            ccodes = codes[:,:,0]
+            for j in range(1,codes.shape[-1]):
+                ccodes += codes[:,:,j] * self.codebook_size ** j
+            codes = ccodes
             codes = codes.flatten()
             l = codes.shape[0]
             i = self.code_ind if (self.codes.shape[0] - self.code_ind) > l else self.codes.shape[0] - l
@@ -251,14 +243,20 @@ class MusicQuantizer(nn.Module):
         else:
             return {}
 
+    def update_for_step(self, step, *args):
+        self.quantizer.temperature = max(
+                    self.max_gumbel_temperature * self.gumbel_temperature_decay**step,
+                    self.min_gumbel_temperature,
+                )
+
 
 @register_model
-def register_music_quantizer(opt_net, opt):
-    return MusicQuantizer(**opt_net['kwargs'])
+def register_music_quantizer2(opt_net, opt):
+    return MusicQuantizer2(**opt_net['kwargs'])
 
 
 if __name__ == '__main__':
-    model = MusicQuantizer(inner_dim=[1024,1024,512], codevector_dim=1024, codebook_size=8192, codebook_groups=0, use_vqvae_quantizer=True)
+    model = MusicQuantizer2(inner_dim=[1024], codevector_dim=1024, codebook_size=256, codebook_groups=2)
     print_network(model)
     mel = torch.randn((2,256,782))
     model(mel)

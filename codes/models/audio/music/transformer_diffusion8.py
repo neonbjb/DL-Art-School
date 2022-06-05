@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from models.audio.music.music_quantizer2 import MusicQuantizer2
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import TimestepBlock
 from models.lucidrains.x_transformers import Encoder, Attention, FeedForward, RMSScaleShiftNorm, RotaryEmbedding
@@ -39,15 +40,16 @@ class TimestepRotaryEmbedSequential(nn.Sequential, TimestepBlock):
 class DietAttentionBlock(TimestepBlock):
     def __init__(self, in_dim, dim, heads, dropout):
         super().__init__()
+        self.rms_scale_norm = RMSScaleShiftNorm(in_dim)
         self.proj = nn.Linear(in_dim, dim)
-        self.rms_scale_norm = RMSScaleShiftNorm(dim)
         self.attn = Attention(dim, heads=heads, causal=False, dropout=dropout)
         self.ff = FeedForward(dim, in_dim, mult=1, dropout=dropout, zero_init_output=True)
 
     def forward(self, x, timestep_emb, rotary_emb):
-        h = self.proj(x)
-        h = self.rms_scale_norm(h, norm_scale_shift_inp=timestep_emb)
-        h, _, _, _ = checkpoint(self.attn, h, None, None, None, None, None, rotary_emb)
+        h = self.rms_scale_norm(x, norm_scale_shift_inp=timestep_emb)
+        h = self.proj(h)
+        k, _, _, _ = checkpoint(self.attn, h, None, None, None, None, None, rotary_emb)
+        h = k + h
         h = checkpoint(self.ff, h)
         return h + x
 
@@ -59,6 +61,7 @@ class TransformerDiffusion(nn.Module):
     def __init__(
             self,
             prenet_channels=256,
+            prenet_layers=3,
             model_channels=512,
             block_channels=256,
             num_layers=8,
@@ -107,7 +110,7 @@ class TransformerDiffusion(nn.Module):
         self.input_converter = nn.Linear(input_vec_dim, prenet_channels)
         self.code_converter = Encoder(
                     dim=prenet_channels,
-                    depth=3,
+                    depth=prenet_layers,
                     heads=prenet_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
@@ -120,7 +123,7 @@ class TransformerDiffusion(nn.Module):
 
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,1,prenet_channels))
         self.rotary_embeddings = RotaryEmbedding(rotary_emb_dim)
-        self.cond_intg = nn.Linear(prenet_channels*2, block_channels)
+        self.cond_intg = nn.Linear(prenet_channels*2, model_channels)
         self.intg = nn.Linear(prenet_channels*2, model_channels)
         self.layers = TimestepRotaryEmbedSequential(*[DietAttentionBlock(model_channels, block_channels, block_channels // 64, dropout) for _ in range(num_layers)])
 
@@ -164,8 +167,10 @@ class TransformerDiffusion(nn.Module):
 
         unused_params = []
         if conditioning_free:
-            code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
-            unused_params.extend(list(self.code_converter.parameters()) + list(self.code_embedding.parameters()))
+            code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1)
+            cond_emb = self.conditioning_embedder(conditioning_input).permute(0,2,1)
+            cond_emb = self.conditioning_encoder(cond_emb)[:, 0]
+            unused_params.extend(list(self.code_converter.parameters()))
         else:
             if precomputed_code_embeddings is not None:
                 code_emb = precomputed_code_embeddings
@@ -195,18 +200,87 @@ class TransformerDiffusion(nn.Module):
         return out
 
 
+class TransformerDiffusionWithQuantizer(nn.Module):
+    def __init__(self, freeze_quantizer_until=20000, **kwargs):
+        super().__init__()
+
+        self.internal_step = 0
+        self.freeze_quantizer_until = freeze_quantizer_until
+        self.diff = TransformerDiffusion(**kwargs)
+        self.quantizer = MusicQuantizer2(inp_channels=256, inner_dim=[1024], codevector_dim=1024, codebook_size=256,
+                                        codebook_groups=2, max_gumbel_temperature=4, min_gumbel_temperature=.5)
+        self.quantizer.quantizer.temperature = self.quantizer.min_gumbel_temperature
+        del self.quantizer.up
+
+    def update_for_step(self, step, *args):
+        self.internal_step = step
+        qstep = max(0, self.internal_step - self.freeze_quantizer_until)
+        self.quantizer.quantizer.temperature = max(
+            self.quantizer.max_gumbel_temperature * self.quantizer.gumbel_temperature_decay ** qstep,
+                    self.quantizer.min_gumbel_temperature,
+                )
+
+    def forward(self, x, timesteps, truth_mel, conditioning_input, disable_diversity=False, conditioning_free=False):
+        quant_grad_enabled = self.internal_step > self.freeze_quantizer_until
+        with torch.set_grad_enabled(quant_grad_enabled):
+            proj, diversity_loss = self.quantizer(truth_mel, return_decoder_latent=True)
+            proj = proj.permute(0,2,1)
+
+        # Make sure this does not cause issues in DDP by explicitly using the parameters for nothing.
+        if not quant_grad_enabled:
+            unused = 0
+            for p in self.quantizer.parameters():
+                unused = unused + p.mean() * 0
+            proj = proj + unused
+            diversity_loss = diversity_loss * 0
+
+        diff = self.diff(x, timesteps, codes=proj, conditioning_input=conditioning_input, conditioning_free=conditioning_free)
+        if disable_diversity:
+            return diff
+        return diff, diversity_loss
+
+    def get_debug_values(self, step, __):
+        if self.quantizer.total_codes > 0:
+            return {'histogram_codes': self.quantizer.codes[:self.quantizer.total_codes]}
+        else:
+            return {}
+
+
 @register_model
-def register_transformer_diffusion6(opt_net, opt):
+def register_transformer_diffusion8(opt_net, opt):
     return TransformerDiffusion(**opt_net['kwargs'])
 
 
+@register_model
+def register_transformer_diffusion8_with_quantizer(opt_net, opt):
+    return TransformerDiffusionWithQuantizer(**opt_net['kwargs'])
+
+
+"""
+# For TFD5
 if __name__ == '__main__':
     clip = torch.randn(2, 256, 400)
     aligned_sequence = torch.randn(2,100,512)
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
-    model = TransformerDiffusion(model_channels=4096, block_channels=2048, prenet_channels=1024, num_layers=16)
+    model = TransformerDiffusion(model_channels=3072, block_channels=1536, prenet_channels=1536)
     torch.save(model, 'sample.pth')
     print_network(model)
     o = model(clip, ts, aligned_sequence, cond)
+"""
+
+if __name__ == '__main__':
+    clip = torch.randn(2, 256, 400)
+    cond = torch.randn(2, 256, 400)
+    ts = torch.LongTensor([600, 600])
+    model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024, input_vec_dim=1024, num_layers=16, prenet_layers=6)
+
+    #quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant\\models\\18000_generator_ema.pth')
+    #diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_tfd5\\models\\48000_generator_ema.pth')
+    #model.quantizer.load_state_dict(quant_weights, strict=False)
+    #model.diff.load_state_dict(diff_weights)
+
+    torch.save(model.state_dict(), 'sample.pth')
+    print_network(model)
+    o = model(clip, ts, clip, cond)
 

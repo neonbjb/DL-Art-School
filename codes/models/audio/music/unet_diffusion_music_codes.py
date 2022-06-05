@@ -530,12 +530,12 @@ class UNetMusicModel(nn.Module):
                         ch,
                         time_embed_dim,
                         dropout,
-                        out_channels=mult * model_channels,
+                        out_channels=int(mult * model_channels),
                         dims=dims,
                         use_scale_shift_norm=use_scale_shift_norm,
                     )
                 ]
-                ch = mult * model_channels
+                ch = int(mult * model_channels)
                 if ds in attention_resolutions:
                     layers.append(
                         AttentionBlock(
@@ -605,12 +605,12 @@ class UNetMusicModel(nn.Module):
                         ch + ich,
                         time_embed_dim,
                         dropout,
-                        out_channels=model_channels * mult,
+                        out_channels=int(model_channels * mult),
                         dims=dims,
                         use_scale_shift_norm=use_scale_shift_norm,
                     )
                 ]
-                ch = model_channels * mult
+                ch = int(model_channels * mult)
                 if ds in attention_resolutions:
                     layers.append(
                         AttentionBlock(
@@ -749,9 +749,9 @@ if __name__ == '__main__':
     clip = torch.randn(2, 256, 782)
     cond = torch.randn(2, 256, 782)
     ts = torch.LongTensor([600, 600])
-    model = UNetMusicModelWithQuantizer(in_channels=256, out_channels=512, model_channels=640, num_res_blocks=3, input_vec_dim=1024,
-                                        attention_resolutions=(2,4), channel_mult=(1,2,3), dims=1,
-                                        use_scale_shift_norm=True, dropout=.1, num_heads=8, unconditioned_percentage=.4)
+    model = UNetMusicModelWithQuantizer(in_channels=256, out_channels=512, model_channels=1024, num_res_blocks=3, input_vec_dim=1024,
+                                        attention_resolutions=(2,4), channel_mult=(1,1.5,2), dims=1,
+                                        use_scale_shift_norm=True, dropout=.1, num_heads=16, unconditioned_percentage=.4)
     print_network(model)
 
     quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant\\models\\18000_generator_ema.pth')
