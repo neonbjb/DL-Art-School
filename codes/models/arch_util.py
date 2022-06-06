@@ -458,10 +458,12 @@ class AttentionBlock(nn.Module):
         num_head_channels=-1,
         use_new_attention_order=False,
         do_checkpoint=True,
+        do_activation=False,
     ):
         super().__init__()
         self.channels = channels
         self.do_checkpoint = do_checkpoint
+        self.do_activation = do_activation
         if num_head_channels == -1:
             self.num_heads = num_heads
         else:
@@ -492,7 +494,10 @@ class AttentionBlock(nn.Module):
     def _forward(self, x, mask=None):
         b, c, *spatial = x.shape
         x = x.reshape(b, c, -1)
-        qkv = self.qkv(self.norm(x))
+        x = self.norm(x)
+        if self.do_activation:
+            x = F.silu(x, inplace=True)
+        qkv = self.qkv(x)
         h = self.attention(qkv, mask)
         h = self.proj_out(h)
         return (x + h).reshape(b, c, *spatial)

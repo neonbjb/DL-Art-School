@@ -658,7 +658,7 @@ class UNetMusicModel(nn.Module):
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
         if conditioning_free:
-            expanded_code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
+            expanded_code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1).permute(0,2,1)
             unused_params.extend(list(self.code_converter.parameters()) + list(self.input_converter.parameters()))
         else:
             code_emb = self.input_converter(y)
