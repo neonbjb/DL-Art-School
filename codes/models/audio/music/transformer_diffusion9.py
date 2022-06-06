@@ -299,7 +299,7 @@ def register_transformer_diffusion9(opt_net, opt):
 
 
 @register_model
-def register_transformer_diffusion8_with_quantizer(opt_net, opt):
+def register_transformer_diffusion9_with_quantizer(opt_net, opt):
     return TransformerDiffusionWithQuantizer(**opt_net['kwargs'])
 
 
