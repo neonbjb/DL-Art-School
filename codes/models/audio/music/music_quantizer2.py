@@ -11,13 +11,25 @@ from utils.util import checkpoint, ceil_multiple, print_network
 
 
 class Downsample(nn.Module):
-    def __init__(self, chan_in, chan_out):
+    def __init__(self, chan_in, chan_out, norm=False, act=False, stride_down=False):
         super().__init__()
-        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size=3, padding=1)
+        self.interpolate = not stride_down
+        if stride_down:
+            self.conv = nn.Conv1d(chan_in, chan_out, kernel_size=3, padding=1, stride=2)
+        else:
+            self.conv = nn.Conv1d(chan_in, chan_out, kernel_size=3, padding=1)
+        if norm:
+            self.norm = nn.GroupNorm(8, chan_out)
+        self.act = act
 
     def forward(self, x):
-        x = F.interpolate(x, scale_factor=.5, mode='linear')
+        if self.interpolate:
+            x = F.interpolate(x, scale_factor=.5, mode='linear')
         x = self.conv(x)
+        if hasattr(self, 'norm'):
+            x = self.norm(x)
+        if self.act:
+            x = F.silu(x, inplace=True)
         return x
 
 
@@ -153,7 +165,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 class MusicQuantizer2(nn.Module):
     def __init__(self, inp_channels=256, inner_dim=1024, codevector_dim=1024, down_steps=2,
                  max_gumbel_temperature=2.0, min_gumbel_temperature=.5, gumbel_temperature_decay=.999995,
-                 codebook_size=16, codebook_groups=4):
+                 codebook_size=16, codebook_groups=4,
+                 # Downsample args:
+                 expressive_downsamples=False):
         super().__init__()
         if not isinstance(inner_dim, list):
             inner_dim = [inner_dim // 2 ** x for x in range(down_steps+1)]
@@ -172,7 +186,8 @@ class MusicQuantizer2(nn.Module):
             self.up = nn.Conv1d(inner_dim[0], inp_channels, kernel_size=3, padding=1)
         elif down_steps == 2:
             self.down = nn.Sequential(nn.Conv1d(inp_channels, inner_dim[-1], kernel_size=3, padding=1),
-                                      *[Downsample(inner_dim[-i], inner_dim[-i-1]) for i in range(1,len(inner_dim))])
+                                      *[Downsample(inner_dim[-i], inner_dim[-i-1], norm=expressive_downsamples, act=expressive_downsamples,
+                                                   stride_down=expressive_downsamples) for i in range(1,len(inner_dim))])
             self.up = nn.Sequential(*[Upsample(inner_dim[i], inner_dim[i+1]) for i in range(len(inner_dim)-1)] +
                                     [nn.Conv1d(inner_dim[-1], inp_channels, kernel_size=3, padding=1)])
 
@@ -190,14 +205,11 @@ class MusicQuantizer2(nn.Module):
         self.code_ind = 0
         self.total_codes = 0
 
-    def get_codes(self, mel, project=False):
-        proj = self.m2v.input_blocks(mel).permute(0,2,1)
-        _, proj = self.m2v.projector(proj)
-        if project:
-            proj, _ = self.quantizer(proj)
-            return proj
-        else:
-            return self.quantizer.get_codes(proj)
+    def get_codes(self, mel):
+        h = self.down(mel)
+        h = self.encoder(h)
+        h = self.enc_norm(h.permute(0,2,1))
+        return self.quantizer.get_codes(h)
 
     def forward(self, mel, return_decoder_latent=False):
         orig_mel = mel

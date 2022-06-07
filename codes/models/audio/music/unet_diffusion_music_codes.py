@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import torchvision  # For debugging, not actually used.
 from x_transformers.x_transformers import RelativePositionBias
 
+from models.audio.music.gpt_music import GptMusicLower
 from models.audio.music.music_quantizer import MusicQuantizer
 from models.diffusion.fp16_util import convert_module_to_f16, convert_module_to_f32
 from models.diffusion.nn import (
@@ -451,6 +452,7 @@ class UNetMusicModel(nn.Module):
         attention_resolutions,
         dropout=0,
         channel_mult=(1, 2, 4, 8),
+        ar_prior=False,
         conv_resample=True,
         dims=2,
         num_classes=None,
@@ -483,6 +485,7 @@ class UNetMusicModel(nn.Module):
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
         self.unconditioned_percentage = unconditioned_percentage
+        self.ar_prior = ar_prior
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -491,8 +494,9 @@ class UNetMusicModel(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        self.input_converter = nn.Linear(input_vec_dim, model_channels)
-        self.code_converter = Encoder(
+        if self.ar_prior:
+            self.ar_input = nn.Linear(input_vec_dim, model_channels)
+            self.ar_prior_intg = Encoder(
                     dim=model_channels,
                     depth=4,
                     heads=num_heads,
@@ -504,6 +508,20 @@ class UNetMusicModel(nn.Module):
                     zero_init_branch_output=True,
                     ff_mult=1,
                 )
+        else:
+            self.input_converter = nn.Linear(input_vec_dim, model_channels)
+            self.code_converter = Encoder(
+                        dim=model_channels,
+                        depth=4,
+                        heads=num_heads,
+                        ff_dropout=dropout,
+                        attn_dropout=dropout,
+                        use_rmsnorm=True,
+                        ff_glu=True,
+                        rotary_pos_emb=True,
+                        zero_init_branch_output=True,
+                        ff_mult=1,
+                    )
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,1,model_channels))
         self.x_processor = conv_nd(dims, in_channels, model_channels, 3, padding=1)
 
@@ -659,15 +677,18 @@ class UNetMusicModel(nn.Module):
 
         if conditioning_free:
             expanded_code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1).permute(0,2,1)
-            unused_params.extend(list(self.code_converter.parameters()) + list(self.input_converter.parameters()))
+            if self.ar_prior:
+                unused_params.extend(list(self.ar_input.parameters()) + list(self.ar_prior_intg.parameters()))
+            else:
+                unused_params.extend(list(self.input_converter.parameters()) + list(self.code_converter.parameters()))
         else:
-            code_emb = self.input_converter(y)
+            code_emb = self.ar_input(y) if self.ar_prior else self.input_converter(y)
             if self.training and self.unconditioned_percentage > 0:
                 unconditioned_batches = torch.rand((code_emb.shape[0], 1, 1),
                                                    device=code_emb.device) < self.unconditioned_percentage
                 code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(y.shape[0], 1, 1),
                                        code_emb)
-            code_emb = self.code_converter(code_emb)
+            code_emb = self.ar_prior_intg(code_emb) if self.ar_prior else self.code_converter(code_emb)
             expanded_code_emb = F.interpolate(code_emb.permute(0,2,1), size=x.shape[-1], mode='nearest')
 
         h = x.type(self.dtype)
@@ -740,23 +761,60 @@ class UNetMusicModelWithQuantizer(nn.Module):
             return {}
 
 
+class UNetMusicModelARPrior(nn.Module):
+    def __init__(self, freeze_unet=False, **kwargs):
+        super().__init__()
+
+        self.internal_step = 0
+        self.ar = GptMusicLower(dim=512, layers=12)
+        for p in self.ar.parameters():
+            p.DO_NOT_TRAIN = True
+            p.requires_grad = False
+
+        self.diff = UNetMusicModel(ar_prior=True, **kwargs)
+        if freeze_unet:
+            for p in self.diff.parameters():
+                p.DO_NOT_TRAIN = True
+                p.requires_grad = False
+            for p in list(self.diff.ar_prior_intg.parameters()) + list(self.diff.ar_input.parameters()):
+                del p.DO_NOT_TRAIN
+                p.requires_grad = True
+
+    def forward(self, x, timesteps, truth_mel, disable_diversity=False, conditioning_input=None, conditioning_free=False):
+        with torch.no_grad():
+            prior = self.ar(truth_mel, conditioning_input, return_latent=True)
+
+        diff = self.diff(x, timesteps, prior, conditioning_free=conditioning_free)
+        return diff
+
+
 @register_model
 def register_unet_diffusion_music_codes(opt_net, opt):
     return UNetMusicModelWithQuantizer(**opt_net['args'])
 
+@register_model
+def register_unet_diffusion_music_ar_prior(opt_net, opt):
+    return UNetMusicModelARPrior(**opt_net['args'])
+
 
 if __name__ == '__main__':
-    clip = torch.randn(2, 256, 782)
-    cond = torch.randn(2, 256, 782)
+    clip = torch.randn(2, 256, 300)
+    cond = torch.randn(2, 256, 300)
     ts = torch.LongTensor([600, 600])
-    model = UNetMusicModelWithQuantizer(in_channels=256, out_channels=512, model_channels=1024, num_res_blocks=3, input_vec_dim=1024,
-                                        attention_resolutions=(2,4), channel_mult=(1,1.5,2), dims=1,
-                                        use_scale_shift_norm=True, dropout=.1, num_heads=16, unconditioned_percentage=.4)
+    model = UNetMusicModelARPrior(in_channels=256, out_channels=512, model_channels=640, num_res_blocks=3, input_vec_dim=512,
+                                  attention_resolutions=(2,4), channel_mult=(1,2,3), dims=1,
+                                  use_scale_shift_norm=True, dropout=.1, num_heads=8, unconditioned_percentage=.4, freeze_unet=True)
     print_network(model)
 
-    quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant\\models\\18000_generator_ema.pth')
-    model.m2v.load_state_dict(quant_weights, strict=False)
+    ar_weights = torch.load('D:\\dlas\\experiments\\train_music_gpt\\models\\44500_generator_ema.pth')
+    model.ar.load_state_dict(ar_weights, strict=True)
+    diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_unet_music\\models\\55500_generator_ema.pth')
+    pruned_diff_weights = {}
+    for k,v in diff_weights.items():
+        if k.startswith('diff.'):
+            pruned_diff_weights[k.replace('diff.', '')] = v
+    model.diff.load_state_dict(pruned_diff_weights, strict=False)
     torch.save(model.state_dict(), 'sample.pth')
 
-    model(clip, ts, cond)
+    model(clip, ts, cond, cond)
 

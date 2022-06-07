@@ -201,13 +201,13 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd5_quant\\train_music_diffusion_tfd5_quant.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd_quant7.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd5_quant\\models\\40500_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_unet_music\\models\\46500_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval', 'diffusion_steps': 100,
                 'conditioning_free': True, 'conditioning_free_k': 1,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes_quant'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 560, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 561, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())

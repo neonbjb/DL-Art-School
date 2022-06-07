@@ -6,6 +6,7 @@ from transformers import GPT2Config, GPT2Model
 from models.arch_util import AttentionBlock
 from models.audio.music.music_quantizer import MusicQuantizer
 from models.audio.music.music_quantizer2 import MusicQuantizer2
+from models.lucidrains.x_transformers import Encoder
 from trainer.networks import register_model
 from utils.util import opt_get
 
@@ -31,34 +32,55 @@ class ConditioningEncoder(nn.Module):
 
 
 class GptMusicLower(nn.Module):
-    def __init__(self, dim, layers, num_target_vectors=512, num_target_groups=2, cv_dim=1024, num_upper_vectors=64, num_upper_groups=4):
+    def __init__(self, dim, layers, dropout=0, num_target_vectors=512, num_target_groups=2, num_upper_vectors=64, num_upper_groups=4):
         super().__init__()
+        self.internal_step = 0
         self.num_groups = num_target_groups
         self.config = GPT2Config(vocab_size=1, n_positions=8192, n_embd=dim, n_layer=layers, n_head=dim//64,
-                                 n_inner=dim*2)
-        self.target_quantizer = MusicQuantizer(inp_channels=256, inner_dim=[1024,1024,512], codevector_dim=cv_dim, codebook_size=num_target_vectors, codebook_groups=num_target_groups)
-        self.upper_quantizer = MusicQuantizer2(inp_channels=256, inner_dim=[1024,896,768,640,512,384], codevector_dim=cv_dim, codebook_size=num_upper_vectors, codebook_groups=num_upper_groups)
+                                 n_inner=dim*2, attn_pdrop=dropout, resid_pdrop=dropout, gradient_checkpointing=True, use_cache=False)
+        self.target_quantizer = MusicQuantizer2(inp_channels=256, inner_dim=[1024], codevector_dim=1024, codebook_size=256,
+                                                codebook_groups=2, max_gumbel_temperature=4, min_gumbel_temperature=.5)
+        self.upper_quantizer = MusicQuantizer2(inp_channels=256, inner_dim=[dim,
+                                                                            max(512,dim-128),
+                                                                            max(512,dim-256),
+                                                                            max(512,dim-384),
+                                                                            max(512,dim-512),
+                                                                            max(512,dim-512)], codevector_dim=dim,
+                                               codebook_size=num_upper_vectors, codebook_groups=num_upper_groups, expressive_downsamples=True)
         # Following are unused quantizer constructs we delete to avoid DDP errors (and to be efficient.. of course..)
         del self.target_quantizer.decoder
         del self.target_quantizer.up
         del self.upper_quantizer.up
+        # Freeze the target quantizer.
+        for p in self.target_quantizer.parameters():
+            p.DO_NOT_TRAIN = True
+            p.requires_grad = False
 
+        self.upper_mixer = Encoder(
+                    dim=dim,
+                    depth=4,
+                    heads=dim//64,
+                    ff_dropout=dropout,
+                    attn_dropout=dropout,
+                    use_rmsnorm=True,
+                    ff_glu=True,
+                    rotary_emb_dim=True,
+                )
         self.conditioning_encoder = ConditioningEncoder(256, dim, attn_blocks=4, num_attn_heads=dim//64)
 
         self.gpt = GPT2Model(self.config)
         del self.gpt.wte  # Unused, we'll do our own embeddings.
 
         self.embeddings = nn.ModuleList([nn.Embedding(num_target_vectors, dim // num_target_groups) for _ in range(num_target_groups)])
-        self.upper_proj = nn.Conv1d(cv_dim, dim, kernel_size=1)
         self.heads = nn.ModuleList([nn.Linear(dim, num_target_vectors) for _ in range(num_target_groups)])
 
 
-    def forward(self, mel, conditioning):
+    def forward(self, mel, conditioning, return_latent=False):
         with torch.no_grad():
             self.target_quantizer.eval()
             codes = self.target_quantizer.get_codes(mel)
         upper_vector, upper_diversity = self.upper_quantizer(mel, return_decoder_latent=True)
-        upper_vector = self.upper_proj(upper_vector)
+        upper_vector = self.upper_mixer(upper_vector.permute(0,2,1)).permute(0,2,1)  # Allow the upper vector to fully attend to itself (the whole thing is a prior.)
         upper_vector = F.interpolate(upper_vector, size=codes.shape[1], mode='linear')
         upper_vector = upper_vector.permute(0,2,1)
 
@@ -68,21 +90,49 @@ class GptMusicLower(nn.Module):
         h = [embedding(inputs[:, :, i]) for i, embedding in enumerate(self.embeddings)]
         h = torch.cat(h, dim=-1) + upper_vector
 
-        # Stick the conditioning embedding on the front of the input sequence.
-        # The transformer will learn how to integrate it.
-        # This statement also serves to pre-pad the inputs by one token, which is the basis of the next-token-prediction task. IOW: this is the "START" token.
-        cond_emb = self.conditioning_encoder(conditioning).unsqueeze(1)
-        h = torch.cat([cond_emb, h], dim=1)
+        with torch.autocast(mel.device.type):
+            # Stick the conditioning embedding on the front of the input sequence.
+            # The transformer will learn how to integrate it.
+            # This statement also serves to pre-pad the inputs by one token, which is the basis of the next-token-prediction task. IOW: this is the "START" token.
+            cond_emb = self.conditioning_encoder(conditioning).unsqueeze(1)
+            h = torch.cat([cond_emb, h], dim=1)
 
-        h = self.gpt(inputs_embeds=h, return_dict=True).last_hidden_state
+            h = self.gpt(inputs_embeds=h, return_dict=True).last_hidden_state
 
-        losses = 0
-        for i, head in enumerate(self.heads):
-            logits = head(h).permute(0,2,1)
-            loss = F.cross_entropy(logits, targets[:,:,i])
-            losses = losses + loss
+            if return_latent:
+                return h.float()
 
-        return losses / self.num_groups
+            losses = 0
+            for i, head in enumerate(self.heads):
+                logits = head(h).permute(0,2,1)
+                loss = F.cross_entropy(logits, targets[:,:,i])
+                losses = losses + loss
+
+        return losses / self.num_groups, upper_diversity
+
+    def get_grad_norm_parameter_groups(self):
+        groups = {
+            'gpt': list(self.gpt.parameters()),
+            'conditioning': list(self.conditioning_encoder.parameters()),
+            'upper_mixer': list(self.upper_mixer.parameters()),
+            'upper_quant_down': list(self.upper_quantizer.down.parameters()),
+            'upper_quant_encoder': list(self.upper_quantizer.encoder.parameters()),
+            'upper_quant_codebook': [self.upper_quantizer.quantizer.codevectors],
+        }
+        return groups
+
+    def get_debug_values(self, step, __):
+        if self.upper_quantizer.total_codes > 0:
+            return {'histogram_upper_codes': self.upper_quantizer.codes[:self.upper_quantizer.total_codes]}
+        else:
+            return {}
+
+    def update_for_step(self, step, *args):
+        self.internal_step = step
+        self.upper_quantizer.quantizer.temperature = max(
+                    self.upper_quantizer.max_gumbel_temperature * self.upper_quantizer.gumbel_temperature_decay**self.internal_step,
+                    self.upper_quantizer.min_gumbel_temperature,
+                )
 
 
 @register_model
@@ -91,6 +141,15 @@ def register_music_gpt_lower(opt_net, opt):
 
 
 if __name__ == '__main__':
+    from models.audio.music.transformer_diffusion8 import TransformerDiffusionWithQuantizer
+    base_diff = TransformerDiffusionWithQuantizer(in_channels=256, out_channels=512, model_channels=2048, block_channels=1024,
+                                                  prenet_channels=1024, prenet_layers=6, num_layers=16, input_vec_dim=1024,
+                                                  dropout=.1, unconditioned_percentage=0, freeze_quantizer_until=6000)
+    base_diff.load_state_dict(torch.load('x:/dlas/experiments/train_music_diffusion_tfd8/models/28000_generator.pth', map_location=torch.device('cpu')))
+
     model = GptMusicLower(512, 12)
+    model.target_quantizer.load_state_dict(base_diff.quantizer.state_dict(), strict=False)
+    torch.save(model.state_dict(), "sample.pth")
     mel = torch.randn(2,256,400)
     model(mel, mel)
+    model.get_grad_norm_parameter_groups()
