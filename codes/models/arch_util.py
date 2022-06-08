@@ -369,7 +369,7 @@ class ResBlock(nn.Module):
     def __init__(
         self,
         channels,
-        dropout,
+        dropout=0,
         out_channels=None,
         use_conv=False,
         dims=2,

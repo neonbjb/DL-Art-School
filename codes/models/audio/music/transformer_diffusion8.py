@@ -73,6 +73,7 @@ class TransformerDiffusion(nn.Module):
             out_channels=512,  # mean and variance
             dropout=0,
             use_fp16=False,
+            ar_prior=False,
             # Parameters for regularization.
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
     ):
@@ -95,8 +96,10 @@ class TransformerDiffusion(nn.Module):
         )
         prenet_heads = prenet_channels//64
 
-        self.input_converter = nn.Linear(input_vec_dim, prenet_channels)
-        self.code_converter = Encoder(
+        self.ar_prior = ar_prior
+        if ar_prior:
+            self.ar_input = nn.Linear(input_vec_dim, prenet_channels)
+            self.ar_prior_intg = Encoder(
                     dim=prenet_channels,
                     depth=prenet_layers,
                     heads=prenet_heads,
@@ -108,6 +111,20 @@ class TransformerDiffusion(nn.Module):
                     zero_init_branch_output=True,
                     ff_mult=1,
                 )
+        else:
+            self.input_converter = nn.Linear(input_vec_dim, prenet_channels)
+            self.code_converter = Encoder(
+                        dim=prenet_channels,
+                        depth=prenet_layers,
+                        heads=prenet_heads,
+                        ff_dropout=dropout,
+                        attn_dropout=dropout,
+                        use_rmsnorm=True,
+                        ff_glu=True,
+                        rotary_pos_emb=True,
+                        zero_init_branch_output=True,
+                        ff_mult=1,
+                    )
 
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,1,prenet_channels))
         self.rotary_embeddings = RotaryEmbedding(rotary_emb_dim)
@@ -130,16 +147,16 @@ class TransformerDiffusion(nn.Module):
         }
         return groups
 
-    def timestep_independent(self, codes, expected_seq_len):
-        code_emb = self.input_converter(codes)
+    def timestep_independent(self, prior, expected_seq_len):
+        code_emb = self.ar_input(prior) if self.ar_prior else self.input_converter(prior)
 
         # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
         if self.training and self.unconditioned_percentage > 0:
             unconditioned_batches = torch.rand((code_emb.shape[0], 1, 1),
                                                device=code_emb.device) < self.unconditioned_percentage
-            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(codes.shape[0], 1, 1),
+            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(prior.shape[0], 1, 1),
                                    code_emb)
-        code_emb = self.code_converter(code_emb)
+        code_emb = self.ar_prior_intg(code_emb) if self.ar_prior else self.code_converter(code_emb)
 
         expanded_code_emb = F.interpolate(code_emb.permute(0,2,1), size=expected_seq_len, mode='nearest').permute(0,2,1)
         return expanded_code_emb
@@ -151,7 +168,6 @@ class TransformerDiffusion(nn.Module):
         unused_params = []
         if conditioning_free:
             code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1)
-            unused_params.extend(list(self.code_converter.parameters()))
         else:
             if precomputed_code_embeddings is not None:
                 code_emb = precomputed_code_embeddings
@@ -240,6 +256,47 @@ class TransformerDiffusionWithQuantizer(nn.Module):
         return groups
 
 
+class TransformerDiffusionWithARPrior(nn.Module):
+    def __init__(self, freeze_diff=False, **kwargs):
+        super().__init__()
+
+        self.internal_step = 0
+        from models.audio.music.gpt_music import GptMusicLower
+        self.ar = GptMusicLower(dim=512, layers=12)
+        for p in self.ar.parameters():
+            p.DO_NOT_TRAIN = True
+            p.requires_grad = False
+
+        self.diff = TransformerDiffusion(ar_prior=True, **kwargs)
+        if freeze_diff:
+            for p in self.diff.parameters():
+                p.DO_NOT_TRAIN = True
+                p.requires_grad = False
+            for p in list(self.diff.ar_prior_intg.parameters()) + list(self.diff.ar_input.parameters()):
+                del p.DO_NOT_TRAIN
+                p.requires_grad = True
+
+    def get_grad_norm_parameter_groups(self):
+        groups = {
+            'attention_layers': list(itertools.chain.from_iterable([lyr.attn.parameters() for lyr in self.diff.layers])),
+            'ff_layers': list(itertools.chain.from_iterable([lyr.ff.parameters() for lyr in self.diff.layers])),
+            'rotary_embeddings': list(self.diff.rotary_embeddings.parameters()),
+            'out': list(self.diff.out.parameters()),
+            'x_proj': list(self.diff.inp_block.parameters()),
+            'layers': list(self.diff.layers.parameters()),
+            'ar_prior_intg': list(self.diff.ar_prior_intg.parameters()),
+            'time_embed': list(self.diff.time_embed.parameters()),
+        }
+        return groups
+
+    def forward(self, x, timesteps, truth_mel, disable_diversity=False, conditioning_input=None, conditioning_free=False):
+        with torch.no_grad():
+            prior = self.ar(truth_mel, conditioning_input, return_latent=True)
+
+        diff = self.diff(x, timesteps, prior, conditioning_free=conditioning_free)
+        return diff
+
+
 @register_model
 def register_transformer_diffusion8(opt_net, opt):
     return TransformerDiffusion(**opt_net['kwargs'])
@@ -250,24 +307,17 @@ def register_transformer_diffusion8_with_quantizer(opt_net, opt):
     return TransformerDiffusionWithQuantizer(**opt_net['kwargs'])
 
 
-"""
-# For TFD5
-if __name__ == '__main__':
-    clip = torch.randn(2, 256, 400)
-    aligned_sequence = torch.randn(2,100,512)
-    cond = torch.randn(2, 256, 400)
-    ts = torch.LongTensor([600, 600])
-    model = TransformerDiffusion(model_channels=3072, block_channels=1536, prenet_channels=1536)
-    torch.save(model, 'sample.pth')
-    print_network(model)
-    o = model(clip, ts, aligned_sequence, cond)
-"""
+@register_model
+def register_transformer_diffusion8_with_ar_prior(opt_net, opt):
+    return TransformerDiffusionWithARPrior(**opt_net['kwargs'])
 
-if __name__ == '__main__':
+
+def test_quant_model():
     clip = torch.randn(2, 256, 400)
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
-    model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024, input_vec_dim=1024, num_layers=16, prenet_layers=6)
+    model = TransformerDiffusionWithQuantizer(model_channels=2048, block_channels=1024, prenet_channels=1024,
+                                              input_vec_dim=1024, num_layers=16, prenet_layers=6)
     model.get_grad_norm_parameter_groups()
 
     quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant_r4\\models\\5000_generator.pth')
@@ -279,3 +329,28 @@ if __name__ == '__main__':
     print_network(model)
     o = model(clip, ts, clip, cond)
 
+
+def test_ar_model():
+    clip = torch.randn(2, 256, 400)
+    cond = torch.randn(2, 256, 400)
+    ts = torch.LongTensor([600, 600])
+    model = TransformerDiffusionWithARPrior(model_channels=2048, block_channels=1024, prenet_channels=1024,
+                                              input_vec_dim=512, num_layers=16, prenet_layers=6, freeze_diff=True)
+    model.get_grad_norm_parameter_groups()
+
+    ar_weights = torch.load('D:\\dlas\\experiments\\train_music_gpt\\models\\44500_generator_ema.pth')
+    model.ar.load_state_dict(ar_weights, strict=True)
+    diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_tfd8\\models\\47500_generator_ema.pth')
+    pruned_diff_weights = {}
+    for k,v in diff_weights.items():
+        if k.startswith('diff.'):
+            pruned_diff_weights[k.replace('diff.', '')] = v
+    model.diff.load_state_dict(pruned_diff_weights, strict=False)
+    torch.save(model.state_dict(), 'sample.pth')
+
+    model(clip, ts, cond, conditioning_input=cond)
+
+
+
+if __name__ == '__main__':
+    test_ar_model()

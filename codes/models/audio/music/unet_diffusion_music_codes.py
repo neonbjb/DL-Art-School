@@ -780,6 +780,15 @@ class UNetMusicModelARPrior(nn.Module):
                 del p.DO_NOT_TRAIN
                 p.requires_grad = True
 
+    def get_grad_norm_parameter_groups(self):
+        groups = {
+            'input_blocks': list(self.diff.input_blocks.parameters()),
+            'output_blocks': list(self.diff.output_blocks.parameters()),
+            'ar_prior_intg': list(self.diff.ar_prior_intg.parameters()),
+            'time_embed': list(self.diff.time_embed.parameters()),
+        }
+        return groups
+
     def forward(self, x, timesteps, truth_mel, disable_diversity=False, conditioning_input=None, conditioning_free=False):
         with torch.no_grad():
             prior = self.ar(truth_mel, conditioning_input, return_latent=True)
@@ -805,6 +814,7 @@ if __name__ == '__main__':
                                   attention_resolutions=(2,4), channel_mult=(1,2,3), dims=1,
                                   use_scale_shift_norm=True, dropout=.1, num_heads=8, unconditioned_percentage=.4, freeze_unet=True)
     print_network(model)
+    model.get_grad_norm_parameter_groups()
 
     ar_weights = torch.load('D:\\dlas\\experiments\\train_music_gpt\\models\\44500_generator_ema.pth')
     model.ar.load_state_dict(ar_weights, strict=True)
