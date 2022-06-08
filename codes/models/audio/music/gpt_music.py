@@ -27,7 +27,7 @@ class ConditioningEncoder(nn.Module):
 
     def forward(self, x):
         h = checkpoint(self.init, x)
-        h = self.attn(h
+        h = self.attn(h)
         return h.mean(dim=2)
 
 
