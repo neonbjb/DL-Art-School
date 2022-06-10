@@ -71,6 +71,7 @@ class TransformerDiffusion(nn.Module):
             rotary_emb_dim=32,
             input_vec_dim=512,
             out_channels=512,  # mean and variance
+            num_heads=16,
             dropout=0,
             use_fp16=False,
             ar_prior=False,
@@ -94,7 +95,6 @@ class TransformerDiffusion(nn.Module):
             nn.SiLU(),
             linear(prenet_channels, model_channels),
         )
-        prenet_heads = prenet_channels//64
 
         self.ar_prior = ar_prior
         if ar_prior:
@@ -102,7 +102,7 @@ class TransformerDiffusion(nn.Module):
             self.ar_prior_intg = Encoder(
                     dim=prenet_channels,
                     depth=prenet_layers,
-                    heads=prenet_heads,
+                    heads=num_heads,
                     ff_dropout=dropout,
                     attn_dropout=dropout,
                     use_rmsnorm=True,
@@ -116,7 +116,7 @@ class TransformerDiffusion(nn.Module):
             self.code_converter = Encoder(
                         dim=prenet_channels,
                         depth=prenet_layers,
-                        heads=prenet_heads,
+                        heads=num_heads,
                         ff_dropout=dropout,
                         attn_dropout=dropout,
                         use_rmsnorm=True,
@@ -129,7 +129,7 @@ class TransformerDiffusion(nn.Module):
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,1,prenet_channels))
         self.rotary_embeddings = RotaryEmbedding(rotary_emb_dim)
         self.intg = nn.Linear(prenet_channels*2, model_channels)
-        self.layers = TimestepRotaryEmbedSequential(*[DietAttentionBlock(model_channels, block_channels, block_channels // 64, dropout) for _ in range(num_layers)])
+        self.layers = TimestepRotaryEmbedSequential(*[DietAttentionBlock(model_channels, block_channels, num_heads, dropout) for _ in range(num_layers)])
 
         self.out = nn.Sequential(
             normalization(model_channels),
@@ -196,19 +196,17 @@ class TransformerDiffusion(nn.Module):
 
 
 class TransformerDiffusionWithQuantizer(nn.Module):
-    def __init__(self, freeze_quantizer_until=20000, quantizer_dims=[1024], no_reconstruction=True, **kwargs):
+    def __init__(self, quantizer_dims=[1024], freeze_quantizer_until=20000, **kwargs):
         super().__init__()
 
         self.internal_step = 0
         self.freeze_quantizer_until = freeze_quantizer_until
         self.diff = TransformerDiffusion(**kwargs)
         self.quantizer = MusicQuantizer2(inp_channels=kwargs['in_channels'], inner_dim=quantizer_dims,
-                                         codevector_dim=quantizer_dims[0], checkpoint=False,
-                                         codebook_size=256, codebook_groups=2,
-                                         max_gumbel_temperature=4, min_gumbel_temperature=.5)
+                                         codevector_dim=quantizer_dims[0], codebook_size=256,
+                                         codebook_groups=2, max_gumbel_temperature=4, min_gumbel_temperature=.5)
         self.quantizer.quantizer.temperature = self.quantizer.min_gumbel_temperature
-        if no_reconstruction:
-            del self.quantizer.up
+        del self.quantizer.up
 
     def update_for_step(self, step, *args):
         self.internal_step = step
@@ -219,30 +217,27 @@ class TransformerDiffusionWithQuantizer(nn.Module):
                 )
 
     def forward(self, x, timesteps, truth_mel, conditioning_input=None, disable_diversity=False, conditioning_free=False):
-        mse, diversity_loss, proj = self.quantizer(truth_mel, return_decoder_latent=True)
-        proj = proj.permute(0,2,1)
-
         quant_grad_enabled = self.internal_step > self.freeze_quantizer_until
+        with torch.set_grad_enabled(quant_grad_enabled):
+            proj, diversity_loss = self.quantizer(truth_mel, return_decoder_latent=True)
+            proj = proj.permute(0,2,1)
+
+        # Make sure this does not cause issues in DDP by explicitly using the parameters for nothing.
         if not quant_grad_enabled:
-            proj = proj.detach()
-            # Make sure this does not cause issues in DDP by explicitly using the parameters for nothing.
             unused = 0
             for p in self.quantizer.parameters():
                 unused = unused + p.mean() * 0
             proj = proj + unused
+            diversity_loss = diversity_loss * 0
 
-        diff = self.diff(x, timesteps, codes=proj, conditioning_input=conditioning_input,
-                         conditioning_free=conditioning_free)
-
+        diff = self.diff(x, timesteps, codes=proj, conditioning_input=conditioning_input, conditioning_free=conditioning_free)
         if disable_diversity:
             return diff
-        if mse is None:
-            return diff, diversity_loss
-        return diff, diversity_loss, mse
+        return diff, diversity_loss
 
     def get_debug_values(self, step, __):
         if self.quantizer.total_codes > 0:
-            return {'histogram_quant_codes': self.quantizer.codes[:self.quantizer.total_codes],
+            return {'histogram_codes': self.quantizer.codes[:self.quantizer.total_codes],
                     'gumbel_temperature': self.quantizer.quantizer.temperature}
         else:
             return {}
@@ -320,26 +315,24 @@ def register_transformer_diffusion8_with_ar_prior(opt_net, opt):
 
 
 def test_quant_model():
-    clip = torch.randn(2, 100, 401)
+    clip = torch.randn(2, 256, 400)
+    cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
-    model = TransformerDiffusionWithQuantizer(in_channels=100, out_channels=200, quantizer_dims=[1024,768,512,384],
-                                              model_channels=2048, block_channels=1024, prenet_channels=1024,
-                                              input_vec_dim=1024, num_layers=16, prenet_layers=6,
-                                              no_reconstruction=False)
-    #model.get_grad_norm_parameter_groups()
+    model = TransformerDiffusionWithQuantizer(in_channels=256, model_channels=2048, block_channels=1024,
+                                              prenet_channels=1024, num_heads=8,
+                                              input_vec_dim=1024, num_layers=16, prenet_layers=6)
+    model.get_grad_norm_parameter_groups()
 
-    #quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant_r4\\models\\5000_generator.pth')
-    #diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_tfd5\\models\\48000_generator_ema.pth')
-    #model.quantizer.load_state_dict(quant_weights, strict=False)
-    #model.diff.load_state_dict(diff_weights)
+    quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant_r4\\models\\5000_generator.pth')
+    model.quantizer.load_state_dict(quant_weights, strict=False)
 
-    #torch.save(model.state_dict(), 'sample.pth')
+    torch.save(model.state_dict(), 'sample.pth')
     print_network(model)
-    o = model(clip, ts, clip)
+    o = model(clip, ts, clip, cond)
 
 
 def test_ar_model():
-    clip = torch.randn(2, 256, 401)
+    clip = torch.randn(2, 256, 400)
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
     model = TransformerDiffusionWithARPrior(model_channels=2048, block_channels=1024, prenet_channels=1024,
