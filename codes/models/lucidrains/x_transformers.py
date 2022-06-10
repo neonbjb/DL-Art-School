@@ -509,9 +509,10 @@ class Attention(nn.Module):
             rel_pos_bias=False,
             rel_pos_num_buckets=32,
             rel_pos_max_distance=128,
+            mup_scale=False
     ):
         super().__init__()
-        self.scale = dim_head ** -0.5
+        self.scale = 8/dim_head if mup_scale else dim_head ** -0.5
 
         self.heads = heads
         self.causal = causal

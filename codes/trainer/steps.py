@@ -127,6 +127,16 @@ class ConfigurableStep(Module):
                                        weight_decay=opt_get(opt_config, ['weight_decay'], 1e-2),
                                        betas=(opt_get(opt_config, ['beta1'], .9), opt_get(opt_config, ['beta2'], .999)))
                 opt._group_names = [params_names_weights, params_names_notweights]
+            elif self.step_opt['optimizer'] == 'mu_adamw':
+                groups = [
+                    { 'params': params_weights, 'weight_decay': opt_get(opt_config, ['weight_decay'], 0) },
+                    { 'params': params_notweights, 'weight_decay': 0 }
+                ]
+                from mup.optim import MuAdamW
+                opt = MuAdamW(groups, lr=opt_config['lr'],
+                             weight_decay=opt_get(opt_config, ['weight_decay'], 1e-2),
+                             betas=(opt_get(opt_config, ['beta1'], .9), opt_get(opt_config, ['beta2'], .999)))
+                opt._group_names = [params_names_weights, params_names_notweights]
             elif self.step_opt['optimizer'] == 'adamw_zero':
                 # The torch ZeRO implementation does not seem to support parameter groups, so do not shard the non-weighted
                 # parameters and just use a normal AdamW implementation. In a large network, these weights will normally
