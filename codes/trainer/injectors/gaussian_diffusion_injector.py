@@ -4,7 +4,7 @@ import torch
 from torch.cuda.amp import autocast
 
 from models.diffusion.gaussian_diffusion import get_named_beta_schedule
-from models.diffusion.resample import create_named_schedule_sampler, LossAwareSampler, DeterministicSampler
+from models.diffusion.resample import create_named_schedule_sampler, LossAwareSampler, DeterministicSampler, LossSecondMomentResampler
 from models.diffusion.respace import space_timesteps, SpacedDiffusion
 from trainer.inject import Injector
 from utils.util import opt_get
