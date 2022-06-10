@@ -208,6 +208,8 @@ if __name__ == '__main__':
     for b in tqdm(dl):
         for b_ in range(b['clip'].shape[0]):
             #pass
-            #torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
-            #torchaudio.save(f'{i}_alt_clip_{b_}.wav', b['alt_clips'][b_], ds.sampling_rate)
+            torchaudio.save(f'{i}_clip_{b_}.wav', b['clip'][b_], ds.sampling_rate)
+            torchaudio.save(f'{i}_alt_clip_{b_}.wav', b['alt_clips'][b_], ds.sampling_rate)
             i += 1
+        if i > 200:
+            break
