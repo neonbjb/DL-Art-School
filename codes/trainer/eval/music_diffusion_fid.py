@@ -1,3 +1,4 @@
+import functools
 import os
 import os.path as osp
 from glob import glob
@@ -62,6 +63,10 @@ class MusicDiffusionFid(evaluator.Evaluator):
             self.local_modules['codegen'] = get_music_codegen()
         elif 'from_codes_quant' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes_quant
+        elif 'partial_from_codes_quant' == mode:
+            self.diffusion_fn = functools.partial(self.perform_partial_diffusion_from_codes_quant,
+                                                  partial_low=opt_eval['partial_low'],
+                                                  partial_high=opt_eval['partial_high'])
         elif 'from_codes_quant_gradual_decode' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes_quant_gradual_decode
         self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000,
@@ -122,6 +127,32 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    x = x.clamp(-s, s) / s
         #    return x
         gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, #denoised_fn=denoising_fn, clip_denoised=False,
+                                              model_kwargs={'truth_mel': mel,
+                                                            'conditioning_input': torch.zeros_like(mel_norm[:,:,:390]),
+                                                            'disable_diversity': True})
+
+        gen_mel_denorm = denormalize_mel(gen_mel)
+        output_shape = (1,16,audio.shape[-1]//16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'aligned_conditioning': gen_mel_denorm})
+        gen_wav = pixel_shuffle_1d(gen_wav, 16)
+
+        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
+
+    def perform_partial_diffusion_from_codes_quant(self, audio, sample_rate=22050, partial_low=0, partial_high=256):
+        if sample_rate != sample_rate:
+            real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
+        else:
+            real_resampled = audio
+        audio = audio.unsqueeze(0)
+
+        mel = self.spec_fn({'in': audio})['out']
+        mel_norm = normalize_mel(mel)
+        mask = torch.ones_like(mel_norm)
+        mask[:, partial_low:partial_high] = 0  # This is the channel region that the model will predict.
+        gen_mel = self.diffuser.p_sample_loop_with_guidance(self.model,
+                                              guidance_input=mel_norm, mask=mask,
                                               model_kwargs={'truth_mel': mel,
                                                             'conditioning_input': torch.zeros_like(mel_norm[:,:,:390]),
                                                             'disable_diversity': True})
@@ -243,7 +274,8 @@ if __name__ == '__main__':
                 'path': 'E:\\music_eval',
                 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes_quant'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 502, 'device': 'cuda', 'opt': {}}
+                'diffusion_schedule': 'linear', 'diffusion_type': 'partial_from_codes_quant',
+                'partial_low': 128, 'partial_high': 192}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 504, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())

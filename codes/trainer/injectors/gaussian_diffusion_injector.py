@@ -1,16 +1,13 @@
 import functools
-import random
-import time
 
 import torch
 from torch.cuda.amp import autocast
 
-from models.diffusion.gaussian_diffusion import GaussianDiffusion, get_named_beta_schedule
+from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.resample import create_named_schedule_sampler, LossAwareSampler, DeterministicSampler
 from models.diffusion.respace import space_timesteps, SpacedDiffusion
 from trainer.inject import Injector
 from utils.util import opt_get
-
 
 
 def masked_channel_balancer(inp, proportion=1):
@@ -21,6 +18,12 @@ def masked_channel_balancer(inp, proportion=1):
         dist = (dist * dist_mult).clamp(0, 1)
         mask = torch.bernoulli(dist)
     return inp * mask.view(1,inp.shape[1],1)
+
+
+def channel_restriction(inp, low, high):
+    m = torch.zeros_like(inp)
+    m[:,low:high] = 1
+    return inp * m
 
 
 # Injects a gaussian diffusion loss as described by OpenAIs "Improved Denoising Diffusion Probabilistic Models" paper.
@@ -40,14 +43,17 @@ class GaussianDiffusionInjector(Injector):
         self.extra_model_output_keys = opt_get(opt, ['extra_model_output_keys'], [])
         self.deterministic_timesteps_every = opt_get(opt, ['deterministic_timesteps_every'], 0)
         self.deterministic_sampler = DeterministicSampler(self.diffusion, opt_get(opt, ['deterministic_sampler_expected_batch_size'], 2048), env)
-        self.channel_balancing_fn = functools.partial(masked_channel_balancer, proportion=opt['channel_balancer_proportion']) \
-            if 'channel_balancer_proportion' in opt.keys() else None
-        self.recent_loss = 0
 
-    def extra_metrics(self):
-        return {
-            'exp_diffusion_loss': torch.exp(self.recent_loss.mean()),
-        }
+        k = 0
+        if 'channel_balancer_proportion' in opt.keys():
+            self.channel_balancing_fn = functools.partial(masked_channel_balancer, proportion=opt['channel_balancer_proportion'])
+            k += 1
+        if 'channel_restriction_low' in opt.keys():
+            self.channel_balancing_fn = functools.partial(channel_restriction, low=opt['channel_restriction_low'], high=opt['channel_restriction_high'])
+            k += 1
+        if not hasattr(self, 'channel_balancing_fn'):
+            self.channel_balancing_fn = None
+        assert k <= 1, 'Only one channel filtering function can be applied.'
 
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
@@ -73,8 +79,6 @@ class GaussianDiffusionInjector(Injector):
             out.update({self.output: diffusion_outputs['mse'],
                     self.output_variational_bounds_key: diffusion_outputs['vb'],
                     self.output_x_start_key: diffusion_outputs['x_start_predicted']})
-
-            self.recent_loss = diffusion_outputs['mse']
 
         return out
 
