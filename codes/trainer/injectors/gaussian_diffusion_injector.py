@@ -59,7 +59,7 @@ class GaussianDiffusionInjector(Injector):
     def extra_metrics(self):
         if hasattr(self, 'schedule_sampler') and isinstance(self.schedule_sampler, LossSecondMomentResampler):
             return {
-                'sampler_warmed_up': torch.tensor(self.schedule_sampler._warmed_up()).float()
+                'sampler_warmed_up': torch.tensor(float(self.schedule_sampler._warmed_up()))
             }
         return {}
 
