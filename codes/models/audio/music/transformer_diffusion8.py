@@ -234,6 +234,8 @@ class TransformerDiffusionWithQuantizer(nn.Module):
         diff = self.diff(x, timesteps, codes=proj, conditioning_input=conditioning_input,
                          conditioning_free=conditioning_free)
 
+        if disable_diversity:
+            return diff
         if mse is None:
             return diff, diversity_loss
         return diff, diversity_loss, mse
