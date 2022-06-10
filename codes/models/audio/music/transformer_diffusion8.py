@@ -203,7 +203,7 @@ class TransformerDiffusionWithQuantizer(nn.Module):
         self.freeze_quantizer_until = freeze_quantizer_until
         self.diff = TransformerDiffusion(**kwargs)
         self.quantizer = MusicQuantizer2(inp_channels=kwargs['in_channels'], inner_dim=quantizer_dims,
-                                         codevector_dim=quantizer_dims[0],
+                                         codevector_dim=quantizer_dims[0], checkpoint=False,
                                          codebook_size=256, codebook_groups=2,
                                          max_gumbel_temperature=4, min_gumbel_temperature=.5)
         self.quantizer.quantizer.temperature = self.quantizer.min_gumbel_temperature
@@ -219,14 +219,13 @@ class TransformerDiffusionWithQuantizer(nn.Module):
                 )
 
     def forward(self, x, timesteps, truth_mel, conditioning_input=None, disable_diversity=False, conditioning_free=False):
-        quant_grad_enabled = self.internal_step > self.freeze_quantizer_until
-
         mse, diversity_loss, proj = self.quantizer(truth_mel, return_decoder_latent=True)
         proj = proj.permute(0,2,1)
 
-        # Make sure this does not cause issues in DDP by explicitly using the parameters for nothing.
+        quant_grad_enabled = self.internal_step > self.freeze_quantizer_until
         if not quant_grad_enabled:
             proj = proj.detach()
+            # Make sure this does not cause issues in DDP by explicitly using the parameters for nothing.
             unused = 0
             for p in self.quantizer.parameters():
                 unused = unused + p.mean() * 0
