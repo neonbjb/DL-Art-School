@@ -56,6 +56,13 @@ class GaussianDiffusionInjector(Injector):
             self.channel_balancing_fn = None
         assert k <= 1, 'Only one channel filtering function can be applied.'
 
+    def extra_metrics(self):
+        if hasattr(self, 'schedule_sampler') and isinstance(self.schedule_sampler, LossSecondMomentResampler):
+            return {
+                'sampler_warmed_up': self.schedule_sampler._warmed_up()
+            }
+        return {}
+
     def forward(self, state):
         gen = self.env['generators'][self.opt['generator']]
         hq = state[self.input]
