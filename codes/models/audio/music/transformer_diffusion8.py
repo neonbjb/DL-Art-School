@@ -236,7 +236,8 @@ class TransformerDiffusionWithQuantizer(nn.Module):
 
     def get_debug_values(self, step, __):
         if self.quantizer.total_codes > 0:
-            return {'histogram_codes': self.quantizer.codes[:self.quantizer.total_codes]}
+            return {'histogram_codes': self.quantizer.codes[:self.quantizer.total_codes],
+                    'gumbel_temperature': self.quantizer.quantizer.temperature}
         else:
             return {}
 

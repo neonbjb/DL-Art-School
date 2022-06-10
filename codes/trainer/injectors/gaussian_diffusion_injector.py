@@ -71,7 +71,7 @@ class GaussianDiffusionInjector(Injector):
             t, weights = sampler.sample(hq.shape[0], hq.device)
             diffusion_outputs = self.diffusion.training_losses(gen, hq, t, model_kwargs=model_inputs, channel_balancing_fn=self.channel_balancing_fn)
             if isinstance(sampler, LossAwareSampler):
-                sampler.update_with_local_losses(t, diffusion_outputs['losses'])
+                sampler.update_with_local_losses(t, diffusion_outputs['loss'])
             if len(self.extra_model_output_keys) > 0:
                 assert(len(self.extra_model_output_keys) == len(diffusion_outputs['extra_outputs']))
                 out = {k: v for k, v in zip(self.extra_model_output_keys, diffusion_outputs['extra_outputs'])}
