@@ -224,14 +224,18 @@ class MusicQuantizer2(nn.Module):
         diversity = (self.quantizer.num_codevectors - perplexity) / self.quantizer.num_codevectors
         self.log_codes(codes)
         h = self.decoder(codevectors.permute(0,2,1))
-        if return_decoder_latent:
-            return h, diversity
+
+        if not hasattr(self, 'up') and return_decoder_latent:
+            return None, diversity, h
 
         reconstructed = self.up(h.float())
         reconstructed = reconstructed[:, :, :orig_mel.shape[-1]]
 
         mse = F.mse_loss(reconstructed, orig_mel)
-        return mse, diversity
+        if return_decoder_latent:
+            return mse, diversity, h
+        else:
+            return mse, diversity
 
     def log_codes(self, codes):
         if self.internal_step % 5 == 0:
