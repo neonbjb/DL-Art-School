@@ -45,7 +45,7 @@ class Upsample(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, chan, checkpoint=True):
+    def __init__(self, chan):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv1d(chan, chan, 3, padding = 1),
@@ -56,13 +56,9 @@ class ResBlock(nn.Module):
             nn.SiLU(),
             zero_module(nn.Conv1d(chan, chan, 3, padding = 1)),
         )
-        self.checkpoint = checkpoint
 
     def forward(self, x):
-        if self.checkpoint:
-            return checkpoint(self._forward, x) + x
-        else:
-            return self._forward(x) + x
+        return checkpoint(self._forward, x) + x
 
     def _forward(self, x):
         return self.net(x)
@@ -169,7 +165,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 class MusicQuantizer2(nn.Module):
     def __init__(self, inp_channels=256, inner_dim=1024, codevector_dim=1024, down_steps=2,
                  max_gumbel_temperature=2.0, min_gumbel_temperature=.5, gumbel_temperature_decay=.999995,
-                 codebook_size=16, codebook_groups=4, checkpoint=True,
+                 codebook_size=16, codebook_groups=4,
                  # Downsample args:
                  expressive_downsamples=False):
         super().__init__()
@@ -195,14 +191,14 @@ class MusicQuantizer2(nn.Module):
             self.up = nn.Sequential(*[Upsample(inner_dim[i], inner_dim[i+1]) for i in range(len(inner_dim)-1)] +
                                     [nn.Conv1d(inner_dim[-1], inp_channels, kernel_size=3, padding=1)])
 
-        self.encoder = nn.Sequential(ResBlock(inner_dim[0], checkpoint=checkpoint),
-                                     ResBlock(inner_dim[0], checkpoint=checkpoint),
-                                     ResBlock(inner_dim[0], checkpoint=checkpoint))
+        self.encoder = nn.Sequential(ResBlock(inner_dim[0]),
+                                     ResBlock(inner_dim[0]),
+                                     ResBlock(inner_dim[0]))
         self.enc_norm = nn.LayerNorm(inner_dim[0], eps=1e-5)
         self.decoder = nn.Sequential(nn.Conv1d(codevector_dim, inner_dim[0], kernel_size=3, padding=1),
-                                     ResBlock(inner_dim[0], checkpoint=checkpoint),
-                                     ResBlock(inner_dim[0], checkpoint=checkpoint),
-                                     ResBlock(inner_dim[0], checkpoint=checkpoint))
+                                     ResBlock(inner_dim[0]),
+                                     ResBlock(inner_dim[0]),
+                                     ResBlock(inner_dim[0]))
 
         self.codes = torch.zeros((3000000,), dtype=torch.long)
         self.internal_step = 0
@@ -228,18 +224,14 @@ class MusicQuantizer2(nn.Module):
         diversity = (self.quantizer.num_codevectors - perplexity) / self.quantizer.num_codevectors
         self.log_codes(codes)
         h = self.decoder(codevectors.permute(0,2,1))
-
-        if not hasattr(self, 'up') and return_decoder_latent:
-            return None, diversity, h
+        if return_decoder_latent:
+            return h, diversity
 
         reconstructed = self.up(h.float())
         reconstructed = reconstructed[:, :, :orig_mel.shape[-1]]
 
         mse = F.mse_loss(reconstructed, orig_mel)
-        if return_decoder_latent:
-            return mse, diversity, h
-        else:
-            return mse, diversity
+        return mse, diversity
 
     def log_codes(self, codes):
         if self.internal_step % 5 == 0:
