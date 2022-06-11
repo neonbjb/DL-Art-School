@@ -220,15 +220,17 @@ class TransformerDiffusion(nn.Module):
 
 
 class TransformerDiffusionWithQuantizer(nn.Module):
-    def __init__(self, quantizer_dims=[1024], freeze_quantizer_until=20000, **kwargs):
+    def __init__(self, quantizer_dims=[1024], quantizer_codebook_size=256, quantizer_codebook_groups=2,
+                 freeze_quantizer_until=20000, **kwargs):
         super().__init__()
 
         self.internal_step = 0
         self.freeze_quantizer_until = freeze_quantizer_until
         self.diff = TransformerDiffusion(**kwargs)
         self.quantizer = MusicQuantizer2(inp_channels=kwargs['in_channels'], inner_dim=quantizer_dims,
-                                         codevector_dim=quantizer_dims[0], codebook_size=256,
-                                         codebook_groups=2, max_gumbel_temperature=4, min_gumbel_temperature=.5)
+                                         codevector_dim=quantizer_dims[0], codebook_size=quantizer_codebook_size,
+                                         codebook_groups=quantizer_codebook_groups, max_gumbel_temperature=4,
+                                         min_gumbel_temperature=.5)
         self.quantizer.quantizer.temperature = self.quantizer.min_gumbel_temperature
         del self.quantizer.up
 
@@ -277,7 +279,7 @@ class TransformerDiffusionWithQuantizer(nn.Module):
         groups = {
             'blk1_attention_layers': attn1,
             'blk2_attention_layers': attn2,
-            'blk2_attention_layers': attn3,
+            'blk3_attention_layers': attn3,
             'attention_layers': attn1 + attn2 + attn3,
             'blk1_ff_layers': ff1,
             'blk2_ff_layers': ff2,
@@ -356,15 +358,30 @@ def test_quant_model():
     clip = torch.randn(2, 256, 400)
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
+
+    """
+    # For music:
     model = TransformerDiffusionWithQuantizer(in_channels=256, model_channels=1024,
                                               prenet_channels=1024, num_heads=4,
                                               input_vec_dim=1024, num_layers=20, prenet_layers=6,
                                               dropout=.1)
-
     quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant_r4\\models\\5000_generator.pth')
     model.quantizer.load_state_dict(quant_weights, strict=False)
-
     torch.save(model.state_dict(), 'sample.pth')
+    """
+
+    # For TTS:
+    model = TransformerDiffusionWithQuantizer(in_channels=256, model_channels=1024,
+                                              prenet_channels=1024, num_heads=4,
+                                              input_vec_dim=1024, num_layers=12, prenet_layers=10,
+                                              quantizer_dims=[1024,768,512], quantizer_codebook_size=64,
+                                              quantizer_codebook_groups=4,
+                                              dropout=.1)
+    quant_weights = torch.load('X:\\dlas\\experiments\\train_tts_quant_64\\models\\15500_generator.pth')
+    model.quantizer.load_state_dict(quant_weights, strict=False)
+    torch.save(model.state_dict(), 'sample.pth')
+
+
     print_network(model)
     o = model(clip, ts, clip, cond)
     model.get_grad_norm_parameter_groups()
