@@ -44,15 +44,21 @@ class DietAttentionBlock(TimestepBlock):
     def __init__(self, in_dim, dim, heads, dropout):
         super().__init__()
         self.proj = nn.Linear(in_dim, dim, bias=False)
-        self.rms_scale_norm = RMSScaleShiftNorm(dim, bias=False)
+        self.prenorm = nn.LayerNorm(dim)
         self.attn = Attention(dim, heads=heads, dim_head=dim//heads, causal=False, dropout=dropout)
-        self.ff = FeedForward(dim, in_dim, mult=2, dropout=dropout, zero_init_output=True)
+        self.attnorm = RMSScaleShiftNorm(dim, bias=False)
+        self.ff1 = FeedForward(dim, mult=2, dropout=dropout)
+        self.midnorm = RMSScaleShiftNorm(dim, bias=False)
+        self.ff2 = FeedForward(dim, in_dim, mult=1, dropout=dropout, zero_init_output=True)
 
     def forward(self, x, timestep_emb, rotary_emb):
         h = self.proj(x)
-        h = self.rms_scale_norm(h, norm_scale_shift_inp=timestep_emb)
-        h, _, _, _ = checkpoint(self.attn, h, None, None, None, None, None, rotary_emb)
-        h = checkpoint(self.ff, h)
+        h = self.prenorm(h)
+        ah, _, _, _ = checkpoint(self.attn, h, None, None, None, None, None, rotary_emb)
+        h = F.gelu(self.attnorm(h, norm_scale_shift_inp=timestep_emb))
+        h = checkpoint(self.ff1, ah + h) + h
+        h = F.gelu(self.midnorm(h, norm_scale_shift_inp=timestep_emb))
+        h = checkpoint(self.ff2, h)
         return h + x
 
 
@@ -247,7 +253,7 @@ class TransformerDiffusionWithQuantizer(nn.Module):
     def get_grad_norm_parameter_groups(self):
         groups = {
             'attention_layers': list(itertools.chain.from_iterable([lyr.attn.parameters() for lyr in self.diff.layers])),
-            'ff_layers': list(itertools.chain.from_iterable([lyr.ff.parameters() for lyr in self.diff.layers])),
+            'ff_layers': list(itertools.chain.from_iterable([lyr.ff1.parameters() for lyr in self.diff.layers])) + list(itertools.chain.from_iterable([lyr.ff2.parameters() for lyr in self.diff.layers])),
             'quantizer_encoder': list(self.quantizer.encoder.parameters()),
             'quant_codebook': [self.quantizer.quantizer.codevectors],
             'rotary_embeddings': list(self.diff.rotary_embeddings.parameters()),
@@ -322,7 +328,8 @@ def test_quant_model():
     ts = torch.LongTensor([600, 600])
     model = TransformerDiffusionWithQuantizer(in_channels=256, model_channels=2048, block_channels=1024,
                                               prenet_channels=1024, num_heads=8,
-                                              input_vec_dim=1024, num_layers=20, prenet_layers=6)
+                                              input_vec_dim=1024, num_layers=20, prenet_layers=6,
+                                              dropout=.1)
     model.get_grad_norm_parameter_groups()
 
     quant_weights = torch.load('D:\\dlas\\experiments\\train_music_quant_r4\\models\\5000_generator.pth')
@@ -338,7 +345,7 @@ def test_ar_model():
     cond = torch.randn(2, 256, 400)
     ts = torch.LongTensor([600, 600])
     model = TransformerDiffusionWithARPrior(model_channels=2048, block_channels=1024, prenet_channels=1536,
-                                            input_vec_dim=512, num_layers=24, prenet_layers=6, freeze_diff=True,
+                                            input_vec_dim=512, num_layers=16, prenet_layers=6, freeze_diff=True,
                                             unconditioned_percentage=.4)
     model.get_grad_norm_parameter_groups()
 
