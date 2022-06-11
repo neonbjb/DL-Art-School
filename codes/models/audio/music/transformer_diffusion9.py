@@ -57,7 +57,7 @@ class DietAttentionBlock(TimestepBlock):
         h = torch.cat([ah, h], dim=-1)
         h = F.gelu(self.attnorm(h))
         h = checkpoint(self.ff, h)
-        return h * self.exit_mult
+        return h * self.exit_mult + x
 
 
 class TransformerDiffusion(nn.Module):
