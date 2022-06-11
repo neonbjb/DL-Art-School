@@ -4,11 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.arch_util import ResBlock
 from models.audio.music.music_quantizer2 import MusicQuantizer2
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import TimestepBlock
-from models.lucidrains.x_transformers import Encoder, Attention, FeedForward, RMSScaleShiftNorm, RotaryEmbedding
+from models.lucidrains.x_transformers import Encoder, Attention, RMSScaleShiftNorm, RotaryEmbedding, \
+    FeedForward
 from trainer.networks import register_model
 from utils.util import checkpoint, print_network
 
@@ -44,22 +44,20 @@ class DietAttentionBlock(TimestepBlock):
     def __init__(self, in_dim, dim, heads, dropout):
         super().__init__()
         self.proj = nn.Linear(in_dim, dim, bias=False)
-        self.prenorm = nn.LayerNorm(dim)
+        self.prenorm = RMSScaleShiftNorm(dim, bias=False)
         self.attn = Attention(dim, heads=heads, dim_head=dim//heads, causal=False, dropout=dropout)
-        self.attnorm = RMSScaleShiftNorm(dim, bias=False)
-        self.ff1 = FeedForward(dim, mult=2, dropout=dropout)
-        self.midnorm = RMSScaleShiftNorm(dim, bias=False)
-        self.ff2 = FeedForward(dim, in_dim, mult=1, dropout=dropout, zero_init_output=True)
+        self.attnorm = nn.LayerNorm(dim*2)
+        self.ff = FeedForward(dim*2, in_dim, mult=1, dropout=dropout)
+        self.exit_mult = nn.Parameter(torch.zeros(1,1,in_dim))
 
     def forward(self, x, timestep_emb, rotary_emb):
         h = self.proj(x)
-        h = self.prenorm(h)
+        h = self.prenorm(h, norm_scale_shift_inp=timestep_emb)
         ah, _, _, _ = checkpoint(self.attn, h, None, None, None, None, None, rotary_emb)
-        h = F.gelu(self.attnorm(h, norm_scale_shift_inp=timestep_emb))
-        h = checkpoint(self.ff1, ah + h) + h
-        h = F.gelu(self.midnorm(h, norm_scale_shift_inp=timestep_emb))
-        h = checkpoint(self.ff2, h)
-        return h + x
+        h = torch.cat([ah, h], dim=-1)
+        h = F.gelu(self.attnorm(h))
+        h = checkpoint(self.ff, h)
+        return h * self.exit_mult
 
 
 class TransformerDiffusion(nn.Module):
@@ -253,7 +251,7 @@ class TransformerDiffusionWithQuantizer(nn.Module):
     def get_grad_norm_parameter_groups(self):
         groups = {
             'attention_layers': list(itertools.chain.from_iterable([lyr.attn.parameters() for lyr in self.diff.layers])),
-            'ff_layers': list(itertools.chain.from_iterable([lyr.ff1.parameters() for lyr in self.diff.layers])) + list(itertools.chain.from_iterable([lyr.ff2.parameters() for lyr in self.diff.layers])),
+            'ff_layers': list(itertools.chain.from_iterable([lyr.ff.parameters() for lyr in self.diff.layers])),
             'quantizer_encoder': list(self.quantizer.encoder.parameters()),
             'quant_codebook': [self.quantizer.quantizer.codevectors],
             'rotary_embeddings': list(self.diff.rotary_embeddings.parameters()),
@@ -290,6 +288,7 @@ class TransformerDiffusionWithARPrior(nn.Module):
         groups = {
             'attention_layers': list(itertools.chain.from_iterable([lyr.attn.parameters() for lyr in self.diff.layers])),
             'ff_layers': list(itertools.chain.from_iterable([lyr.ff.parameters() for lyr in self.diff.layers])),
+            'exit_mults': list([lyr.ff.exit_mult for lyr in self.diff.layers]),
             'rotary_embeddings': list(self.diff.rotary_embeddings.parameters()),
             'out': list(self.diff.out.parameters()),
             'x_proj': list(self.diff.inp_block.parameters()),
