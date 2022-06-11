@@ -489,6 +489,7 @@ class Attention(nn.Module):
     def __init__(
             self,
             dim,
+            out_dim=None,
             dim_head=DEFAULT_DIM_HEAD,
             heads=8,
             causal=False,
@@ -571,7 +572,8 @@ class Attention(nn.Module):
 
         # attention on attention
         self.attn_on_attn = on_attn
-        self.to_out = nn.Sequential(nn.Linear(v_dim, dim * 2), nn.GLU()) if on_attn else nn.Linear(v_dim, dim)
+        out_dim = default(out_dim, dim)
+        self.to_out = nn.Sequential(nn.Linear(v_dim, out_dim * 2), nn.GLU()) if on_attn else nn.Linear(v_dim, out_dim)
 
         self.rel_pos_bias = rel_pos_bias
         if rel_pos_bias:

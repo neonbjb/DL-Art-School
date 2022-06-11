@@ -287,7 +287,6 @@ class TransformerDiffusionWithARPrior(nn.Module):
         groups = {
             'attention_layers': list(itertools.chain.from_iterable([lyr.attn.parameters() for lyr in self.diff.layers])),
             'ff_layers': list(itertools.chain.from_iterable([lyr.ff.parameters() for lyr in self.diff.layers])),
-            'exit_mults': list([lyr.ff.exit_mult for lyr in self.diff.layers]),
             'rotary_embeddings': list(self.diff.rotary_embeddings.parameters()),
             'out': list(self.diff.out.parameters()),
             'x_proj': list(self.diff.inp_block.parameters()),
