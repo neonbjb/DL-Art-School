@@ -48,6 +48,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
         self.diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [diffusion_steps]), model_mean_type='epsilon',
                            model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule(diffusion_schedule, 4000),
                            conditioning_free=conditioning_free_diffusion_enabled, conditioning_free_k=conditioning_free_k)
+        self.spectral_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [100]), model_mean_type='epsilon',
+                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                           conditioning_free=False, conditioning_free_k=1)
         self.dev = self.env['device']
         mode = opt_get(opt_eval, ['diffusion_type'], 'tts')
 
@@ -106,7 +109,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
+        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
                                               model_kwargs={'aligned_conditioning': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
@@ -127,14 +130,14 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    x = x.clamp(-s, s) / s
         #    return x
         gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, #denoised_fn=denoising_fn, clip_denoised=False,
-                                              model_kwargs={'truth_mel': mel,
-                                                            'conditioning_input': torch.zeros_like(mel_norm[:,:,:390]),
+                                              model_kwargs={'truth_mel': mel_norm,
+                                                            'conditioning_input': None,
                                                             'disable_diversity': True})
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
+        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
                                               model_kwargs={'aligned_conditioning': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
@@ -160,7 +163,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
+        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
                                               model_kwargs={'aligned_conditioning': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
@@ -236,7 +239,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
             for i in tqdm(list(range(0, len(self.data), self.skip))):
                 path = self.data[(i + self.env['rank']) % len(self.data)]
                 audio = load_audio(path, 22050).to(self.dev)
-                audio = audio[:, :22050*10]
+                audio = audio[:, :100000]
                 sample, ref, sample_mel, ref_mel, sample_rate = self.diffusion_fn(audio)
 
                 gen_projections.append(self.project(sample, sample_rate).cpu())  # Store on CPU to avoid wasting GPU memory.
@@ -266,16 +269,17 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_ar_prior.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd_quant.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_ar_prior\\models\\22000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd11\\models\\24000_generator_ema.pth'
                                        ).cuda()
-    opt_eval = {#'path': 'Y:\\split\\yt-music-eval',
-                'path': 'E:\\music_eval',
-                'diffusion_steps': 100,
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
+                #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
+                'diffusion_steps': 200,
                 'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'partial_from_codes_quant',
-                'partial_low': 128, 'partial_high': 192}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 504, 'device': 'cuda', 'opt': {}}
+                'diffusion_schedule': 'cosine', 'diffusion_type': 'from_codes_quant',
+                #'partial_low': 128, 'partial_high': 192
+    }
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 600, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())

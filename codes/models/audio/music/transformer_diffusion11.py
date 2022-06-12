@@ -355,8 +355,7 @@ def register_transformer_diffusion11_with_ar_prior(opt_net, opt):
 
 
 def test_quant_model():
-    clip = torch.randn(2, 256, 400)
-    cond = torch.randn(2, 256, 400)
+    clip = torch.randn(2, 100, 400)
     ts = torch.LongTensor([600, 600])
 
     """
@@ -371,19 +370,19 @@ def test_quant_model():
     """
 
     # For TTS:
-    model = TransformerDiffusionWithQuantizer(in_channels=256, model_channels=1024,
+    model = TransformerDiffusionWithQuantizer(in_channels=100, out_channels=200, model_channels=1024,
                                               prenet_channels=1024, num_heads=4,
                                               input_vec_dim=1024, num_layers=12, prenet_layers=10,
                                               quantizer_dims=[1024,768,512], quantizer_codebook_size=64,
                                               quantizer_codebook_groups=4,
                                               dropout=.1)
-    quant_weights = torch.load('X:\\dlas\\experiments\\train_tts_quant_64\\models\\15500_generator.pth')
+    quant_weights = torch.load('X:\\dlas\\experiments\\train_tts_quant_128\\models\\4000_generator.pth')
     model.quantizer.load_state_dict(quant_weights, strict=False)
     torch.save(model.state_dict(), 'sample.pth')
 
 
     print_network(model)
-    o = model(clip, ts, clip, cond)
+    o = model(clip, ts, clip)
     model.get_grad_norm_parameter_groups()
 
 

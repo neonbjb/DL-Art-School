@@ -20,7 +20,7 @@ from models.clip.mel_text_clip import MelTextCLIP
 from models.audio.tts.tacotron2 import text_to_sequence
 from scripts.audio.gen.speech_synthesis_utils import load_discrete_vocoder_diffuser, wav_to_mel, load_speech_dvae, \
     convert_mel_to_codes, load_univnet_vocoder, wav_to_univnet_mel, load_clvp
-from trainer.injectors.audio_injectors import denormalize_mel, TorchMelSpectrogramInjector
+from trainer.injectors.audio_injectors import denormalize_mel, TorchMelSpectrogramInjector, normalize_mel
 from utils.util import ceil_multiple, opt_get, load_model_from_config, pad_or_truncate
 
 
@@ -214,12 +214,9 @@ class AudioDiffusionFid(evaluator.Evaluator):
                                                             'conditioning_input': None,
                                                             'disable_diversity': True})
 
-        # denormalize mel
-        gen_mel = denormalize_mel(gen_mel)
-
-        gen_wav = self.local_modules['vocoder'].inference(gen_mel)
-        real_dec = self.local_modules['vocoder'].inference(mel)
-        return gen_wav.float(), real_dec, SAMPLE_RATE
+        gen_wav = self.local_modules['vocoder'].inference(denormalize_mel(gen_mel))
+        real_dec = self.local_modules['vocoder'].inference(denormalize_mel(mel))
+        return gen_wav.float(), real_dec, gen_mel, mel, SAMPLE_RATE
 
     def load_projector(self):
         """
@@ -337,12 +334,12 @@ if __name__ == '__main__':
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_speech_diffusion_from_ctc_und10\\train.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_tts_diffusion_tfd11_quant\\train.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_speech_diffusion_from_ctc_und10\\models\\43000_generator_ema.pth').cuda()
+                                       load_path='X:\\dlas\\experiments\\train_tts_diffusion_tfd11_quant\\models\\14500_generator_ema.pth').cuda()
     opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-oco-realtext.tsv', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'tfd'}
+                'diffusion_schedule': 'cosine', 'diffusion_type': 'tfd'}
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 100, 'device': 'cuda', 'opt': {}}
     eval = AudioDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
