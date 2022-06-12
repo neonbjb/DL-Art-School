@@ -88,7 +88,9 @@ class AudioDiffusionFid(evaluator.Evaluator):
                 self.tts9_codegen = self.tts9_get_autoregressive_codes
             else:
                 self.tts9_codegen = self.tts9_get_dvae_codes
-
+        elif 'tfd' == mode:
+            self.diffusion_fn = self.perform_diffusion_tfd
+            self.local_modules['vocoder'] = load_univnet_vocoder().cpu()
 
     def perform_diffusion_tts(self, audio, codes, text, sample_rate=5500):
         real_resampled = torchaudio.functional.resample(audio, 22050, sample_rate).unsqueeze(0)
@@ -202,6 +204,22 @@ class AudioDiffusionFid(evaluator.Evaluator):
         gen_wav = self.local_modules['vocoder'].inference(gen_mel_denorm)
         real_dec = self.local_modules['vocoder'].inference(denormalize_mel(univnet_mel))
         return gen_wav.float(), real_dec, gen_mel, univnet_mel, SAMPLE_RATE
+
+    def perform_diffusion_tfd(self, audio, codes, text):
+        SAMPLE_RATE = 24000
+        audio_resampled = torchaudio.functional.resample(audio, 22050, SAMPLE_RATE).unsqueeze(0)
+        mel = wav_to_univnet_mel(audio_resampled, do_normalization=True)
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel.shape,
+                                              model_kwargs={'truth_mel': mel,
+                                                            'conditioning_input': None,
+                                                            'disable_diversity': True})
+
+        # denormalize mel
+        gen_mel = denormalize_mel(gen_mel)
+
+        gen_wav = self.local_modules['vocoder'].inference(gen_mel)
+        real_dec = self.local_modules['vocoder'].inference(mel)
+        return gen_wav.float(), real_dec, SAMPLE_RATE
 
     def load_projector(self):
         """
@@ -319,14 +337,12 @@ if __name__ == '__main__':
 
 
 if __name__ == '__main__':
-    # 34k; no conditioning_free: {'frechet_distance': tensor(1.4559, device='cuda:0', dtype=torch.float64), 'intelligibility_loss': tensor(151.9112, device='cuda:0')}
-    # 34k; conditioning_free:    {'frechet_distance': tensor(1.4059, device='cuda:0', dtype=torch.float64), 'intelligibility_loss': tensor(118.3377, device='cuda:0')}
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_speech_diffusion_from_ctc_und10\\train.yml', 'generator',
                                        also_load_savepoint=False,
                                        load_path='X:\\dlas\\experiments\\train_speech_diffusion_from_ctc_und10\\models\\43000_generator_ema.pth').cuda()
     opt_eval = {'eval_tsv': 'Y:\\libritts\\test-clean\\transcribed-oco-realtext.tsv', 'diffusion_steps': 100,
                 'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'ctc_to_mel'}
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 223, 'device': 'cuda', 'opt': {}}
+                'diffusion_schedule': 'linear', 'diffusion_type': 'tfd'}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval', 'step': 100, 'device': 'cuda', 'opt': {}}
     eval = AudioDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
