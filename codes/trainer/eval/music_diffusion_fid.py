@@ -131,7 +131,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    return x
         gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, #denoised_fn=denoising_fn, clip_denoised=False,
                                               model_kwargs={'truth_mel': mel_norm,
-                                                            'conditioning_input': None,
+                                                            'conditioning_input': mel_norm,
                                                             'disable_diversity': True})
 
         gen_mel_denorm = denormalize_mel(gen_mel)
