@@ -402,7 +402,7 @@ class ExtensibleTrainer(BaseModel):
                 net.module.after_step(it)
             if self.do_emas:
                 # When the EMA is on the CPU, only update every 10 steps to save processing time.
-                if self.ema_on_cpu and step % 5 != 0:
+                if self.ema_on_cpu and it % 10 != 0:
                     continue
                 ema_params = self.emas[name].parameters()
                 net_params = net.parameters()
