@@ -368,5 +368,16 @@ class NormalizeMelInjector(Injector):
             return {self.output: normalize_mel(mel)}
 
 
+class ChannelClipInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.lo = opt['channel_low']
+        self.hi = opt['channel_high']
+
+    def forward(self, state):
+        inp = state[self.input]
+        return {self.output: inp[:,self.lo:self.hi]}
+
+
 if __name__ == '__main__':
     print('hi')
