@@ -472,7 +472,7 @@ def test_vqvae_model():
                                               )
     quant_weights = torch.load('D:\\dlas\\experiments\\retrained_dvae_8192_clips.pth')
     model.quantizer.load_state_dict(quant_weights, strict=True)
-    #torch.save(model.state_dict(), 'sample.pth')
+    torch.save(model.state_dict(), 'sample.pth')
 
     print_network(model)
     o = model(clip, ts, cond)
