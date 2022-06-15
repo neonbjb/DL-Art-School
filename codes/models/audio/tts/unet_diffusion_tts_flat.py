@@ -1,4 +1,5 @@
 import random
+from time import time
 
 import torch
 import torch.nn as nn
@@ -320,9 +321,22 @@ if __name__ == '__main__':
     aligned_sequence = torch.randint(0,8192,(2,100))
     cond = torch.randn(2, 100, 400)
     ts = torch.LongTensor([600, 600])
-    model = DiffusionTtsFlat(512, layer_drop=.3, unconditioned_percentage=.5, freeze_everything_except_autoregressive_inputs=True)
+    model = DiffusionTtsFlat(model_channels=1024, num_layers=10, in_channels=100, out_channels=200,
+                                          in_latent_channels=1024, in_tokens=8193, dropout=0, use_fp16=True, num_heads=16,
+                                          layer_drop=0, unconditioned_percentage=0)
     # Test with latent aligned conditioning
     #o = model(clip, ts, aligned_latent, cond)
     # Test with sequence aligned conditioning
-    o = model(clip, ts, aligned_sequence, cond)
+    #o = model(clip, ts, aligned_sequence, cond)
+
+    with torch.no_grad():
+        proj = torch.randn(2, 100, 1024).cuda()
+        clip = clip.cuda()
+        ts = ts.cuda()
+        start = time()
+        model = model.cuda().eval()
+        ti = model.timestep_independent(proj, clip, clip.shape[2], False)
+        for k in range(100):
+            model(clip, ts, precomputed_aligned_embeddings=ti)
+        print(f"Elapsed: {time()-start}")
 

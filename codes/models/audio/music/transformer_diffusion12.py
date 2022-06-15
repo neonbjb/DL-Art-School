@@ -1,4 +1,5 @@
 import itertools
+from time import time
 
 import torch
 import torch.nn as nn
@@ -99,6 +100,8 @@ class TransformerDiffusion(nn.Module):
             ar_prior=False,
             # Parameters for regularization.
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
+            # Parameters for re-training head
+            freeze_except_code_converters=False,
     ):
         super().__init__()
 
@@ -160,6 +163,16 @@ class TransformerDiffusion(nn.Module):
             nn.SiLU(),
             zero_module(conv_nd(1, model_channels, out_channels, 3, padding=1)),
         )
+
+        if freeze_except_code_converters:
+            for p in self.parameters():
+                p.DO_NOT_TRAIN = True
+                p.requires_grad = False
+            for m in [self.input_converter and self.code_converter]:
+                for p in m.parameters():
+                    del p.DO_NOT_TRAIN
+                    p.requires_grad = True
+
 
         self.debug_codes = {}
 
@@ -391,7 +404,7 @@ class TransformerDiffusionWithPretrainedVqvae(nn.Module):
             'out': list(self.diff.out.parameters()),
             'x_proj': list(self.diff.inp_block.parameters()),
             'layers': list(self.diff.layers.parameters()),
-            'code_converters': list(self.diff.input_converter.parameters()) + list(self.diff.code_converter.parameters()),
+            #'code_converters': list(self.diff.input_converter.parameters()) + list(self.diff.code_converter.parameters()),
             'time_embed': list(self.diff.time_embed.parameters()),
         }
         return groups
@@ -534,7 +547,7 @@ def test_vqvae_model():
     model = TransformerDiffusionWithPretrainedVqvae(in_channels=100, out_channels=200,
                                                     model_channels=1024, contraction_dim=512,
                                               prenet_channels=1024, num_heads=8,
-                                              input_vec_dim=512, num_layers=12, prenet_layers=6,
+                                              input_vec_dim=512, num_layers=12, prenet_layers=6, ar_prior=True,
                                               dropout=.1, vqargs= {
                                                      'positional_dims': 1, 'channels': 80,
             'hidden_dim': 512, 'num_resnet_blocks': 3, 'codebook_dim': 512, 'num_tokens': 8192,
@@ -549,6 +562,20 @@ def test_vqvae_model():
     o = model(clip, ts, cond)
     pg = model.get_grad_norm_parameter_groups()
 
+    """
+    with torch.no_grad():
+        proj = torch.randn(2, 100, 512).cuda()
+        clip = clip.cuda()
+        ts = ts.cuda()
+        start = time()
+        model = model.cuda().eval()
+        model.diff.enable_fp16 = True
+        ti = model.diff.timestep_independent(proj, clip.shape[2])
+        for k in range(100):
+            model.diff(clip, ts, precomputed_code_embeddings=ti)
+        print(f"Elapsed: {time()-start}")
+        """
+
 
 def test_multi_vqvae_model():
     clip = torch.randn(2, 256, 400)
@@ -556,7 +583,7 @@ def test_multi_vqvae_model():
     ts = torch.LongTensor([600, 600])
 
     # For music:
-    model = TransformerDiffusionWithMultiPretrainedVqvae(in_channels=256, out_channels=200,
+    model = TransformerDiffusionWithMultiPretrainedVqvae(in_channels=256, out_channels=512,
                                                     model_channels=1024, contraction_dim=512,
                                               prenet_channels=1024, num_heads=8,
                                               input_vec_dim=2048, num_layers=12, prenet_layers=6,
@@ -604,4 +631,4 @@ def test_ar_model():
 
 
 if __name__ == '__main__':
-    test_multi_vqvae_model()
+    test_vqvae_model()
