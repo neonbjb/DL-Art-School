@@ -191,8 +191,7 @@ class GptVoiceLatentInjector(Injector):
             codes = self.dvae.get_codebook_indices(mel_inputs)
             latents = self.gpt(mel_conds, state[self.text_input_key],
                                state[self.text_lengths_key], codes, state[self.input_lengths_key],
-                               text_first=True, raw_mels=None, return_attentions=False, return_latent=True,
-                               clip_inputs=False)
+                               text_first=True, raw_mels=None, return_attentions=False, return_latent=True)
             assert latents.shape[1] == codes.shape[1]
             return {self.output: latents}
 
