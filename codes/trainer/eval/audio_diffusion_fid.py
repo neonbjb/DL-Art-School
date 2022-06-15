@@ -286,7 +286,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
             real_projections = []
             intelligibility_losses = []
             for i in tqdm(list(range(0, len(self.data), self.skip))):
-                path, text, codes = self.data[i + self.env['rank']]
+                path, text, codes = self.data[(i + self.env['rank']) % len(self.data)]
                 audio = load_audio(path, 22050).to(self.dev)
                 codes = codes.to(self.dev)
                 sample, ref, gen_mel, ref_mel, sample_rate = self.diffusion_fn(audio, codes, text)
