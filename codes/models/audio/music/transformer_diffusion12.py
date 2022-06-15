@@ -407,7 +407,7 @@ class TransformerDiffusionWithPretrainedVqvae(nn.Module):
 
 
 class TransformerDiffusionWithMultiPretrainedVqvae(nn.Module):
-    def __init__(self, num_vaes=4, vqargs, **kwargs):
+    def __init__(self, num_vaes=4, vqargs={}, **kwargs):
         super().__init__()
 
         self.internal_step = 0
