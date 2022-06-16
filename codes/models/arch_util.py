@@ -319,7 +319,7 @@ class Downsample(nn.Module):
                  downsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None):
+    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=2):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -327,16 +327,7 @@ class Downsample(nn.Module):
         self.dims = dims
         ksize = 3
         pad = 1
-        if dims == 1:
-            stride = 4
-            ksize = 5
-            pad = 2
-        elif dims == 2:
-            stride = 2
-        else:
-            stride = (1,2,2)
-        if factor is not None:
-            stride = factor
+        stride = factor
         if use_conv:
             self.op = conv_nd(
                 dims, self.channels, self.out_channels, ksize, stride=stride, padding=pad
