@@ -35,7 +35,8 @@ class UpperEncoder(nn.Module):
             ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1),
             nn.GroupNorm(8, hidden_dim),
             nn.SiLU(),
-            nn.Conv1d(hidden_dim, embedding_dim, 1)
+            nn.Conv1d(hidden_dim, embedding_dim, 1),
+            nn.Tanh(),
         )
 
     def forward(self, x):
