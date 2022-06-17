@@ -24,8 +24,8 @@ class UpperEncoder(nn.Module):
             ResBlock(spec_dim, out_channels=edim(1), use_conv=True, dims=1, down=True),
             ResBlock(edim(1), out_channels=edim(2), use_conv=True, dims=1, down=True),
             ResBlock(edim(2), out_channels=edim(3), use_conv=True, dims=1, down=True),
-            ResBlock(edim(5), out_channels=edim(5), use_conv=True, dims=1),
-            ResBlock(edim(5), out_channels=hidden_dim, use_conv=True, dims=1, down=True))
+            ResBlock(edim(3), out_channels=edim(4), use_conv=True, dims=1),
+            ResBlock(edim(4), out_channels=hidden_dim, use_conv=True, dims=1, down=True))
         self.encoder = nn.Sequential(
             AttentionBlock(hidden_dim, 4, do_activation=True),
             ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1),
