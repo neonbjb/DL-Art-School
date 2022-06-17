@@ -131,7 +131,6 @@ class GptMusicLower(nn.Module):
         return groups
 
 
-
 @register_model
 def register_music_gpt_lower2(opt_net, opt):
     return GptMusicLower(**opt_get(opt_net, ['kwargs'], {}))
