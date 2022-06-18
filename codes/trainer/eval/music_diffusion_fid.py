@@ -52,7 +52,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                            model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
                            conditioning_free=False, conditioning_free_k=1)
         self.dev = self.env['device']
-        mode = opt_get(opt_eval, ['diffusion_type'], 'tts')
+        mode = opt_get(opt_eval, ['diffusion_type'], 'spec_decode')
 
         self.spec_decoder = get_mel2wav_model()
         self.projector = ContrastiveAudio(model_dim=512, transformer_heads=8, dropout=0, encoder_depth=8, mel_channels=256)
@@ -141,7 +141,11 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                               model_kwargs={'aligned_conditioning': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
-        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
+        real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'aligned_conditioning': mel})
+        real_wav = pixel_shuffle_1d(real_wav, 16)
+
+        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
 
     def perform_partial_diffusion_from_codes_quant(self, audio, sample_rate=22050, partial_low=0, partial_high=256):
         if sample_rate != sample_rate:
@@ -271,15 +275,15 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd_quant.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd11\\models\\24000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd12\\models\\41500_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
                 'diffusion_steps': 200,
-                'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'cosine', 'diffusion_type': 'from_codes_quant',
+                'conditioning_free': True, 'conditioning_free_k': 2,
+                'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes_quant',
                 #'partial_low': 128, 'partial_high': 192
     }
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 600, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 605, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
