@@ -20,6 +20,7 @@ class PreprocessedMelDataset(torch.utils.data.Dataset):
         if os.path.exists(cache_path):
             self.paths = torch.load(cache_path)
         else:
+            print("Building cache..")
             path = Path(path)
             self.paths = [str(p) for p in path.rglob("*.npz")]
             torch.save(self.paths, cache_path)

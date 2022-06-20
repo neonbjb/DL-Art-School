@@ -216,10 +216,6 @@ class TransformerDiffusionWithConditioningEncoder(nn.Module):
         self.internal_step = 0
         self.diff = TransformerDiffusion(**kwargs)
         self.conditioning_encoder = ConditioningEncoder(256, kwargs['model_channels'])
-        self.encoder = UpperEncoder(256, 1024, 256).eval()
-        for p in self.encoder.parameters():
-            p.DO_NOT_TRAIN = True
-            p.requires_grad = False
 
     def forward(self, x, timesteps, true_cheater, conditioning_input=None, disable_diversity=False, conditioning_free=False):
         cond = self.conditioning_encoder(true_cheater)
