@@ -61,6 +61,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         if mode == 'spec_decode':
             self.diffusion_fn = self.perform_diffusion_spec_decode
+            self.squeeze_ratio = opt_eval['squeeze_ratio']
         elif 'from_codes' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
@@ -81,11 +82,11 @@ class MusicDiffusionFid(evaluator.Evaluator):
     def perform_diffusion_spec_decode(self, audio, sample_rate=22050):
         real_resampled = audio
         audio = audio.unsqueeze(0)
-        output_shape = (1, 256, audio.shape[-1] // 256)
+        output_shape = (1, self.squeeze_ratio, audio.shape[-1] // self.squeeze_ratio)
         mel = self.spec_fn({'in': audio})['out']
         gen = self.diffuser.p_sample_loop(self.model, output_shape,
                                           model_kwargs={'codes': mel})
-        gen = pixel_shuffle_1d(gen, 256)
+        gen = pixel_shuffle_1d(gen, self.squeeze_ratio)
 
         return gen, real_resampled, normalize_mel(self.spec_fn({'in': gen})['out']), normalize_mel(mel), sample_rate
 
