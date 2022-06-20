@@ -80,7 +80,7 @@ class ConcatAttentionBlock(TimestepBlock):
         return h[:, 1:] + x
 
 
-class TransformerDiffusion(nn.Module):
+class TransformerDiffusionWithPointConditioning(nn.Module):
     """
     A diffusion model composed entirely of stacks of transformer layers. Why would you do it any other way?
     """
@@ -214,7 +214,7 @@ class TransformerDiffusionWithConditioningEncoder(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
         self.internal_step = 0
-        self.diff = TransformerDiffusion(**kwargs)
+        self.diff = TransformerDiffusionWithPointConditioning(**kwargs)
         self.conditioning_encoder = ConditioningEncoder(256, kwargs['model_channels'])
 
     def forward(self, x, timesteps, true_cheater, conditioning_input=None, disable_diversity=False, conditioning_free=False):
@@ -243,8 +243,8 @@ class TransformerDiffusionWithConditioningEncoder(nn.Module):
 
 
 @register_model
-def register_transformer_diffusion_with_point_conditioning(opt_net, opt):
-    return TransformerDiffusion(**opt_net['kwargs'])
+def register_tfdpc(opt_net, opt):
+    return TransformerDiffusionWithPointConditioning(**opt_net['kwargs'])
 
 
 @register_model
