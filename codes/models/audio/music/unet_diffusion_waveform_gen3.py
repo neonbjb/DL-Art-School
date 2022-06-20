@@ -110,7 +110,8 @@ class StackedResidualBlock(TimestepBlock):
             self.add_module(
                 f'conv{i + 1}',
                 nn.Conv1d(channels + i * gc, out_channels, 3, 1, 1))
-            self.add_module(f'gn{i+1}', nn.GroupNorm(num_groups=8, num_channels=out_channels))
+            if i != 4:
+                self.add_module(f'gn{i+1}', nn.GroupNorm(num_groups=8, num_channels=out_channels))
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         zero_module(self.conv5)
         self.drop = nn.Dropout(p=dropout)
