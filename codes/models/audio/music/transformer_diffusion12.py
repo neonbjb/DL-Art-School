@@ -596,13 +596,16 @@ def register_transformer_diffusion12_with_quantizer(opt_net, opt):
 def register_transformer_diffusion12_with_ar_prior(opt_net, opt):
     return TransformerDiffusionWithARPrior(**opt_net['kwargs'])
 
+
 @register_model
 def register_transformer_diffusion_12_with_pretrained_vqvae(opt_net, opt):
     return TransformerDiffusionWithPretrainedVqvae(**opt_net['kwargs'])
 
+
 @register_model
 def register_transformer_diffusion_12_with_multi_vqvae(opt_net, opt):
     return TransformerDiffusionWithMultiPretrainedVqvae(**opt_net['kwargs'])
+
 
 @register_model
 def register_transformer_diffusion_12_with_cheater_latent(opt_net, opt):
