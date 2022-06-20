@@ -150,8 +150,6 @@ class DiffusionWaveformGen(nn.Module):
     :param dropout: the dropout probability.
     :param channel_mult: channel multiplier for each level of the UNet.
     :param dims: determines if the signal is 1D, 2D, or 3D.
-    :param use_scale_shift_norm: use a FiLM-like conditioning mechanism.
-    :param resblock_updown: use residual blocks for up/downsampling.
     """
 
     def __init__(
@@ -166,7 +164,6 @@ class DiffusionWaveformGen(nn.Module):
             num_res_blocks=(1,1,0),
             token_conditioning_resolutions=(1,4),
             mid_resnet_depth=10,
-            dims=1,
             use_fp16=False,
             time_embed_dim_multiplier=1,
             # Parameters for regularization.
@@ -179,7 +176,6 @@ class DiffusionWaveformGen(nn.Module):
         self.out_channels = out_channels
         self.dropout = dropout
         self.channel_mult = channel_mult
-        self.dims = dims
         self.unconditioned_percentage = unconditioned_percentage
         self.enable_fp16 = use_fp16
         self.alignment_size = 2 ** (len(channel_mult)+1)
@@ -203,7 +199,7 @@ class DiffusionWaveformGen(nn.Module):
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, 3, padding=1)
+                    conv_nd(1, in_channels, model_channels, 3, padding=1)
                 )
             ]
         )
@@ -227,7 +223,7 @@ class DiffusionWaveformGen(nn.Module):
                         time_embed_dim,
                         dropout,
                         out_channels=int(mult * model_channels),
-                        dims=dims,
+                        dims=1,
                         kernel_size=3,
                         use_scale_shift_norm=True,
                     )
@@ -241,7 +237,7 @@ class DiffusionWaveformGen(nn.Module):
                 self.input_blocks.append(
                     TimestepEmbedSequential(
                         Downsample(
-                            ch, True, dims=dims, out_channels=out_ch, factor=2, ksize=3, pad=1
+                            ch, True, dims=1, out_channels=out_ch, factor=2, ksize=3, pad=1
                         )
                     )
                 )
@@ -264,7 +260,7 @@ class DiffusionWaveformGen(nn.Module):
                         time_embed_dim,
                         dropout,
                         out_channels=int(model_channels * mult),
-                        dims=dims,
+                        dims=1,
                         kernel_size=3,
                         use_scale_shift_norm=True,
                     )
@@ -273,7 +269,7 @@ class DiffusionWaveformGen(nn.Module):
                 if level and i == num_blocks:
                     out_ch = ch
                     layers.append(
-                        Upsample(ch, True, dims=dims, out_channels=out_ch, factor=2)
+                        Upsample(ch, True, dims=1, out_channels=out_ch, factor=2)
                     )
                     ds //= 2
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
@@ -282,7 +278,7 @@ class DiffusionWaveformGen(nn.Module):
         self.out = nn.Sequential(
             normalization(ch),
             nn.SiLU(),
-            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
+            zero_module(conv_nd(1, model_channels, out_channels, 3, padding=1)),
         )
 
     def get_grad_norm_parameter_groups(self):
@@ -354,13 +350,6 @@ class DiffusionWaveformGen(nn.Module):
         out = out + extraneous_addition * 0
 
         return out[:, :, :orig_x_shape]
-
-    def before_step(self, step):
-        # The middle block traditionally gets really small gradients; scale them up by an order of magnitude.
-        scaled_grad_parameters = self.middle_block.parameters()
-        for p in scaled_grad_parameters:
-            if hasattr(p, 'grad') and p.grad is not None:
-                p.grad *= 10
 
 
 @register_model
