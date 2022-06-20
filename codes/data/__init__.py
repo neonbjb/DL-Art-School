@@ -95,6 +95,8 @@ def create_dataset(dataset_opt, return_collate=False):
         from data.audio.unsupervised_audio_dataset import UnsupervisedAudioDataset as D
     elif mode == 'unsupervised_audio_with_noise':
         from data.audio.audio_with_noise_dataset import AudioWithNoiseDataset as D
+    elif mode == 'preprocessed_mel':
+        from data.audio.preprocessed_mel_dataset import PreprocessedMelDataset as D
     elif mode == 'grand_conjoined_voice':
         from data.audio.grand_conjoined_dataset import GrandConjoinedDataset as D
         from data.zero_pad_dict_collate import ZeroPadDictCollate as C

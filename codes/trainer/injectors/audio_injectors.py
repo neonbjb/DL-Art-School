@@ -378,5 +378,20 @@ class ChannelClipInjector(Injector):
         return {self.output: inp[:,self.lo:self.hi]}
 
 
+class MusicCheaterLatentInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        from models.audio.music.gpt_music2 import UpperEncoder
+        self.encoder = UpperEncoder(256, 1024, 256).eval()
+        self.encoder.load_state_dict(torch.load('../experiments/music_cheater_encoder_256.pth', map_location=torch.device('cpu')))
+
+    def forward(self, state):
+        with torch.no_grad():
+            mel = state[self.input]
+            self.encoder = self.encoder.to(mel.device)
+            proj = self.encoder(mel)
+            return {self.output: proj}
+
+
 if __name__ == '__main__':
     print('hi')
