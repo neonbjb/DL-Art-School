@@ -62,9 +62,9 @@ class GaussianDiffusionInjector(Injector):
 
     def extra_metrics(self):
         uqt = self.latest_timesteps > self.num_timesteps * 3 / 4
-        uql = (self.latest_mse_by_batch * uqt).sum() / uqt.sum()
+        uql = (self.latest_mse_by_batch * uqt).sum() / uqt.sum() if uqt.sum() != 0 else 0
         muqt = (self.latest_timesteps > self.num_timesteps / 2) * (self.latest_timesteps < self.num_timesteps * 3 / 4)
-        muql = (self.latest_mse_by_batch * muqt).sum() / muqt.sum()
+        muql = (self.latest_mse_by_batch * muqt).sum() / muqt.sum() if muqt.sum() != 0 else 0
         d = {
             'upper_quantile_mse_loss': uql,
             'mid_upper_quantile_mse_loss': muql,
