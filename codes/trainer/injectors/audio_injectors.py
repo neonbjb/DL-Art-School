@@ -93,8 +93,8 @@ class RandomAudioCropInjector(Injector):
             self.min_crop_sz = opt['crop_size']
             self.max_crop_sz = self.min_crop_sz
         else:
-            self.min_crop_sz = opt['min_crop_sz']
-            self.max_crop_sz = opt['max_crop_sz']
+            self.min_crop_sz = opt['min_crop_size']
+            self.max_crop_sz = opt['max_crop_size']
         self.lengths_key = opt['lengths_key']
 
     def forward(self, state):
@@ -106,7 +106,7 @@ class RandomAudioCropInjector(Injector):
         if margin < 0:
             return {self.output: inp}
         start = random.randint(0, margin)
-        return {self.output: inp[:, :, start:start+self.crop_sz]}
+        return {self.output: inp[:, :, start:start+crop_sz]}
 
 
 class AudioClipInjector(Injector):
