@@ -168,7 +168,7 @@ class UnsupervisedAudioDataset(torch.utils.data.Dataset):
         output = {
             'prepad_length': prepad_length,
             'clip': clips[0],
-            'clip_lengths': torch.tensor(audio_norm.shape[-1]),
+            'clip_lengths': torch.tensor(clips[0].shape[-1]),
             'path': filename,
         }
         if self.should_resample_clip:
