@@ -25,11 +25,14 @@ class PreprocessedMelDataset(torch.utils.data.Dataset):
             self.paths = [str(p) for p in path.rglob("*.npz")]
             torch.save(self.paths, cache_path)
         self.pad_to = opt_get(opt, ['pad_to_samples'], 10336)
+        self.squeeze = opt_get(opt, ['should_squeeze'], False)
 
     def __getitem__(self, index):
         with np.load(self.paths[index]) as npz_file:
             mel = torch.tensor(npz_file['arr_0'])
         assert mel.shape[-1] <= self.pad_to
+        if self.squeeze:
+            mel = mel.squeeze()
         padding_needed = self.pad_to - mel.shape[-1]
         mask = torch.zeros_like(mel)
         if padding_needed > 0:
@@ -52,9 +55,9 @@ class PreprocessedMelDataset(torch.utils.data.Dataset):
 if __name__ == '__main__':
     params = {
         'mode': 'preprocessed_mel',
-        'path': 'Y:\\separated\\large_mels',
-        'cache_path': 'Y:\\separated\\large_mels.pth',
-        'pad_to_samples': 10336,
+        'path': 'Y:\\separated\\large_mel_cheaters',
+        'cache_path': 'Y:\\separated\\large_mel_cheaters_win.pth',
+        'pad_to_samples': 646,
         'phase': 'train',
         'n_workers': 0,
         'batch_size': 16,
