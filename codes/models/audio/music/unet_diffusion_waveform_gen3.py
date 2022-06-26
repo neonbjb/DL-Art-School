@@ -358,10 +358,13 @@ def register_unet_diffusion_waveform_gen3(opt_net, opt):
 
 
 if __name__ == '__main__':
-    clip = torch.randn(2, 64, 880)
+    clip = torch.randn(2, 4, 880)
     aligned_sequence = torch.randn(2,256,220)
     ts = torch.LongTensor([600, 600])
-    model = DiffusionWaveformGen()
+    model = DiffusionWaveformGen(in_channels=4, out_channels=8, model_channels=64, in_mel_channels=256,
+                                 channel_mult=[1,2,4,6,8,16], num_res_blocks=[2,2,2,1,1,0], mid_resnet_depth=24,
+                                 conditioning_dim_factor=8,
+                                 token_conditioning_resolutions=[4,16], dropout=.1, time_embed_dim_multiplier=4)
     # Test with sequence aligned conditioning
     o = model(clip, ts, aligned_sequence)
     print_network(model)

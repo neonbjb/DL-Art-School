@@ -10,6 +10,15 @@ def get_mel2wav_model():
     model.eval()
     return model
 
+def get_mel2wav_v3_model():
+    from models.audio.music.unet_diffusion_waveform_gen3 import DiffusionWaveformGen
+    model = DiffusionWaveformGen(model_channels=256, in_channels=16, in_mel_channels=256, out_channels=32, channel_mult=[1,1.5,2,4],
+                                 num_res_blocks=[2,1,1,0], mid_resnet_depth=24, token_conditioning_resolutions=[1,4],
+                                 dropout=0, time_embed_dim_multiplier=1, unconditioned_percentage=0)
+    model.load_state_dict(torch.load("../experiments/music_mel2wav_v3.pth", map_location=torch.device('cpu')))
+    model.eval()
+    return model
+
 def get_music_codegen():
     from models.audio.mel2vec import ContrastiveTrainingWrapper
     model = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0,
