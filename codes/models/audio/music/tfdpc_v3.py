@@ -1,20 +1,18 @@
 import itertools
-from time import time
+import os
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchaudio
+import torchvision
 
-from models.arch_util import ResBlock, AttentionBlock
-from models.audio.music.gpt_music2 import UpperEncoder, GptMusicLower
-from models.audio.music.music_quantizer2 import MusicQuantizer2
-from models.audio.tts.lucidrains_dvae import DiscreteVAE
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import TimestepBlock
 from models.lucidrains.x_transformers import Encoder, Attention, RMSScaleShiftNorm, RotaryEmbedding, \
     FeedForward
 from trainer.networks import register_model
-from utils.util import checkpoint, print_network
+from utils.util import checkpoint, print_network, load_audio
 
 
 class TimestepRotaryEmbedSequential(nn.Sequential, TimestepBlock):
@@ -147,7 +145,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
     def forward(self, x, timesteps, conditioning_input, conditioning_free=False):
         unused_params = []
         if conditioning_free:
-            cond = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1)
+            cond = self.unconditioned_embedding
         else:
             cond = conditioning_input
             # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
@@ -243,7 +241,7 @@ class TransformerDiffusionWithConditioningEncoder(nn.Module):
 
 
 @register_model
-def register_tfdpc2(opt_net, opt):
+def register_tfdpc3(opt_net, opt):
     return TransformerDiffusionWithPointConditioning(**opt_net['kwargs'])
 
 
@@ -258,11 +256,93 @@ def test_cheater_model():
     ts = torch.LongTensor([600, 600])
 
     # For music:
-    model = TransformerDiffusionWithConditioningEncoder(model_channels=1024)
+    model = TransformerDiffusionWithConditioningEncoder(in_channels=256, out_channels=512, model_channels=1024,
+                                                        contraction_dim=512, num_heads=8, num_layers=24, dropout=0,
+                                                        unconditioned_percentage=.4)
     print_network(model)
     o = model(clip, ts, cl)
     pg = model.get_grad_norm_parameter_groups()
 
 
+def inference_tfdpc3_with_cheater():
+    with torch.no_grad():
+        os.makedirs('results/tfdpc_v3', exist_ok=True)
+
+        #length = 40 * 22050 // 256 // 16
+        samples = {'electronica1': load_audio('Y:\\split\\yt-music-eval\\00001.wav', 22050),
+                   'electronica2': load_audio('Y:\\split\\yt-music-eval\\00272.wav', 22050),
+                   'e_guitar': load_audio('Y:\\split\\yt-music-eval\\00227.wav', 22050),
+                   'creep': load_audio('Y:\\separated\\bt-music-3\\[2007] MTV Unplugged (Live) (Japan Edition)\\05 - Creep [Cover On Radiohead]\\00001\\no_vocals.wav', 22050),
+                   'rock1': load_audio('Y:\\separated\\bt-music-3\\2016 - Heal My Soul\\01 - Daze Of The Night\\00000\\no_vocals.wav', 22050),
+                   'kiss': load_audio('Y:\\separated\\bt-music-3\\KISS (2001) Box Set CD1\\02 Deuce (Demo Version)\\00000\\no_vocals.wav', 22050),
+                   'purp': load_audio('Y:\\separated\\bt-music-3\\Shades of Deep Purple\\11 Help (Alternate Take)\\00001\\no_vocals.wav', 22050),
+                   'western_stars': load_audio('Y:\\separated\\bt-music-3\\Western Stars\\01 Hitch Hikin\'\\00000\\no_vocals.wav', 22050),
+                   'silk': load_audio('Y:\\separated\\silk\\MonstercatSilkShowcase\\890\\00007\\no_vocals.wav', 22050),
+                   'long_electronica': load_audio('C:\\Users\\James\\Music\\longer_sample.wav', 22050),}
+        for k, sample in samples.items():
+            sample = sample.cuda()
+            length = sample.shape[0]//256//16
+
+            model = TransformerDiffusionWithConditioningEncoder(in_channels=256, out_channels=512, model_channels=1024,
+                                                                contraction_dim=512, num_heads=8, num_layers=12, dropout=0,
+                                                                use_fp16=False, unconditioned_percentage=0).eval().cuda()
+            model.load_state_dict(torch.load('x:/dlas/experiments/train_music_cheater_gen_v3/models/59000_generator_ema.pth'))
+
+            from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector
+            spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000, 'true_normalization': True,
+                                                        'normalize': True, 'in': 'in', 'out': 'out'}, {}).cuda()
+            ref_mel = spec_fn({'in': sample.unsqueeze(0)})['out']
+            from trainer.injectors.audio_injectors import MusicCheaterLatentInjector
+            cheater_encoder = MusicCheaterLatentInjector({'in': 'in', 'out': 'out'}, {}).cuda()
+            ref_cheater = cheater_encoder({'in': ref_mel})['out']
+
+            from models.diffusion.respace import SpacedDiffusion
+            from models.diffusion.respace import space_timesteps
+            from models.diffusion.gaussian_diffusion import get_named_beta_schedule
+            diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [128]), model_mean_type='epsilon',
+                                   model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                                   conditioning_free=True, conditioning_free_k=1)
+
+            # Conventional decoding method:
+            gen_cheater = diffuser.ddim_sample_loop(model, (1,256,length), progress=True, model_kwargs={'true_cheater': ref_cheater})
+
+            # Guidance decoding method:
+            #mask = torch.ones_like(ref_cheater)
+            #mask[:,:,15:-15] = 0
+            #gen_cheater = diffuser.p_sample_loop_with_guidance(model, ref_cheater, mask, model_kwargs={'true_cheater': ref_cheater})
+
+            # Just decode the ref.
+            #gen_cheater = ref_cheater
+
+            from models.audio.music.transformer_diffusion12 import TransformerDiffusionWithCheaterLatent
+            diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
+                                   model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                                   conditioning_free=True, conditioning_free_k=1)
+            wrap = TransformerDiffusionWithCheaterLatent(in_channels=256, out_channels=512, model_channels=1024,
+                                                         contraction_dim=512, prenet_channels=1024, input_vec_dim=256,
+                                                         prenet_layers=6, num_heads=8, num_layers=16, new_code_expansion=True,
+                                                         dropout=0, unconditioned_percentage=0).eval().cuda()
+            wrap.load_state_dict(torch.load('x:/dlas/experiments/train_music_diffusion_tfd_cheater_from_scratch/models/56500_generator_ema.pth'))
+            cheater_to_mel = wrap.diff
+            gen_mel = diffuser.ddim_sample_loop(cheater_to_mel, (1,256,gen_cheater.shape[-1]*16), progress=True,
+                                             model_kwargs={'codes': gen_cheater.permute(0,2,1)})
+            torchvision.utils.save_image((gen_mel + 1)/2, f'results/tfdpc_v3/{k}.png')
+
+            from utils.music_utils import get_mel2wav_v3_model
+            m2w = get_mel2wav_v3_model().cuda()
+            spectral_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
+                                   model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                                   conditioning_free=True, conditioning_free_k=1)
+            from trainer.injectors.audio_injectors import denormalize_mel
+            gen_mel_denorm = denormalize_mel(gen_mel)
+            output_shape = (1,16,gen_mel_denorm.shape[-1]*256//16)
+            gen_wav = spectral_diffuser.ddim_sample_loop(m2w, output_shape, model_kwargs={'codes': gen_mel_denorm})
+            from trainer.injectors.audio_injectors import pixel_shuffle_1d
+            gen_wav = pixel_shuffle_1d(gen_wav, 16)
+
+            torchaudio.save(f'results/tfdpc_v3/{k}.wav', gen_wav.squeeze(1).cpu(), 22050)
+            torchaudio.save(f'results/tfdpc_v3/{k}_ref.wav', sample.unsqueeze(0).cpu(), 22050)
+
 if __name__ == '__main__':
-    test_cheater_model()
+    #test_cheater_model()
+    inference_tfdpc3_with_cheater()
