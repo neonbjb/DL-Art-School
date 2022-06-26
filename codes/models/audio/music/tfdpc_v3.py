@@ -286,7 +286,7 @@ def inference_tfdpc3_with_cheater():
             model = TransformerDiffusionWithConditioningEncoder(in_channels=256, out_channels=512, model_channels=1024,
                                                                 contraction_dim=512, num_heads=8, num_layers=12, dropout=0,
                                                                 use_fp16=False, unconditioned_percentage=0).eval().cuda()
-            model.load_state_dict(torch.load('x:/dlas/experiments/train_music_cheater_gen_v3/models/59000_generator_ema.pth'))
+            model.load_state_dict(torch.load('x:/dlas/experiments/train_music_cheater_gen_v3/models/61000_generator_ema.pth'))
 
             from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector
             spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000, 'true_normalization': True,

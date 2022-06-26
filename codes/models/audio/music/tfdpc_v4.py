@@ -229,8 +229,8 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
         return out
 
     def before_step(self, step):
-        scaled_grad_parameters = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.diff.layers])) + \
-                                 list(itertools.chain.from_iterable([lyr.prenorm.parameters() for lyr in self.diff.layers]))
+        scaled_grad_parameters = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.layers])) + \
+                                 list(itertools.chain.from_iterable([lyr.prenorm.parameters() for lyr in self.layers]))
         # Scale back the gradients of the blkout and prenorm layers by a constant factor. These get two orders of magnitudes
         # higher gradients. Ideally we would use parameter groups, but ZeroRedundancyOptimizer makes this trickier than
         # directly fiddling with the gradients.
@@ -251,7 +251,7 @@ def test_cheater_model():
 
     # For music:
     model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
-                                                        contraction_dim=384, num_heads=6, num_layers=18, dropout=0,
+                                                        contraction_dim=512, num_heads=8, num_layers=15, dropout=0,
                                                         unconditioned_percentage=.4)
     print_network(model)
     o = model(clip, ts, cl)
