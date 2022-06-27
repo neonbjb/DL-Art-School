@@ -96,17 +96,26 @@ class RandomAudioCropInjector(Injector):
             self.min_crop_sz = opt['min_crop_size']
             self.max_crop_sz = opt['max_crop_size']
         self.lengths_key = opt['lengths_key']
+        self.crop_start_key = opt['crop_start_key']
+
 
     def forward(self, state):
         crop_sz = random.randint(self.min_crop_sz, self.max_crop_sz)
         inp = state[self.input]
-        lens = state[self.lengths_key]
-        len = torch.min(lens)
+        if self.lengths_key is not None:
+            lens = state[self.lengths_key]
+            len = torch.min(lens)
+        else:
+            len = inp.shape[-1]
         margin = len - crop_sz
         if margin < 0:
-            return {self.output: inp}
-        start = random.randint(0, margin)
-        return {self.output: inp[:, :, start:start+crop_sz]}
+            res = {self.output: inp}
+        else:
+            start = random.randint(0, margin)
+            res = {self.output: inp[:, :, start:start+crop_sz]}
+        if self.crop_start_key is not None:
+            res[self.crop_start_key] = start
+        return res
 
 
 class AudioClipInjector(Injector):
