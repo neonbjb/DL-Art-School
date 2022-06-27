@@ -215,8 +215,8 @@ class TransformerDiffusionWithConditioningEncoder(nn.Module):
         self.diff = TransformerDiffusionWithPointConditioning(**kwargs)
         self.conditioning_encoder = ConditioningEncoder(256, kwargs['model_channels'])
 
-    def forward(self, x, timesteps, true_cheater, conditioning_input=None, disable_diversity=False, conditioning_free=False):
-        cond = self.conditioning_encoder(true_cheater)
+    def forward(self, x, timesteps, conditioning_input=None, disable_diversity=False, conditioning_free=False):
+        cond = self.conditioning_encoder(conditioning_input)
         diff = self.diff(x, timesteps, conditioning_input=cond, conditioning_free=conditioning_free)
         return diff
 

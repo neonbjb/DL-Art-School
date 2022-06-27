@@ -301,14 +301,14 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen_r8.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v4\\models\\28000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\18000_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
                 'diffusion_steps': 32,
-                'conditioning_free': False, 'conditioning_free_k': 1, 'clip_audio': False, 'use_ddim': True,
+                'conditioning_free': True, 'conditioning_free_k': 1, 'clip_audio': False, 'use_ddim': True,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
                 #'partial_low': 128, 'partial_high': 192
     }

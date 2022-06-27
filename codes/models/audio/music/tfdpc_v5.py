@@ -196,16 +196,16 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
         unused_params = []
 
         time_emb = self.time_embed(timestep_embedding(timesteps, self.time_embed_dim))
-        cond_enc = self.conditioning_encoder(conditioning_input, time_emb)
-        cs = cond_enc[:,:,cond_start]
-        ce = cond_enc[:,:,x.shape[-1]+cond_start]
-        cond_enc = torch.cat([cs.unsqueeze(-1), ce.unsqueeze(-1)], dim=-1)
-        cond_enc = F.interpolate(cond_enc, size=(x.shape[-1],), mode='linear').permute(0,2,1)
 
         if conditioning_free:
             cond = self.unconditioned_embedding
+            cond = cond.repeat(1,x.shape[-1],1)
         else:
-            cond = cond_enc
+            cond_enc = self.conditioning_encoder(conditioning_input, time_emb)
+            cs = cond_enc[:,:,cond_start]
+            ce = cond_enc[:,:,x.shape[-1]+cond_start]
+            cond_enc = torch.cat([cs.unsqueeze(-1), ce.unsqueeze(-1)], dim=-1)
+            cond = F.interpolate(cond_enc, size=(x.shape[-1],), mode='linear').permute(0,2,1)
             # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
             if self.training and self.unconditioned_percentage > 0:
                 unconditioned_batches = torch.rand((cond.shape[0], 1, 1),
