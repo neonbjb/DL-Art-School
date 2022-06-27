@@ -270,7 +270,7 @@ def test_cheater_model():
 
 def inference_tfdpc4_with_cheater():
     with torch.no_grad():
-        os.makedirs('results/tfdpc_v3', exist_ok=True)
+        os.makedirs('results/tfdpc_v4', exist_ok=True)
 
         #length = 40 * 22050 // 256 // 16
         samples = {'electronica1': load_audio('Y:\\split\\yt-music-eval\\00001.wav', 22050),
@@ -290,7 +290,7 @@ def inference_tfdpc4_with_cheater():
             model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
                                                               contraction_dim=512, num_heads=8, num_layers=12, dropout=0,
                                                               use_fp16=False, unconditioned_percentage=0).eval().cuda()
-            model.load_state_dict(torch.load('x:/dlas/experiments/train_music_cheater_gen_v3/models/59000_generator_ema.pth'))
+            model.load_state_dict(torch.load('x:/dlas/experiments/train_music_cheater_gen_v4/models/28000_generator_ema.pth'))
 
             from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector
             spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000, 'true_normalization': True,
@@ -308,7 +308,7 @@ def inference_tfdpc4_with_cheater():
                                    conditioning_free=True, conditioning_free_k=1)
 
             # Conventional decoding method:
-            gen_cheater = diffuser.ddim_sample_loop(model, (1,256,length), progress=True, model_kwargs={'true_cheater': ref_cheater})
+            gen_cheater = diffuser.ddim_sample_loop(model, (1,256,length), progress=True, model_kwargs={'conditioning_input': ref_cheater})
 
             # Guidance decoding method:
             #mask = torch.ones_like(ref_cheater)
@@ -330,7 +330,7 @@ def inference_tfdpc4_with_cheater():
             cheater_to_mel = wrap.diff
             gen_mel = diffuser.ddim_sample_loop(cheater_to_mel, (1,256,gen_cheater.shape[-1]*16), progress=True,
                                              model_kwargs={'codes': gen_cheater.permute(0,2,1)})
-            torchvision.utils.save_image((gen_mel + 1)/2, f'results/tfdpc_v3/{k}.png')
+            torchvision.utils.save_image((gen_mel + 1)/2, f'results/tfdpc_v4/{k}.png')
 
             from utils.music_utils import get_mel2wav_v3_model
             m2w = get_mel2wav_v3_model().cuda()
@@ -344,9 +344,9 @@ def inference_tfdpc4_with_cheater():
             from trainer.injectors.audio_injectors import pixel_shuffle_1d
             gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
-            torchaudio.save(f'results/tfdpc_v3/{k}.wav', gen_wav.squeeze(1).cpu(), 22050)
-            torchaudio.save(f'results/tfdpc_v3/{k}_ref.wav', sample.unsqueeze(0).cpu(), 22050)
+            torchaudio.save(f'results/tfdpc_v4/{k}.wav', gen_wav.squeeze(1).cpu(), 22050)
+            torchaudio.save(f'results/tfdpc_v4/{k}_ref.wav', sample.unsqueeze(0).cpu(), 22050)
 
 if __name__ == '__main__':
-    test_cheater_model()
-    #inference_tfdpc4_with_cheater()
+    #test_cheater_model()
+    inference_tfdpc4_with_cheater()

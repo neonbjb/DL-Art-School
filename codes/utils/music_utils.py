@@ -10,6 +10,7 @@ def get_mel2wav_model():
     model.eval()
     return model
 
+
 def get_mel2wav_v3_model():
     from models.audio.music.unet_diffusion_waveform_gen3 import DiffusionWaveformGen
     model = DiffusionWaveformGen(model_channels=256, in_channels=16, in_mel_channels=256, out_channels=32, channel_mult=[1,1.5,2,4],
@@ -19,6 +20,7 @@ def get_mel2wav_v3_model():
     model.eval()
     return model
 
+
 def get_music_codegen():
     from models.audio.mel2vec import ContrastiveTrainingWrapper
     model = ContrastiveTrainingWrapper(mel_input_channels=256, inner_dim=1024, layers=24, dropout=0,
@@ -26,5 +28,25 @@ def get_music_codegen():
                                            mask_time_length=6, num_negatives=100, codebook_size=16, codebook_groups=4,
                                            disable_custom_linear_init=True, do_reconstruction_loss=True)
     model.load_state_dict(torch.load(f"../experiments/m2v_music.pth", map_location=torch.device('cpu')))
+    model = model.eval()
+    return model
+
+
+def get_cheater_encoder():
+    from models.audio.music.gpt_music2 import UpperEncoder
+    encoder = UpperEncoder(256, 1024, 256)
+    encoder.load_state_dict(
+        torch.load('../experiments/music_cheater_encoder_256.pth', map_location=torch.device('cpu')))
+    encoder = encoder.eval()
+    return encoder
+
+
+def get_cheater_decoder():
+    from models.audio.music.transformer_diffusion12 import TransformerDiffusionWithCheaterLatent
+    model = TransformerDiffusionWithCheaterLatent(in_channels=256, out_channels=512, model_channels=1024,
+                                                         contraction_dim=512, prenet_channels=1024, input_vec_dim=256,
+                                                         prenet_layers=6, num_heads=8, num_layers=16, new_code_expansion=True,
+                                                         dropout=0, unconditioned_percentage=0)
+    model.load_state_dict(torch.load(f'../experiments/music_cheater_decoder.pth', map_location=torch.device('cpu')))
     model = model.eval()
     return model

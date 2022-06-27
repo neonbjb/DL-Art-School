@@ -22,7 +22,8 @@ from models.diffusion.gaussian_diffusion import get_named_beta_schedule
 from models.diffusion.respace import space_timesteps, SpacedDiffusion
 from trainer.injectors.audio_injectors import denormalize_mel, TorchMelSpectrogramInjector, pixel_shuffle_1d, \
     normalize_mel
-from utils.music_utils import get_music_codegen, get_mel2wav_model
+from utils.music_utils import get_music_codegen, get_mel2wav_model, get_cheater_decoder, get_cheater_encoder, \
+    get_mel2wav_v3_model
 from utils.util import opt_get, load_model_from_config
 
 
@@ -34,6 +35,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         super().__init__(model, opt_eval, env, uses_all_ddp=True)
         self.real_path = opt_eval['path']
         self.data = self.load_data(self.real_path)
+        self.clip = opt_get(opt_eval, ['clip_audio'], True)  # Recommend setting true for more efficient eval passes.
+        self.ddim = opt_get(opt_eval, ['use_ddim'], False)
         if distributed.is_initialized() and distributed.get_world_size() > 1:
             self.skip = distributed.get_world_size()  # One batch element per GPU.
         else:
@@ -48,17 +51,16 @@ class MusicDiffusionFid(evaluator.Evaluator):
         self.diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [diffusion_steps]), model_mean_type='epsilon',
                            model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule(diffusion_schedule, 4000),
                            conditioning_free=conditioning_free_diffusion_enabled, conditioning_free_k=conditioning_free_k)
-        self.spectral_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [100]), model_mean_type='epsilon',
+        self.spectral_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [16 if self.ddim else 100]), model_mean_type='epsilon',
                            model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
                            conditioning_free=False, conditioning_free_k=1)
         self.dev = self.env['device']
         mode = opt_get(opt_eval, ['diffusion_type'], 'spec_decode')
 
-        self.spec_decoder = get_mel2wav_model()
         self.projector = ContrastiveAudio(model_dim=512, transformer_heads=8, dropout=0, encoder_depth=8, mel_channels=256)
         self.projector.load_state_dict(torch.load('../experiments/music_eval_projector.pth', map_location=torch.device('cpu')))
-        self.local_modules = {'spec_decoder': self.spec_decoder, 'projector': self.projector}
 
+        self.local_modules = {'projector': self.projector}
         if mode == 'spec_decode':
             self.diffusion_fn = self.perform_diffusion_spec_decode
             self.squeeze_ratio = opt_eval['squeeze_ratio']
@@ -73,6 +75,16 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                                   partial_high=opt_eval['partial_high'])
         elif 'from_codes_quant_gradual_decode' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes_quant_gradual_decode
+        elif 'cheater_gen' == mode:
+            self.diffusion_fn = self.perform_reconstruction_from_cheater_gen
+            self.local_modules['cheater_encoder'] = get_cheater_encoder()
+            self.local_modules['cheater_decoder'] = get_cheater_decoder()
+            self.spec_decoder = get_mel2wav_v3_model()  # The only reason the other functions don't use v3 is because earlier models were trained with v1 and I want to keep metrics consistent.
+            self.local_modules['spec_decoder'] = self.spec_decoder
+
+        if not hasattr(self, 'spec_decoder'):
+            self.spec_decoder = get_mel2wav_model()
+            self.local_modules['spec_decoder'] = self.spec_decoder
         self.spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000,
                                                     'normalize': True, 'in': 'in', 'out': 'out'}, {})
 
@@ -191,6 +203,35 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
 
+    def perform_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
+        assert self.ddim, "DDIM mode expected for reconstructing cheater gen. Do you like to waste resources??"
+        audio = audio.unsqueeze(0)
+
+        mel = self.spec_fn({'in': audio})['out']
+        mel_norm = normalize_mel(mel)
+        cheater = self.local_modules['cheater_encoder'].to(audio.device)(mel_norm)
+
+        # 1. Generate the cheater latent using the input as a reference.
+        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True, model_kwargs={'conditioning_input': cheater})
+
+        # 2. Decode the cheater into a MEL
+        gen_mel = self.diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
+                                                 model_kwargs={'codes': gen_cheater.permute(0,2,1)})
+
+        # 3. And then the MEL back into a spectrogram
+        output_shape = (1,16,audio.shape[-1]//16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        gen_mel_denorm = denormalize_mel(gen_mel)
+        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'codes': gen_mel_denorm})
+        gen_wav = pixel_shuffle_1d(gen_wav, 16)
+
+        real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'codes': mel})
+        real_wav = pixel_shuffle_1d(real_wav, 16)
+
+        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
+
 
     def project(self, sample, sample_rate):
         sample = torchaudio.functional.resample(sample, sample_rate, 22050)
@@ -229,7 +270,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
             for i in tqdm(list(range(0, len(self.data), self.skip))):
                 path = self.data[(i + self.env['rank']) % len(self.data)]
                 audio = load_audio(path, 22050).to(self.dev)
-                audio = audio[:, :100000]
+                if self.clip:
+                    audio = audio[:, :100000]
                 sample, ref, sample_mel, ref_mel, sample_rate = self.diffusion_fn(audio)
 
                 gen_projections.append(self.project(sample, sample_rate).cpu())  # Store on CPU to avoid wasting GPU memory.
@@ -259,17 +301,17 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_waveform_gen.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_waveform_gen_retry\\models\\22000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v4\\models\\28000_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
-                'diffusion_steps': 100,
-                'conditioning_free': False, 'conditioning_free_k': 1,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'spec_decode',
+                'diffusion_steps': 32,
+                'conditioning_free': False, 'conditioning_free_k': 1, 'clip_audio': False, 'use_ddim': True,
+                'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
                 #'partial_low': 128, 'partial_high': 192
     }
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 100, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 200, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
