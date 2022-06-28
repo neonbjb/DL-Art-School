@@ -408,5 +408,23 @@ class MusicCheaterLatentInjector(Injector):
             return {self.output: proj}
 
 
+class KmeansQuantizer(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        _, self.centroids = torch.load(opt['centroids'])
+        k, b = self.centroids.shape
+        self.centroids = self.centroids.reshape(1, k, b, 1)
+
+    def forward(self, state):
+        with torch.no_grad():
+            x = state[self.input]
+            self.centroids = self.centroids.to(x.device)
+            distances = ((self.centroids - x.unsqueeze(1))**2).sum(2)
+            distances[distances.isnan()] = 9999999999
+            labels = distances.argmin(1)
+            return {self.output: labels}
+
+        
+
 if __name__ == '__main__':
     print('hi')
