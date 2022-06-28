@@ -79,6 +79,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
             self.diffusion_fn = self.perform_reconstruction_from_cheater_gen
             self.local_modules['cheater_encoder'] = get_cheater_encoder()
             self.local_modules['cheater_decoder'] = get_cheater_decoder()
+            self.cheater_decoder_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
+                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                           conditioning_free=True, conditioning_free_k=1)
             self.spec_decoder = get_mel2wav_v3_model()  # The only reason the other functions don't use v3 is because earlier models were trained with v1 and I want to keep metrics consistent.
             self.local_modules['spec_decoder'] = self.spec_decoder
 
@@ -215,7 +218,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True, model_kwargs={'conditioning_input': cheater})
 
         # 2. Decode the cheater into a MEL
-        gen_mel = self.diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
+        gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
                                                  model_kwargs={'codes': gen_cheater.permute(0,2,1)})
 
         # 3. And then the MEL back into a spectrogram
@@ -303,7 +306,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen_r8.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\18000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\46000_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
