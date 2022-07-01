@@ -45,7 +45,7 @@ def is_wav_file(filename):
 
 
 def is_audio_file(filename):
-    AUDIO_EXTENSIONS = ['.wav', '.mp3', '.wma', '.m4b', '.flac']
+    AUDIO_EXTENSIONS = ['.wav', '.mp3', '.wma', '.m4b', '.flac', '.aac']
     return any(filename.endswith(extension) for extension in AUDIO_EXTENSIONS)
 
 

@@ -23,6 +23,11 @@ def report_progress(progress_file, file):
 
 
 def process_file(file, base_path, output_path, progress_file, duration_per_clip, sampling_rate=22050):
+    lp = os.path.basename(file).lower()
+    if ' live' in lp or 'concert' in lp:
+        print(f"Skipping file {file} because likely a live performance")
+        report_progress(progress_file, file)
+        return
     try:
         audio = load_audio(file, sampling_rate)
     except:
@@ -42,9 +47,9 @@ def process_file(file, base_path, output_path, progress_file, duration_per_clip,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\sources\\manual_podcasts_music')
-    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\sources\\manual_podcasts_music\\already_processed.txt')
-    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\manual_podcasts_music')
+    parser.add_argument('-path', type=str, help='Path to search for files', default='C:\\Users\\James\\Downloads\\soundcloud-dl\\sc2')
+    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='C:\\Users\\James\\Downloads\\soundcloud-dl\\sc2\\already_processed.txt')
+    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\soundcloud_mixes\\bigmix1')
     parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=4)
     parser.add_argument('-duration', type=int, help='Duration per clip in seconds', default=30)
     args = parser.parse_args()

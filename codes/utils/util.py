@@ -574,6 +574,16 @@ def load_audio(audiopath, sampling_rate, raw_data=None):
             import soundfile as sf
             audio, lsr = sf.read(audiopath)
             audio = torch.FloatTensor(audio)
+        elif audiopath[-4:] == '.aac':
+            # Process AAC files using pydub. I'd use this for everything except I'm cornered into backwards compatibility.
+            from pydub import AudioSegment
+            asg = AudioSegment.from_file(audiopath)
+            dtype = getattr(np, "int{:d}".format(asg.sample_width * 8))
+            arr = np.ndarray((int(asg.frame_count()), asg.channels), buffer=asg.raw_data, dtype=dtype)
+            arr = arr.astype('float') / (2 ** (asg.sample_width * 8 - 1))
+            arr = arr[:,0]
+            audio = torch.FloatTensor(arr)
+            lsr = asg.frame_rate
         else:
             audio, lsr = open_audio(audiopath)
             audio = torch.FloatTensor(audio)
