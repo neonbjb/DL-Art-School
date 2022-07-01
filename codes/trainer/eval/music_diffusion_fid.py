@@ -306,15 +306,15 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen_r8.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\46000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\71000_generator_ema.pth'
                                        ).cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
-                #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
-                'diffusion_steps': 32,
-                'conditioning_free': True, 'conditioning_free_k': 1, 'clip_audio': False, 'use_ddim': True,
+    opt_eval = {#'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
+                'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
+                'diffusion_steps': 128,
+                'conditioning_free': True, 'conditioning_free_k': 2, 'clip_audio': False, 'use_ddim': True,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
                 #'partial_low': 128, 'partial_high': 192
     }
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 200, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 225, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())

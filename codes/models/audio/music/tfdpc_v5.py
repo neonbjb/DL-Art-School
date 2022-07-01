@@ -1,5 +1,6 @@
 import itertools
 import os
+import random
 
 import torch
 import torch.nn as nn
@@ -127,6 +128,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
             use_fp16=False,
             # Parameters for regularization.
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
+            conditioning_masking=0,
     ):
         super().__init__()
 
@@ -136,6 +138,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
         self.out_channels = out_channels
         self.dropout = dropout
         self.unconditioned_percentage = unconditioned_percentage
+        self.conditioning_masking = conditioning_masking
         self.enable_fp16 = use_fp16
 
         self.inp_block = conv_nd(1, in_channels, model_channels, 3, 1, 1)
@@ -192,7 +195,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
         }
         return groups
 
-    def forward(self, x, timesteps, conditioning_input, conditioning_free=False, cond_start=0):
+    def forward(self, x, timesteps, conditioning_input=None, conditioning_free=False, cond_start=0, custom_conditioning_fetcher=None):
         unused_params = []
 
         time_emb = self.time_embed(timestep_embedding(timesteps, self.time_embed_dim))
@@ -201,9 +204,18 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
             cond = self.unconditioned_embedding
             cond = cond.repeat(1,x.shape[-1],1)
         else:
-            cond_enc = self.conditioning_encoder(conditioning_input, time_emb)
-            cs = cond_enc[:,:,cond_start]
-            ce = cond_enc[:,:,x.shape[-1]+cond_start]
+            if custom_conditioning_fetcher is not None:
+                cs, ce = custom_conditioning_fetcher(self.conditioning_encoder, time_emb)
+            else:
+                if self.conditioning_masking > 0:
+                    cond_op_len = x.shape[-1]
+                    mask_len = int(cond_op_len * self.conditioning_masking)
+                    if mask_len > 0:
+                        start = random.randint(0, (cond_op_len-mask_len)) + cond_start
+                        conditioning_input[:,:,start:(start+mask_len)] = 0
+                cond_enc = self.conditioning_encoder(conditioning_input, time_emb)
+                cs = cond_enc[:,:,cond_start]
+                ce = cond_enc[:,:,x.shape[-1]+cond_start]
             cond_enc = torch.cat([cs.unsqueeze(-1), ce.unsqueeze(-1)], dim=-1)
             cond = F.interpolate(cond_enc, size=(x.shape[-1],), mode='linear').permute(0,2,1)
             # Mask out the conditioning branch for whole batch elements, implementing something similar to classifier-free guidance.
@@ -255,7 +267,7 @@ def test_cheater_model():
     # For music:
     model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
                                                         contraction_dim=512, num_heads=8, num_layers=15, dropout=0,
-                                                        unconditioned_percentage=.4)
+                                                        unconditioned_percentage=.4, conditioning_masking=.5)
     print_network(model)
     o = model(clip, ts, cl)
     pg = model.get_grad_norm_parameter_groups()
