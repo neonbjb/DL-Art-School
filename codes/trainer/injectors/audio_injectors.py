@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 
+from models.audio.music.cheater_gen_ar import ConditioningAR
 from trainer.inject import Injector
 from utils.music_utils import get_music_codegen
 from utils.util import opt_get, load_model_from_config, pad_or_truncate
@@ -426,3 +427,22 @@ class KmeansQuantizerInjector(Injector):
             distances = distances.reshape(b, s, self.centroids.shape[-1])
             labels = distances.argmin(-1)
             return {self.output: labels}
+
+
+class MusicCheaterArInjector(Injector):
+    def __init__(self, opt, env):
+        super().__init__(opt, env)
+        self.cheater_ar = ConditioningAR(1024, layers=24, dropout=0, cond_free_percent=0)
+        self.cheater_ar.load_state_dict(torch.load('../experiments/music_cheater_ar.pth', map_location=torch.device('cpu')))
+        self.cond_key = opt['cheater_latent_key']
+        self.needs_move = True
+
+    def forward(self, state):
+        codes = state[self.input]
+        cond = state[self.cond_key]
+        if self.needs_move:
+            self.cheater_ar = self.cheater_ar.to(codes.device)
+            self.needs_move = False
+        with torch.no_grad():
+            latents = self.cheater_ar(codes, cond, return_latent=True)
+            return {self.output: latents}
