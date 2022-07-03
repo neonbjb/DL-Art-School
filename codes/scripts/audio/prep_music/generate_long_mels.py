@@ -50,7 +50,8 @@ def process_folder(folder, base_path, output_path, progress_file, max_duration, 
             to_combine.append(load_audio(audio_file, 22050))
             file_ordinal = int(files[i])
             if last_ordinal != -1 and file_ordinal != last_ordinal+1:
-                break
+                last_ordinal = file_ordinal
+                continue
             else:
                 i += 1
                 total_progress += 30
