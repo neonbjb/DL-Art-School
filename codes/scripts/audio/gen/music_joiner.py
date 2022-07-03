@@ -13,7 +13,6 @@ from trainer.injectors.audio_injectors import MusicCheaterLatentInjector
 from models.diffusion.respace import SpacedDiffusion
 from models.diffusion.respace import space_timesteps
 from models.diffusion.gaussian_diffusion import get_named_beta_schedule
-from models.audio.music.transformer_diffusion12 import TransformerDiffusionWithCheaterLatent
 
 
 def join_music(clip1, clip1_cut, clip2, clip2_cut, mix_time, results_dir):
