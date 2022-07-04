@@ -432,7 +432,7 @@ class KmeansQuantizerInjector(Injector):
 class MusicCheaterArInjector(Injector):
     def __init__(self, opt, env):
         super().__init__(opt, env)
-        self.cheater_ar = ConditioningAR(1024, layers=24, dropout=0, cond_free_percent=0)
+        self.cheater_ar = ConditioningAR(1024, layers=24, dropout=0, cond_free_percent=0).eval()
         self.cheater_ar.load_state_dict(torch.load('../experiments/music_cheater_ar.pth', map_location=torch.device('cpu')))
         self.cond_key = opt['cheater_latent_key']
         self.needs_move = True
