@@ -56,5 +56,5 @@ def get_ar_prior():
     from models.audio.music.cheater_gen_ar import ConditioningAR
     cheater_ar = ConditioningAR(1024, layers=24, dropout=0, cond_free_percent=0)
     cheater_ar.load_state_dict(torch.load('../experiments/music_cheater_ar.pth', map_location=torch.device('cpu')))
-    #cheater_ar = cheater_ar.eval()
+    cheater_ar = cheater_ar.eval()
     return cheater_ar
