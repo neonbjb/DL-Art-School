@@ -774,6 +774,7 @@ class AttentionLayers(nn.Module):
             use_qk_norm_attn=False,
             qk_norm_attn_seq_len=None,
             zero_init_branch_output=False,
+            do_checkpointing=True,
             **kwargs
     ):
         super().__init__()
@@ -786,6 +787,7 @@ class AttentionLayers(nn.Module):
         self.depth = depth
         self.layers = nn.ModuleList([])
         self.causal = causal
+        self.do_checkpointing = do_checkpointing
 
         rel_pos_bias = 'rel_pos_bias' in attn_kwargs
         self.has_pos_emb = position_infused_attn or rel_pos_bias or rotary_pos_emb
@@ -977,17 +979,21 @@ class AttentionLayers(nn.Module):
                 else:
                     layer_past = None
 
+            def fake_checkpoint(blk, *args):
+                return blk(*args)
+            chkpt_fn = checkpoint if self.do_checkpointing else fake_checkpoint
+
             if layer_type == 'a':
-                out, inter, k, v = checkpoint(block, x, None, mask, None, attn_mask, self.pia_pos_emb, rotary_pos_emb,
+                out, inter, k, v = chkpt_fn(block, x, None, mask, None, attn_mask, self.pia_pos_emb, rotary_pos_emb,
                                         prev_attn, layer_mem, layer_past)
             elif layer_type == 'c':
                 if exists(full_context):
-                    out, inter, k, v = checkpoint(block, x, full_context[cross_attn_count], mask, context_mask, None, None,
+                    out, inter, k, v = chkpt_fn(block, x, full_context[cross_attn_count], mask, context_mask, None, None,
                                             None, prev_attn, None, layer_past)
                 else:
-                    out, inter, k, v = checkpoint(block, x, context, mask, context_mask, None, None, None, prev_attn, None, layer_past)
+                    out, inter, k, v = chkpt_fn(block, x, context, mask, context_mask, None, None, None, prev_attn, None, layer_past)
             elif layer_type == 'f':
-                out = checkpoint(block, x)
+                out = chkpt_fn(block, x)
 
             if layer_type == 'a' or layer_type == 'c' and present_key_values is not None:
                 present_key_values.append((k.detach(), v.detach()))

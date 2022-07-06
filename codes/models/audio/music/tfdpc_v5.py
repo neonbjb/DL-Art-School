@@ -97,9 +97,9 @@ class ConditioningEncoder(nn.Module):
                 rotary_pos_emb=True,
                 zero_init_branch_output=True,
                 ff_mult=2,
+                do_checkpointing=do_checkpointing
             )
         self.dim = embedding_dim
-        self.do_checkpointing = do_checkpointing
 
     def forward(self, x, time_emb):
         h = self.init(x).permute(0,2,1)
@@ -126,6 +126,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
             num_heads=8,
             dropout=0,
             use_fp16=False,
+            checkpoint_conditioning=True,  # This will need to be false for DDP training. :(
             # Parameters for regularization.
             unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
     ):
@@ -140,7 +141,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
         self.enable_fp16 = use_fp16
 
         self.inp_block = conv_nd(1, in_channels, model_channels, 3, 1, 1)
-        self.conditioning_encoder = ConditioningEncoder(256, model_channels, time_embed_dim)
+        self.conditioning_encoder = ConditioningEncoder(256, model_channels, time_embed_dim, do_checkpointing=checkpoint_conditioning)
 
         self.time_embed = nn.Sequential(
             linear(time_embed_dim, time_embed_dim),
@@ -287,7 +288,7 @@ def test_cheater_model():
     # For music:
     model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
                                                         contraction_dim=512, num_heads=8, num_layers=15, dropout=0,
-                                                        unconditioned_percentage=.4)
+                                                        unconditioned_percentage=.4, checkpoint_conditioning=False)
     print_network(model)
     for k in range(100):
         o = model(clip, ts, cl)
@@ -406,6 +407,6 @@ def inference_tfdpc5_with_cheater():
             torchaudio.save(f'results/tfdpc_v3/{k}_ref.wav', sample.unsqueeze(0).cpu(), 22050)
 
 if __name__ == '__main__':
-    #test_cheater_model()
-    test_conditioning_splitting_logic()
+    test_cheater_model()
+    #test_conditioning_splitting_logic()
     #inference_tfdpc5_with_cheater()
