@@ -97,6 +97,7 @@ class TransformerDiffusion(nn.Module):
             out_channels=512,  # mean and variance
             num_heads=4,
             dropout=0,
+            use_corner_alignment=False,  # This is an interpolation parameter only provided for backwards compatibility. ALL NEW TRAINS SHOULD SET THIS TO TRUE.
             use_fp16=False,
             new_code_expansion=False,
             permute_codes=False,
@@ -117,6 +118,7 @@ class TransformerDiffusion(nn.Module):
         self.enable_fp16 = use_fp16
         self.new_code_expansion = new_code_expansion
         self.permute_codes = permute_codes
+        self.use_corner_alignment = use_corner_alignment
 
         self.inp_block = conv_nd(1, in_channels, prenet_channels, 3, 1, 1)
 
@@ -189,7 +191,7 @@ class TransformerDiffusion(nn.Module):
 
     def timestep_independent(self, prior, expected_seq_len):
         if self.new_code_expansion:
-            prior = F.interpolate(prior.permute(0,2,1), size=expected_seq_len, mode='linear').permute(0,2,1)
+            prior = F.interpolate(prior.permute(0,2,1), size=expected_seq_len, mode='linear', align_corners=self.use_corner_alignment).permute(0,2,1)
         code_emb = self.input_converter(prior)
         code_emb = self.code_converter(code_emb)
 

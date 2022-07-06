@@ -225,7 +225,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
             cond_right_enc = self.conditioning_encoder(cond_right_full, time_emb)
             ce = cond_right_enc[:,:,cond_right.shape[-1]-1]
         cond_enc = torch.cat([cs.unsqueeze(-1), ce.unsqueeze(-1)], dim=-1)
-        cond = F.interpolate(cond_enc, size=(N,), mode='linear').permute(0,2,1)
+        cond = F.interpolate(cond_enc, size=(N,), mode='linear', align_corners=True).permute(0,2,1)
         return cond
 
     def forward(self, x, timesteps, conditioning_input=None, conditioning_free=False, cond_start=0, custom_conditioning_fetcher=None):
@@ -302,6 +302,28 @@ def test_cheater_model():
         return sz
     for k, v in pg.items():
         print(f'{k}: {prmsz(v)/1000000}')
+
+
+def test_conditioning_splitting_logic():
+    ts = torch.LongTensor([600])
+    class fake_conditioner(nn.Module):
+        def __init__(self):
+            super().__init__()
+        def forward(self, t, _):
+            print(t[:,0])
+            return t
+    model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
+                                                        contraction_dim=512, num_heads=8, num_layers=15, dropout=0,
+                                                        unconditioned_percentage=.4)
+    model.conditioning_encoder = fake_conditioner()
+    BASEDIM=30
+    for x in range(BASEDIM+1, BASEDIM+20):
+        start = random.randint(0,x-BASEDIM)
+        cl = torch.arange(1, x+1, 1).view(1,1,-1).float().repeat(1,256,1)
+        print("Effective input: " + str(cl[0, 0, start:BASEDIM+start]))
+        res = model.process_conditioning(cl, ts, BASEDIM, start, None)
+        print("Result: " + str(res[0,:,0]))
+        print()
 
 
 def inference_tfdpc5_with_cheater():
@@ -384,5 +406,6 @@ def inference_tfdpc5_with_cheater():
             torchaudio.save(f'results/tfdpc_v3/{k}_ref.wav', sample.unsqueeze(0).cpu(), 22050)
 
 if __name__ == '__main__':
-    test_cheater_model()
+    #test_cheater_model()
+    test_conditioning_splitting_logic()
     #inference_tfdpc5_with_cheater()
