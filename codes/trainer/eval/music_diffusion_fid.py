@@ -37,6 +37,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         self.data = self.load_data(self.real_path)
         self.clip = opt_get(opt_eval, ['clip_audio'], True)  # Recommend setting true for more efficient eval passes.
         self.ddim = opt_get(opt_eval, ['use_ddim'], False)
+        self.causal = opt_get(opt_eval, ['causal'], True)
+        self.causal_slope = opt_get(opt_eval, ['causal_slope'], 1)
         if distributed.is_initialized() and distributed.get_world_size() > 1:
             self.skip = distributed.get_world_size()  # One batch element per GPU.
         else:
@@ -77,15 +79,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
             self.diffusion_fn = self.perform_diffusion_from_codes_quant_gradual_decode
         elif 'cheater_gen' == mode:
             self.diffusion_fn = self.perform_reconstruction_from_cheater_gen
-            self.local_modules['cheater_encoder'] = get_cheater_encoder()
-            self.local_modules['cheater_decoder'] = get_cheater_decoder()
-            self.cheater_decoder_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
-                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
-                           conditioning_free=True, conditioning_free_k=1)
-            self.spec_decoder = get_mel2wav_v3_model()  # The only reason the other functions don't use v3 is because earlier models were trained with v1 and I want to keep metrics consistent.
-            self.local_modules['spec_decoder'] = self.spec_decoder
-        elif 'cheater_gen_fake_ar' == mode:
-            self.diffusion_fn = self.perform_fake_ar_reconstruction_from_cheater_gen
             self.local_modules['cheater_encoder'] = get_cheater_encoder()
             self.local_modules['cheater_decoder'] = get_cheater_decoder()
             self.cheater_decoder_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
@@ -230,7 +223,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
         cheater = self.local_modules['cheater_encoder'].to(audio.device)(mel_norm)
 
         # 1. Generate the cheater latent using the input as a reference.
-        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True, model_kwargs={'conditioning_input': cheater})
+        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True,
+                                                     model_kwargs={'conditioning_input': cheater},
+                                                     causal=self.causal, causal_slope=self.causal_slope)
 
         # 2. Decode the cheater into a MEL. This operation and the next need to be chunked to make them feasible to perform within GPU memory.
         chunks = torch.split(gen_cheater, 64, dim=-1)
@@ -400,9 +395,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
             real_projections = []
             for i in tqdm(list(range(0, len(self.data), self.skip))):
                 path = self.data[(i + self.env['rank']) % len(self.data)]
-                #audio = load_audio(path, 22050).to(self.dev)
-                audio = load_audio('C:\\Users\\James\\Music\\another_longer_sample.wav', 22050).to(self.dev)  # <- hack, remove it!
-                audio = audio[:, :1764000]
+                audio = load_audio(path, 22050).to(self.dev)
+                #audio = load_audio('C:\\Users\\James\\Music\\another_longer_sample.wav', 22050).to(self.dev)  # <- hack, remove it!
+                #audio = audio[:, :1764000]
                 if self.clip:
                     audio = audio[:, :100000]
                 sample, ref, sample_mel, ref_mel, sample_rate = self.diffusion_fn(audio)
@@ -436,13 +431,14 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen_r8.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\203000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5_causal\\models\\1000_generator.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
                 'diffusion_steps': 64,
                 'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': False,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen_fake_ar',
+                'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
+                'causal': True, 'causal_slope': 4,
                 #'partial_low': 128, 'partial_high': 192
     }
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 232, 'device': 'cuda', 'opt': {}}

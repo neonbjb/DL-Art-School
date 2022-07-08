@@ -336,7 +336,7 @@ class GaussianDiffusion:
         if self.conditioning_free:
             if self.ramp_conditioning_free:
                 assert t.shape[0] == 1  # This should only be used in inference.
-                cfk = self.conditioning_free_k * (1 - self._scale_timesteps(t)[0].item() / self.num_timesteps)
+                cfk = self.conditioning_free_k * (1 - self._scale_timesteps(t).float().mean().item() / self.num_timesteps)
             else:
                 cfk = self.conditioning_free_k
             model_output = (1 + cfk) * model_output - cfk * model_output_no_conditioning
@@ -660,9 +660,12 @@ class GaussianDiffusion:
             out["pred_xstart"] * th.sqrt(alpha_bar_prev)
             + th.sqrt(1 - alpha_bar_prev - sigma ** 2) * eps
         )
-        nonzero_mask = (
-            (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
-        )  # no noise when t == 0
+        if len(t.shape) == 2:
+            nonzero_mask = (
+                (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
+            )  # no noise when t == 0
+        else:
+            nonzero_mask = (t != 0).float()
         sample = mean_pred + nonzero_mask * sigma * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
@@ -710,11 +713,13 @@ class GaussianDiffusion:
         shape,
         noise=None,
         clip_denoised=True,
+        causal=False,
+        causal_slope=1,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
         device=None,
-        progress=False,
+        progress=True,
         eta=0.0,
     ):
         """
@@ -728,6 +733,8 @@ class GaussianDiffusion:
             shape,
             noise=noise,
             clip_denoised=clip_denoised,
+            causal=causal,
+            causal_slope=causal_slope,
             denoised_fn=denoised_fn,
             cond_fn=cond_fn,
             model_kwargs=model_kwargs,
@@ -744,11 +751,13 @@ class GaussianDiffusion:
         shape,
         noise=None,
         clip_denoised=True,
+        causal=False,
+        causal_slope=1,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
         device=None,
-        progress=False,
+        progress=True,
         eta=0.0,
     ):
         """
@@ -772,8 +781,15 @@ class GaussianDiffusion:
 
             indices = tqdm(indices)
 
+        orig_img = img
         for i in indices:
             t = th.tensor([i] * shape[0], device=device)
+            mask = torch.zeros_like(img)
+            if causal:
+                t = causal_timestep_adjustment(t, shape[-1], self.num_timesteps, causal_slope, add_jitter=False).unsqueeze(1)
+                mask = t == self.num_timesteps
+                t[mask] = self.num_timesteps-1
+                mask = mask.repeat(img.shape[0], img.shape[1], 1)
             with th.no_grad():
                 out = self.ddim_sample(
                     model,
@@ -787,6 +803,8 @@ class GaussianDiffusion:
                 )
                 yield out
                 img = out["sample"]
+                if torch.any(mask):
+                    img[mask] = orig_img[mask]  # For causal diffusion, keep resetting these predictions until they are unmasked.
 
     def _vb_terms_bpd(
         self, model, x_start, x_t, t, clip_denoised=True, model_kwargs=None
