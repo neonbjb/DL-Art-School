@@ -5,4 +5,14 @@ https://github.com/neonbjb/demucs
 conda activate demucs
 python setup.py install
 CUDA_VISIBLE_DEVICES=0 python -m demucs /y/split/bt-music-5 --out=/y/separated/bt-music-5 --num_workers=2 --device cuda --two-stems=vocals
-``
+```
+
+Example usage of generate_long_cheaters and generate_long_mels, post demucs:
+
+```
+CUDA_VISIBLE_DEVICES=0 python generate_long_mels.py --path=/y/separated/mpm/1 --progress_file=/y/separated/large_mels/mpm/already_processed.txt \
+--output_path=/y/separated/large_mels/mpm/1 --num_threads=2
+
+CUDA_VISIBLE_DEVICES=2 python generate_long_cheaters.py --path=/y/separated/large_mels/mpm/3 --progress_file=/y/separated/large_mel_cheaters/mpm/already_processed.txt \
+--output_path=/y/separated/large_mel_cheaters/mpm/3 --num_threads=1
+```

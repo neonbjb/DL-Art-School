@@ -47,9 +47,9 @@ def process_file(file, base_path, output_path, progress_file, duration_per_clip,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-path', type=str, help='Path to search for files', default='C:\\Users\\James\\Downloads\\soundcloud-dl\\sc2')
-    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='C:\\Users\\James\\Downloads\\soundcloud-dl\\sc2\\already_processed.txt')
-    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\soundcloud_mixes\\bigmix1')
+    parser.add_argument('-path', type=str, help='Path to search for files', default='Y:\\sources\\soundcloud-mixes\\mixes2')
+    parser.add_argument('-progress_file', type=str, help='Place to store all files that have already been processed', default='Y:\\sources\\soundcloud-mixes\\mixes2\\already_processed.txt')
+    parser.add_argument('-output_path', type=str, help='Path for output files', default='Y:\\split\\soundcloud-mixes2')
     parser.add_argument('-num_threads', type=int, help='Number of concurrent workers processing files.', default=4)
     parser.add_argument('-duration', type=int, help='Duration per clip in seconds', default=30)
     args = parser.parse_args()

@@ -1,6 +1,31 @@
 import torch
 
 
+def music2mel(clip):
+    if len(clip.shape) == 1:
+        clip = clip.unsqueeze(0)
+
+    from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector
+    inj = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000,
+                                       'normalize': True, 'true_normalization': True, 'in': 'in', 'out': 'out'}, {})
+    return inj({'in': clip})['out']
+
+
+def music2cqt(clip):
+    def normalize_cqt(cqt):
+        # CQT_MIN = 0
+        CQT_MAX = 18
+        return 2 * cqt / CQT_MAX - 1
+
+    if len(clip.shape) == 1:
+        clip = clip.unsqueeze(0)
+    from nnAudio.features.cqt import CQT
+    # Visually, filter_scale=.25 seems to be the most descriptive representation, but loses frequency fidelity.
+    # It may be desirable to mix filter_scale=.25 with filter_scale=1.
+    cqt = CQT(sr=22050, hop_length=256, n_bins=256, bins_per_octave=32, filter_scale=.25, norm=1, verbose=False)
+    return normalize_cqt(cqt(clip))
+
+
 def get_mel2wav_model():
     from models.audio.music.unet_diffusion_waveform_gen_simple import DiffusionWaveformGen
     model = DiffusionWaveformGen(model_channels=256, in_channels=16, in_mel_channels=256, out_channels=32, channel_mult=[1,2,3,4,4],
