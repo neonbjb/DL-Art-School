@@ -7,14 +7,15 @@ Docstrings have been added, as well as DDIM sampling and a new collection of bet
 
 import enum
 import math
+import random
 
 import numpy as np
 import torch
 import torch as th
 from tqdm import tqdm
 
-from .nn import mean_flat
-from .losses import normal_kl, discretized_gaussian_log_likelihood
+from models.diffusion.nn import mean_flat
+from models.diffusion.losses import normal_kl, discretized_gaussian_log_likelihood
 
 
 def causal_timestep_adjustment(t, S, num_timesteps, causal_slope=1, add_jitter=True):
@@ -37,41 +38,16 @@ def causal_timestep_adjustment(t, S, num_timesteps, causal_slope=1, add_jitter=T
     # This algorithm for adding causality does so by simply adding S_sloped additional timesteps. To make this
     # actually work, we map the existing t from the timescale specified to the model to the causal timescale:
     adj_t = t * (num_timesteps + S_sloped) // num_timesteps
+    adj_t = adj_t - S_sloped
     if add_jitter:
-        jitter = (random.random() - .5) * S_sloped
-        adj_t = (adj_t+jitter).clamp(0, num_timesteps+S_sloped)
+        t_gap = (num_timesteps + S_sloped) / num_timesteps
+        jitter = (2*random.random()-1) * t_gap
+        adj_t = (adj_t+jitter).clamp(-S_sloped, num_timesteps)
 
     # Now use the re-mapped adj_t to create a timestep vector that propagates across the sequence with the specified slope.
     t = adj_t.unsqueeze(1).repeat(1, S)
-    t = (t - torch.arange(0, S) * causal_slope).clamp(0, num_timesteps).long()
+    t = (t + torch.arange(0, S, device=t.device) * causal_slope).clamp(0, num_timesteps).long()
     return t
-
-
-def graph_causal_timestep_adjustment():
-    S = 400
-    slope=4
-    num_timesteps=4000
-    #for num_timesteps in range(100, 4000, 200):
-    t_res = []
-    for t in range(num_timesteps, -1, -num_timesteps//50):
-        T = causal_timestep_adjustment(torch.tensor([t]), S, num_timesteps, causal_slope=slope, add_jitter=False)[0]
-        t_res.append(T)
-        plt.plot(T.numpy())
-        plt.ylim(0,4000)
-        plt.xlim(0,500)
-        plt.savefig(f'{t}.png')
-        plt.clf()
-
-    for i in range(len(t_res)):
-        for j in range(len(t_res)):
-            if i == j:
-                continue
-            #assert not torch.all(t_res[i] == t_res[j])
-    plt.ylim(0,4000)
-    plt.xlim(0,500)
-    plt.ylabel('timestep')
-    plt.savefig(f'{num_timesteps}.png')
-    plt.clf()
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
@@ -319,7 +295,7 @@ class GaussianDiffusion:
             model_kwargs = {}
 
         B, C = x.shape[:2]
-        assert t.shape == (B,)
+        assert t.shape == (B,) or t.shape == (B,1,x.shape[-1])
         model_output = model(x, self._scale_timesteps(t), **model_kwargs)
         if self.conditioning_free:
             model_output_no_conditioning = model(x, self._scale_timesteps(t), conditioning_free=True, **model_kwargs)
@@ -844,7 +820,10 @@ class GaussianDiffusion:
 
         # At the first timestep return the decoder NLL,
         # otherwise return KL(q(x_{t-1}|x_t,x_0) || p(x_{t-1}|x_t))
-        output = th.where((t == 0).view(-1, 1, 1), decoder_nll, kl)
+        if len(t.shape) == 1:
+            output = th.where((t == 0).view(-1, 1, 1), decoder_nll, kl)
+        else:
+            output = th.where((t == 0), decoder_nll, kl)
         return {"output": output, "pred_xstart": out["pred_xstart"]}
 
     def causal_training_losses(self, model, x_start, t, causal_slope=1, model_kwargs=None, noise=None, channel_balancing_fn=None):
@@ -852,8 +831,9 @@ class GaussianDiffusion:
         Compute training losses for a causal diffusion process.
         """
         assert len(x_start.shape) == 3, "causal_training_losses assumes a 1d sequence with the axis being the time axis."
-        t = causal_timestep_adjustment(t, x_start.shape[-1], self.num_timesteps, causal_slope, add_jitter=True)
-        return self.training_losses(model, x_start, t, model_kwargs, noise, channel_balancing_fn)
+        ct = causal_timestep_adjustment(t, x_start.shape[-1], self.num_timesteps, causal_slope, add_jitter=True)
+        ct = ct.unsqueeze(1)  # Necessary to make the output shape compatible with x_start.
+        return self.training_losses(model, x_start, ct, model_kwargs, noise, channel_balancing_fn)
 
     def training_losses(self, model, x_start, t, model_kwargs=None, noise=None, channel_balancing_fn=None):
         """
@@ -872,6 +852,13 @@ class GaussianDiffusion:
             model_kwargs = {}
         if noise is None:
             noise = th.randn_like(x_start)
+
+        if len(t.shape) == 3:
+            t_mask = t != self.num_timesteps
+            t[t_mask.logical_not()] = self.num_timesteps-1
+        else:
+            t_mask = torch.ones_like(x_start)
+
         x_t = self.q_sample(x_start, t, noise=noise)
 
         terms = {}
@@ -912,7 +899,7 @@ class GaussianDiffusion:
                     x_t=x_t,
                     t=t,
                     clip_denoised=False,
-                )["output"]
+                )["output"] * t_mask
                 if self.loss_type == LossType.RESCALED_MSE:
                     # Divide by 1000 for equivalence with initial implementation.
                     # Without a factor of 1/1000, the VB term hurts the MSE term.
@@ -932,7 +919,7 @@ class GaussianDiffusion:
             else:
                 raise NotImplementedError(self.model_mean_type)
             assert model_output.shape == target.shape == x_start.shape
-            s_err = (target - model_output) ** 2
+            s_err = t_mask * (target - model_output) ** 2
             if channel_balancing_fn is not None:
                 s_err = channel_balancing_fn(s_err)
             terms["mse_by_batch"] = s_err.reshape(s_err.shape[0], -1).mean(dim=1)
@@ -1039,3 +1026,47 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
     while len(res.shape) < len(broadcast_shape):
         res = res[..., None]
     return res.expand(broadcast_shape)
+
+
+def test_causal_training_losses():
+    from models.diffusion.respace import SpacedDiffusion
+    from models.diffusion.respace import space_timesteps
+    diff = SpacedDiffusion(use_timesteps=space_timesteps(4000, [4000]), model_mean_type='epsilon',
+                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                           conditioning_free=False, conditioning_free_k=1)
+    class IdentityTwoArg(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+        def forward(self, x, *args, **kwargs):
+            return x.repeat(1,2,1)
+
+    model = IdentityTwoArg()
+    diff.causal_training_losses(model, torch.randn(4,256,400), torch.tensor([500,1000,3000,3500]), causal_slope=4)
+
+def graph_causal_timestep_adjustment():
+    import matplotlib.pyplot as plt
+    S = 400
+    #slope=4
+    num_timesteps=4000
+    for slpe in range(10, 400, 10):
+        slope = slpe / 10
+        t_res = []
+        for t in range(num_timesteps, -1, -num_timesteps//50):
+            T = causal_timestep_adjustment(torch.tensor([t]), S, num_timesteps, causal_slope=slope, add_jitter=False)[0]
+            t_res.append(T)
+            plt.plot(T.numpy())
+
+        for i in range(len(t_res)):
+            for j in range(len(t_res)):
+                if i == j:
+                    continue
+                #assert not torch.all(t_res[i] == t_res[j])
+        plt.ylim(0,num_timesteps)
+        plt.xlim(0,4000)
+        plt.ylabel('timestep')
+        plt.savefig(f'{slpe}.png')
+        plt.clf()
+
+if __name__ == '__main__':
+    #test_causal_training_losses()
+    graph_causal_timestep_adjustment()

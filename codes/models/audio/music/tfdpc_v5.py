@@ -81,11 +81,14 @@ class ConditioningEncoder(nn.Module):
                  attn_blocks=6,
                  num_attn_heads=8,
                  dropout=.1,
-                 do_checkpointing=False):
+                 do_checkpointing=False,
+                 time_proj=True):
         super().__init__()
         attn = []
         self.init = nn.Conv1d(cond_dim, embedding_dim, kernel_size=1)
-        self.time_proj = nn.Linear(time_embed_dim, embedding_dim)
+        self.time_proj = time_proj
+        if time_proj:
+            self.time_proj = nn.Linear(time_embed_dim, embedding_dim)
         self.attn = Encoder(
                 dim=embedding_dim,
                 depth=attn_blocks,
@@ -103,8 +106,9 @@ class ConditioningEncoder(nn.Module):
 
     def forward(self, x, time_emb):
         h = self.init(x).permute(0,2,1)
-        time_enc = self.time_proj(time_emb)
-        h = torch.cat([time_enc.unsqueeze(1), h], dim=1)
+        if self.time_proj:
+            time_enc = self.time_proj(time_emb)
+            h = torch.cat([time_enc.unsqueeze(1), h], dim=1)
         h = self.attn(h).permute(0,2,1)
         return h
 
@@ -125,6 +129,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
             input_cond_dim=1024,
             num_heads=8,
             dropout=0,
+            time_proj=False,
             use_fp16=False,
             checkpoint_conditioning=True,  # This will need to be false for DDP training. :(
             # Parameters for regularization.
@@ -141,7 +146,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
         self.enable_fp16 = use_fp16
 
         self.inp_block = conv_nd(1, in_channels, model_channels, 3, 1, 1)
-        self.conditioning_encoder = ConditioningEncoder(256, model_channels, time_embed_dim, do_checkpointing=checkpoint_conditioning)
+        self.conditioning_encoder = ConditioningEncoder(256, model_channels, time_embed_dim, do_checkpointing=checkpoint_conditioning, time_proj=time_proj)
 
         self.time_embed = nn.Sequential(
             linear(time_embed_dim, time_embed_dim),
@@ -210,11 +215,12 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
             cond_left = cond_aligned[:,:,:break_pt]
             cond_right = cond_aligned[:,:,break_pt:]
 
-            # Drop out a random amount of the aligned data. The network will need to figure out how to reconstruct this.
-            to_remove_left = random.randint(1, cond_left.shape[-1]-MIN_MARGIN)
-            cond_left = cond_left[:,:,:-to_remove_left]
-            to_remove_right = random.randint(1, cond_right.shape[-1]-MIN_MARGIN)
-            cond_right = cond_right[:,:,to_remove_right:]
+            if self.training:
+                # Drop out a random amount of the aligned data. The network will need to figure out how to reconstruct this.
+                to_remove_left = random.randint(1, cond_left.shape[-1]-MIN_MARGIN)
+                cond_left = cond_left[:,:,:-to_remove_left]
+                to_remove_right = random.randint(1, cond_right.shape[-1]-MIN_MARGIN)
+                cond_right = cond_right[:,:,to_remove_right:]
 
             # Concatenate the _pre and _post back on.
             cond_left_full = torch.cat([cond_pre, cond_left], dim=-1)

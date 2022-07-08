@@ -1,4 +1,5 @@
 import functools
+import random
 
 import torch
 from torch.cuda.amp import autocast
@@ -44,6 +45,8 @@ class GaussianDiffusionInjector(Injector):
         self.extra_model_output_keys = opt_get(opt, ['extra_model_output_keys'], [])
         self.deterministic_timesteps_every = opt_get(opt, ['deterministic_timesteps_every'], 0)
         self.deterministic_sampler = DeterministicSampler(self.diffusion, opt_get(opt, ['deterministic_sampler_expected_batch_size'], 2048), env)
+        self.causal_mode = opt_get(opt, ['causal_mode'], False)
+        self.causal_slope_range = opt_get(opt, ['causal_slope_range'], [1,8])
 
         k = 0
         if 'channel_balancer_proportion' in opt.keys():
@@ -86,7 +89,16 @@ class GaussianDiffusionInjector(Injector):
                 self.deterministic_sampler.reset()  # Keep this reset whenever it is not being used, so it is ready to use automatically.
             model_inputs = {k: state[v] if isinstance(v, str) else v for k, v in self.model_input_keys.items()}
             t, weights = sampler.sample(hq.shape[0], hq.device)
-            diffusion_outputs = self.diffusion.training_losses(gen, hq, t, model_kwargs=model_inputs, channel_balancing_fn=self.channel_balancing_fn)
+            if self.causal_mode:
+                cs, ce = self.causal_slope_range
+                slope = random.random() * (ce-cs) + cs
+                diffusion_outputs = self.diffusion.causal_training_losses(gen, hq, t, model_kwargs=model_inputs,
+                                                                   channel_balancing_fn=self.channel_balancing_fn,
+                                                                          causal_slope=slope)
+            else:
+                diffusion_outputs = self.diffusion.training_losses(gen, hq, t, model_kwargs=model_inputs,
+                                                                   channel_balancing_fn=self.channel_balancing_fn)
+
             if isinstance(sampler, LossAwareSampler):
                 sampler.update_with_local_losses(t, diffusion_outputs['loss'])
             if len(self.extra_model_output_keys) > 0:
