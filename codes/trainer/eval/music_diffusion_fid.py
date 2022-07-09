@@ -215,7 +215,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
 
     def perform_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
-        assert self.ddim, "DDIM mode expected for reconstructing cheater gen. Do you like to waste resources??"
+        #assert self.ddim, "DDIM mode expected for reconstructing cheater gen. Do you like to waste resources??"
         audio = audio.unsqueeze(0)
 
         mel = self.spec_fn({'in': audio})['out']
@@ -223,9 +223,10 @@ class MusicDiffusionFid(evaluator.Evaluator):
         cheater = self.local_modules['cheater_encoder'].to(audio.device)(mel_norm)
 
         # 1. Generate the cheater latent using the input as a reference.
-        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True,
-                                                     causal=self.causal, causal_slope=self.causal_slope,
-                                                     model_kwargs={'conditioning_input': cheater})
+        sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
+        gen_cheater = sampler(self.model, cheater.shape, progress=True,
+                              causal=self.causal, causal_slope=self.causal_slope,
+                              model_kwargs={'conditioning_input': cheater})
 
         # 2. Decode the cheater into a MEL
         gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
@@ -423,14 +424,14 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5_causal_retrain\\models\\12000_generator.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5_causal_retrain\\models\\18000_generator.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
-                'diffusion_steps': 64,
-                'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': False,
+                'diffusion_steps': 256,
+                'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': False,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
-                'causal': True, 'causal_slope': 4,
+                'causal': True, 'causal_slope': 1,
                 #'partial_low': 128, 'partial_high': 192
     }
     env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 236, 'device': 'cuda', 'opt': {}}
