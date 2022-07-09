@@ -223,7 +223,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
         cheater = self.local_modules['cheater_encoder'].to(audio.device)(mel_norm)
 
         # 1. Generate the cheater latent using the input as a reference.
-        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True, model_kwargs={'conditioning_input': cheater})
+        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True,
+                                                     causal=self.causal, causal_slope=self.causal_slope,
+                                                     model_kwargs={'conditioning_input': cheater})
 
         # 2. Decode the cheater into a MEL
         gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
@@ -253,8 +255,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         cheater_codes = self.kmeans_inj({'in': cheater})['out']
         ar_latent = self.local_modules['ar_prior'].to(audio.device)(cheater_codes, cheater, return_latent=True)
 
-        gen_mel = self.diffuser.ddim_sample_loop(self.model, mel_norm.shape, model_kwargs={'codes': ar_latent},
-                                                 causal=self.causal, causal_slope=self.causal_slope, progress=True)
+        gen_mel = self.diffuser.ddim_sample_loop(self.model, mel_norm.shape, model_kwargs={'codes': ar_latent}, progress=True)
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
