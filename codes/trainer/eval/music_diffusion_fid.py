@@ -223,36 +223,23 @@ class MusicDiffusionFid(evaluator.Evaluator):
         cheater = self.local_modules['cheater_encoder'].to(audio.device)(mel_norm)
 
         # 1. Generate the cheater latent using the input as a reference.
-        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True,
-                                                     model_kwargs={'conditioning_input': cheater},
-                                                     causal=self.causal, causal_slope=self.causal_slope)
+        gen_cheater = self.diffuser.ddim_sample_loop(self.model, cheater.shape, progress=True, model_kwargs={'conditioning_input': cheater})
 
-        # 2. Decode the cheater into a MEL. This operation and the next need to be chunked to make them feasible to perform within GPU memory.
-        chunks = torch.split(gen_cheater, 64, dim=-1)
-        gen_mels = []
-        gen_wavs = []
-        for chunk in tqdm(chunks):
-            gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,chunk.shape[-1]*16), progress=True,
-                                                     model_kwargs={'codes': chunk.permute(0,2,1)})
-            gen_mels.append(gen_mel)
+        # 2. Decode the cheater into a MEL
+        gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
+                                                 model_kwargs={'codes': gen_cheater.permute(0,2,1)})
 
-            # 3. And then the MEL back into a spectrogram
-            output_shape = (1,16,audio.shape[-1]//(16*len(chunks)))
-            self.spec_decoder = self.spec_decoder.to(audio.device)
-            gen_mel_denorm = denormalize_mel(gen_mel)
-            gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                                  model_kwargs={'codes': gen_mel_denorm})
-            gen_wav = pixel_shuffle_1d(gen_wav, 16)
-            gen_wavs.append(gen_wav)
-        gen_mel = torch.cat(gen_mels, dim=-1)
-        gen_wav = torch.cat(gen_wavs, dim=-1)
+        # 3. And then the MEL back into a spectrogram
+        output_shape = (1,16,audio.shape[-1]//16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        gen_mel_denorm = denormalize_mel(gen_mel)
+        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'codes': gen_mel_denorm})
+        gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
-        if audio.shape[-1] < 40 * 22050:
-            real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                                  model_kwargs={'codes': mel})
-            real_wav = pixel_shuffle_1d(real_wav, 16)
-        else:
-            real_wav = audio  # TODO: chunk like above.
+        real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'codes': mel})
+        real_wav = pixel_shuffle_1d(real_wav, 16)
 
         return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
 
@@ -432,18 +419,18 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen_r8.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen_v5\\train.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5_causal\\models\\1000_generator.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\206000_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
                 'diffusion_steps': 64,
                 'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': False,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
-                'causal': True, 'causal_slope': 4,
+                #'causal': True, 'causal_slope': 4,
                 #'partial_low': 128, 'partial_high': 192
     }
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 232, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 235, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
