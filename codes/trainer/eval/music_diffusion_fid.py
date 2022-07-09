@@ -253,7 +253,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         cheater_codes = self.kmeans_inj({'in': cheater})['out']
         ar_latent = self.local_modules['ar_prior'].to(audio.device)(cheater_codes, cheater, return_latent=True)
 
-        gen_mel = self.diffuser.ddim_sample_loop(self.model, mel_norm.shape, model_kwargs={'codes': ar_latent}, progress=True)
+        gen_mel = self.diffuser.ddim_sample_loop(self.model, mel_norm.shape, model_kwargs={'codes': ar_latent},
+                                                 causal=self.causal, causal_slope=self.causal_slope, progress=True)
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
@@ -419,18 +420,18 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
-    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen_v5\\train.yml', 'generator',
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5\\models\\206000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5_causal_retrain\\models\\12000_generator.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
                 'diffusion_steps': 64,
                 'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': False,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
-                #'causal': True, 'causal_slope': 4,
+                'causal': True, 'causal_slope': 4,
                 #'partial_low': 128, 'partial_high': 192
     }
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 235, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 236, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     print(eval.perform_eval())
