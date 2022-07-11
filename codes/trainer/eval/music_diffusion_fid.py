@@ -37,7 +37,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         self.data = self.load_data(self.real_path)
         self.clip = opt_get(opt_eval, ['clip_audio'], True)  # Recommend setting true for more efficient eval passes.
         self.ddim = opt_get(opt_eval, ['use_ddim'], False)
-        self.causal = opt_get(opt_eval, ['causal'], True)
+        self.causal = opt_get(opt_eval, ['causal'], False)
         self.causal_slope = opt_get(opt_eval, ['causal_slope'], 1)
         if distributed.is_initialized() and distributed.get_world_size() > 1:
             self.skip = distributed.get_world_size()  # One batch element per GPU.
@@ -84,11 +84,18 @@ class MusicDiffusionFid(evaluator.Evaluator):
             self.cheater_decoder_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
                            model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
                            conditioning_free=True, conditioning_free_k=1)
+            self.spectral_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [16]), model_mean_type='epsilon',
+                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                           conditioning_free=False, conditioning_free_k=1)
             self.spec_decoder = get_mel2wav_v3_model()  # The only reason the other functions don't use v3 is because earlier models were trained with v1 and I want to keep metrics consistent.
             self.local_modules['spec_decoder'] = self.spec_decoder
         elif 'from_ar_prior' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes_ar_prior
             self.local_modules['cheater_encoder'] = get_cheater_encoder()
+            self.local_modules['cheater_decoder'] = get_cheater_decoder()
+            self.cheater_decoder_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
+                           model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
+                           conditioning_free=True, conditioning_free_k=1)
             self.kmeans_inj = KmeansQuantizerInjector({'centroids': '../experiments/music_k_means_centroids.pth', 'in': 'in', 'out': 'out'}, {})
             self.local_modules['ar_prior'] = get_ar_prior()
             self.spec_decoder = get_mel2wav_v3_model()
@@ -215,7 +222,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
         return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
 
     def perform_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
-        #assert self.ddim, "DDIM mode expected for reconstructing cheater gen. Do you like to waste resources??"
         audio = audio.unsqueeze(0)
 
         mel = self.spec_fn({'in': audio})['out']
@@ -236,18 +242,17 @@ class MusicDiffusionFid(evaluator.Evaluator):
         output_shape = (1,16,audio.shape[-1]//16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
         gen_mel_denorm = denormalize_mel(gen_mel)
-        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+        gen_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape,
                                               model_kwargs={'codes': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
-        real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+        real_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape,
                                               model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
         return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
 
     def perform_diffusion_from_codes_ar_prior(self, audio, sample_rate=22050):
-        assert self.ddim, "DDIM mode expected for reconstructing cheater gen. Do you like to waste resources??"
         audio = audio.unsqueeze(0)
 
         mel = self.spec_fn({'in': audio})['out']
@@ -256,17 +261,24 @@ class MusicDiffusionFid(evaluator.Evaluator):
         cheater_codes = self.kmeans_inj({'in': cheater})['out']
         ar_latent = self.local_modules['ar_prior'].to(audio.device)(cheater_codes, cheater, return_latent=True)
 
-        gen_mel = self.diffuser.ddim_sample_loop(self.model, mel_norm.shape, model_kwargs={'codes': ar_latent}, progress=True)
+        # 1. Generate the cheater latent using the input as a reference.
+        sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
+        gen_cheater = sampler(self.model, cheater.shape, progress=True,
+                              causal=self.causal, causal_slope=self.causal_slope,
+                              model_kwargs={'codes': ar_latent})
 
+        # 2. Decode the cheater into a MEL
+        gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
+                                                 model_kwargs={'codes': gen_cheater.permute(0,2,1)})
         gen_mel_denorm = denormalize_mel(gen_mel)
+
+        # 3. Decode into waveform.
         output_shape = (1,16,audio.shape[-1]//16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape,
-                                              model_kwargs={'codes': gen_mel_denorm})
+        gen_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape, model_kwargs={'codes': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
-        real_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape,
-                                              model_kwargs={'codes': mel})
+        real_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape, model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
         return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
@@ -424,16 +436,23 @@ class MusicDiffusionFid(evaluator.Evaluator):
 if __name__ == '__main__':
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_cheater_gen.yml', 'generator',
                                        also_load_savepoint=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5_causal_retrain\\models\\22000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_cheater_gen_v5_causal_retrain\\models\\53000_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
-                'diffusion_steps': 100,
+                'diffusion_steps': 220,  # basis: 192
                 'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': False,
                 'diffusion_schedule': 'linear', 'diffusion_type': 'cheater_gen',
-                'causal': True, 'causal_slope': 1,
+                # Slope 1: 1.03x, 2: 1.06, 4: 1.135, 8: 1.27, 16: 1.54
+                'causal': True, 'causal_slope': 3,  # DONT FORGET TO INCREMENT THE STEP!
                 #'partial_low': 128, 'partial_high': 192
     }
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 236, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 3, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
-    print(eval.perform_eval())
+    fds = []
+    for i in range(2):
+        res = eval.perform_eval()
+        print(res)
+        fds.append(res['frechet_distance'])
+    print(fds)
+
