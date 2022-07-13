@@ -212,7 +212,7 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
 
         if cond_left is None and self.new_cond:
             cond_left = conditioning_input[:,:,:max(cond_start, 20)]
-            left_pt = cond_start
+            left_pt = cond_start-1
             cond_right = conditioning_input[:,:,min(N+cond_start, conditioning_input.shape[-1]-20):]
             right_pt = cond_right.shape[-1] - (conditioning_input.shape[-1] - (N+cond_start))
         elif cond_left is None:
