@@ -14,6 +14,7 @@ class UpperEncoder(nn.Module):
                  spec_dim,
                  hidden_dim,
                  embedding_dim,
+                 checkpointing_enabled=True,
                  ):
         super().__init__()
         attn = []
@@ -21,18 +22,18 @@ class UpperEncoder(nn.Module):
             dd = min(spec_dim + m * 128, hidden_dim)
             return ceil_multiple(dd, 8)
         self.downsampler = nn.Sequential(
-            ResBlock(spec_dim, out_channels=edim(1), use_conv=True, dims=1, down=True),
-            ResBlock(edim(1), out_channels=edim(2), use_conv=True, dims=1, down=True),
-            ResBlock(edim(2), out_channels=edim(3), use_conv=True, dims=1, down=True),
-            ResBlock(edim(3), out_channels=edim(4), use_conv=True, dims=1),
-            ResBlock(edim(4), out_channels=hidden_dim, use_conv=True, dims=1, down=True))
+            ResBlock(spec_dim, out_channels=edim(1), use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled),
+            ResBlock(edim(1), out_channels=edim(2), use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled),
+            ResBlock(edim(2), out_channels=edim(3), use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled),
+            ResBlock(edim(3), out_channels=edim(4), use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
+            ResBlock(edim(4), out_channels=hidden_dim, use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled))
         self.encoder = nn.Sequential(
             AttentionBlock(hidden_dim, 4, do_activation=True),
-            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1),
+            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
             AttentionBlock(hidden_dim, 4, do_activation=True),
-            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1),
+            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
             AttentionBlock(hidden_dim, 4, do_activation=True),
-            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1),
+            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
             nn.GroupNorm(8, hidden_dim),
             nn.SiLU(),
             nn.Conv1d(hidden_dim, embedding_dim, 1),
@@ -44,6 +45,8 @@ class UpperEncoder(nn.Module):
         h = self.encoder(h)
         return h
 
+
+    
 
 class GptMusicLower(nn.Module):
     def __init__(self, dim, layers, encoder_out_dim, dropout=0, num_target_vectors=8192, fp16=True, num_vaes=4, vqargs={}):

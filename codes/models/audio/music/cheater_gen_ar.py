@@ -31,9 +31,9 @@ class ConditioningEncoder(nn.Module):
                 rotary_pos_emb=True,
                 zero_init_branch_output=True,
                 ff_mult=2,
+                do_checkpointing=do_checkpointing
             )
         self.dim = embedding_dim
-        self.do_checkpointing = do_checkpointing
 
     def forward(self, x):
         h = self.init(x).permute(0,2,1)

@@ -367,12 +367,14 @@ class ResBlock(nn.Module):
         up=False,
         down=False,
         kernel_size=3,
+        checkpointing_enabled=True,
     ):
         super().__init__()
         self.channels = channels
         self.dropout = dropout
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
+        self.checkpointing_enabled = checkpointing_enabled
         padding = 1 if kernel_size == 3 else 2
 
         self.in_layers = nn.Sequential(
@@ -417,9 +419,12 @@ class ResBlock(nn.Module):
         :param x: an [N x C x ...] Tensor of features.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        return checkpoint(
-            self._forward, x
-        )
+        if self.checkpointing_enabled:
+            return checkpoint(
+                self._forward, x
+            )
+        else:
+            return self._forward(x)
 
     def _forward(self, x):
         if self.updown:
