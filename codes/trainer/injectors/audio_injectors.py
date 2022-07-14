@@ -98,11 +98,24 @@ class RandomAudioCropInjector(Injector):
             self.max_crop_sz = opt['max_crop_size']
         self.lengths_key = opt['lengths_key']
         self.crop_start_key = opt['crop_start_key']
+        self.rand_buffer_ptr=9999
+        self.rand_buffer_sz=5000
 
 
     def forward(self, state):
         crop_sz = random.randint(self.min_crop_sz, self.max_crop_sz)
         inp = state[self.input]
+        if torch.distributed.get_world_size() > 1:
+            # All processes should agree, otherwise all processes wait to process max_crop_sz (effectively). But agreeing too often
+            # is expensive, so agree on a "chunk" at a time.
+            if self.rand_buffer_ptr >= self.rand_buffer_sz:
+                self.rand_buffer = torch.randint(self.min_crop_sz, self.max_crop_sz, (self.rand_buffer_sz,), dtype=torch.long, device=inp.device)
+                torch.distributed.broadcast(self.rand_buffer, 0)
+                self.rand_buffer_ptr = 0
+            crop_sz = self.rand_buffer[self.rand_buffer_ptr]
+            self.rand_buffer_ptr += 1
+        else:
+            crop_sz = random.randint(self.min_crop_sz, self.max_crop_sz)
         if self.lengths_key is not None:
             lens = state[self.lengths_key]
             len = torch.min(lens)

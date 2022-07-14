@@ -456,15 +456,14 @@ class TransformerDiffusionWithMultiPretrainedVqvae(nn.Module):
             if hasattr(p, 'grad') and p.grad is not None:
                 p.grad *= .2
 
-
 class TransformerDiffusionWithCheaterLatent(nn.Module):
-    def __init__(self, freeze_encoder_until=None, **kwargs):
+    def __init__(self, freeze_encoder_until=None, checkpoint_encoder=True, **kwargs):
         super().__init__()
         self.internal_step = 0
         self.freeze_encoder_until = freeze_encoder_until
         self.diff = TransformerDiffusion(**kwargs)
-        self.encoder = UpperEncoder(256, 1024, 256)
-        self.encoder = self.encoder.eval()
+        from models.audio.music.encoders import ResEncoder16x
+        self.encoder = ResEncoder16x(256, 1024, 256, checkpointing_enabled=checkpoint_encoder)
 
     def forward(self, x, timesteps, truth_mel, conditioning_input=None, disable_diversity=False, conditioning_free=False):
         unused_parameters = []
