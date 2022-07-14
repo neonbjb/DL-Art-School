@@ -313,7 +313,7 @@ def test_cheater_model():
 
     # For music:
     model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
-                                                      contraction_dim=512, num_heads=8, num_layers=40, dropout=0,
+                                                      contraction_dim=512, num_heads=8, num_layers=32, dropout=0,
                                                       unconditioned_percentage=.4, checkpoint_conditioning=False,
                                                       regularization=True, new_cond=True)
     print_network(model)
