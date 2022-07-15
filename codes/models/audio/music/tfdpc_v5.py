@@ -215,6 +215,15 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
             left_pt = -1
             cond_right = conditioning_input[:,:,cond_start+N:]
             right_pt = 0
+
+            if self.training:
+                # Arbitrarily restrict the context given. We should support short contexts and without this they are never encountered.
+                arb_context_cap = random.randint(50, 100)
+                if cond_left.shape[-1] > arb_context_cap and random() > .5:
+                    cond_left = cond_left[:,:,-arb_context_cap:]
+                if cond_right.shape[-1] > arb_context_cap and random() > .5:
+                    cond_right = cond_right[:,:,:arb_context_cap]
+
         elif cond_left is None:
             assert conditioning_input.shape[-1] - cond_start - N >= 0, f'Some sort of conditioning misalignment, {conditioning_input.shape[-1], cond_start, N}'
             cond_pre = conditioning_input[:,:,:cond_start]

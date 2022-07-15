@@ -230,10 +230,11 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         # 1. Generate the cheater latent using the input as a reference.
         sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
-        output_shape = (1, 256, cheater.shape[-1]-80)
-        gen_cheater = sampler(self.model, output_shape, progress=True,
+        # center-pad the conditioning input (the center isn't actually used). this is hack for giving tfdpc5 a bigger working context.
+        cheater_padded = torch.cat([cheater[:,:,cheater.shape[-1]//2:], torch.zeros(1,256,160, device=cheater.device),  cheater[:,:,:cheater.shape[-1]//2]], dim=-1)
+        gen_cheater = sampler(self.model, cheater.shape, progress=True,
                               causal=self.causal, causal_slope=self.causal_slope,
-                              model_kwargs={'conditioning_input': cheater, 'cond_start': 40})
+                              model_kwargs={'conditioning_input': cheater_padded, 'cond_start': 80})
 
         # 2. Decode the cheater into a MEL
         gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,gen_cheater.shape[-1]*16), progress=True,
