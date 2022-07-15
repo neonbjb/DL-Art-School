@@ -84,7 +84,6 @@ class ConditioningEncoder(nn.Module):
                  do_checkpointing=False,
                  time_proj=True):
         super().__init__()
-        attn = []
         self.init = nn.Conv1d(cond_dim, embedding_dim, kernel_size=1)
         self.time_proj = time_proj
         if time_proj:
@@ -211,10 +210,11 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
                 conditioning_input[:,:,tstart:tstart+tclip] = 0
 
         if cond_left is None and self.new_cond:
-            cond_left = conditioning_input[:,:,:max(cond_start, 20)]
-            left_pt = cond_start-1
-            cond_right = conditioning_input[:,:,min(N+cond_start, conditioning_input.shape[-1]-20):]
-            right_pt = min(cond_right.shape[-1]-1, cond_right.shape[-1] - (conditioning_input.shape[-1] - (N+cond_start)))
+            assert cond_start > 20 and (cond_start+N+20 <= conditioning_input.shape[-1])
+            cond_left = conditioning_input[:,:,:cond_start]
+            left_pt = -1
+            cond_right = conditioning_input[:,:,cond_start+N:]
+            right_pt = 0
         elif cond_left is None:
             assert conditioning_input.shape[-1] - cond_start - N >= 0, f'Some sort of conditioning misalignment, {conditioning_input.shape[-1], cond_start, N}'
             cond_pre = conditioning_input[:,:,:cond_start]
@@ -292,13 +292,13 @@ class TransformerDiffusionWithPointConditioning(nn.Module):
     def before_step(self, step):
         scaled_grad_parameters = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.layers])) + \
                                  list(itertools.chain.from_iterable([lyr.prenorm.parameters() for lyr in self.layers]))
+
         # Scale back the gradients of the blkout and prenorm layers by a constant factor. These get two orders of magnitudes
         # higher gradients. Ideally we would use parameter groups, but ZeroRedundancyOptimizer makes this trickier than
         # directly fiddling with the gradients.
-        if not self.new_cond:  # Not really related, I just don't want to add a new config.
-            for p in scaled_grad_parameters:
-                if hasattr(p, 'grad') and p.grad is not None:
-                    p.grad *= .2
+        for p in scaled_grad_parameters:
+            if hasattr(p, 'grad') and p.grad is not None:
+                p.grad *= .2
 
 
 @register_model
