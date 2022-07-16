@@ -122,7 +122,7 @@ class RandomAudioCropInjector(Injector):
         else:
             len = inp.shape[-1]
             
-        margin = len - crop_sz - self.min_buffer
+        margin = len - crop_sz - self.min_buffer * 2
         if margin < 0:
             start = self.min_buffer
         else:
