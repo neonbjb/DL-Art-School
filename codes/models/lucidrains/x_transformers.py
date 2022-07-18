@@ -352,23 +352,30 @@ class RMSNorm(nn.Module):
 
 
 class RMSScaleShiftNorm(nn.Module):
-    def __init__(self, dim, embed_dim=None, eps=1e-8, bias=True):
+    def __init__(self, dim, embed_dim=None, eps=1e-8, bias=True, conv_ch_order=False):
         super().__init__()
         embed_dim = default(embed_dim, dim)
         self.scale = dim ** -0.5
         self.eps = eps
         self.g = nn.Parameter(torch.ones(dim))
-        self.scale_shift_process = nn.Linear(embed_dim, dim * 2, bias=bias)
+        if conv_ch_order:
+            self.scale_shift_process = nn.Conv1d(embed_dim, dim*2, kernel_size=1, bias=bias)
+            self.cdim = 1
+            self.pdim = -1
+        else:
+            self.scale_shift_process = nn.Linear(embed_dim, dim * 2, bias=bias)
+            self.cdim = -1
+            self.pdim = 1
 
     def forward(self, x, norm_scale_shift_inp):
-        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        norm = torch.norm(x, dim=self.cdim, keepdim=True) * self.scale
         norm = x / norm.clamp(min=self.eps) * self.g
 
         ss_emb = self.scale_shift_process(norm_scale_shift_inp)
-        scale, shift = torch.chunk(ss_emb, 2, dim=-1)
+        scale, shift = torch.chunk(ss_emb, 2, dim=self.cdim)
         if len(scale.shape) == 2 and len(x.shape) == 3:
-            scale = scale.unsqueeze(1)
-            shift = shift.unsqueeze(1)
+            scale = scale.unsqueeze(self.pdim)
+            shift = shift.unsqueeze(self.pdim)
         h = norm * (1 + scale) + shift
         return h
 

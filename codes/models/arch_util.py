@@ -452,12 +452,14 @@ class AttentionBlock(nn.Module):
         channels,
         num_heads=1,
         num_head_channels=-1,
+        out_channels=None,
         use_new_attention_order=False,
         do_checkpoint=True,
         do_activation=False,
     ):
         super().__init__()
         self.channels = channels
+        out_channels = channels if out_channels is None else out_channels
         self.do_checkpoint = do_checkpoint
         self.do_activation = do_activation
         if num_head_channels == -1:
@@ -468,7 +470,7 @@ class AttentionBlock(nn.Module):
             ), f"q,k,v channels {channels} is not divisible by num_head_channels {num_head_channels}"
             self.num_heads = channels // num_head_channels
         self.norm = normalization(channels)
-        self.qkv = conv_nd(1, channels, channels * 3, 1)
+        self.qkv = conv_nd(1, channels, out_channels * 3, 1)
         if use_new_attention_order:
             # split qkv before split heads
             self.attention = QKVAttention(self.num_heads)
@@ -476,7 +478,8 @@ class AttentionBlock(nn.Module):
             # split heads before split qkv
             self.attention = QKVAttentionLegacy(self.num_heads)
 
-        self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
+        self.x_proj = nn.Identity() if out_channels == channels else conv_nd(1, channels, out_channels, 1)
+        self.proj_out = zero_module(conv_nd(1, out_channels, out_channels, 1))
 
     def forward(self, x, mask=None):
         if self.do_checkpoint:
@@ -496,7 +499,8 @@ class AttentionBlock(nn.Module):
         qkv = self.qkv(x)
         h = self.attention(qkv, mask)
         h = self.proj_out(h)
-        return (x + h).reshape(b, c, *spatial)
+        xp = self.x_proj(x)
+        return (xp + h).reshape(b, xp.shape[1], *spatial)
 
 
 class QKVAttentionLegacy(nn.Module):
