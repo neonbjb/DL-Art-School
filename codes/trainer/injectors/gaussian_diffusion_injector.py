@@ -47,6 +47,7 @@ class GaussianDiffusionInjector(Injector):
         self.deterministic_sampler = DeterministicSampler(self.diffusion, opt_get(opt, ['deterministic_sampler_expected_batch_size'], 2048), env)
         self.causal_mode = opt_get(opt, ['causal_mode'], False)
         self.causal_slope_range = opt_get(opt, ['causal_slope_range'], [1,8])
+        self.preprocess_fn = opt_get(opt, ['preprocess_fn'], None)
 
         k = 0
         if 'channel_balancer_proportion' in opt.keys():
@@ -88,6 +89,9 @@ class GaussianDiffusionInjector(Injector):
                 sampler = self.schedule_sampler
                 self.deterministic_sampler.reset()  # Keep this reset whenever it is not being used, so it is ready to use automatically.
             model_inputs = {k: state[v] if isinstance(v, str) else v for k, v in self.model_input_keys.items()}
+            if self.preprocess_fn is not None:
+                hq = getattr(gen, self.preprocess_fn)(hq, **model_inputs)
+
             t, weights = sampler.sample(hq.shape[0], hq.device)
             if self.causal_mode:
                 cs, ce = self.causal_slope_range
