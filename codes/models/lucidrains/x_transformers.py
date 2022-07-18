@@ -366,7 +366,7 @@ class RMSScaleShiftNorm(nn.Module):
 
         ss_emb = self.scale_shift_process(norm_scale_shift_inp)
         scale, shift = torch.chunk(ss_emb, 2, dim=-1)
-        if len(scale.shape) == 2:
+        if len(scale.shape) == 2 and len(x.shape) == 3:
             scale = scale.unsqueeze(1)
             shift = shift.unsqueeze(1)
         h = norm * (1 + scale) + shift
