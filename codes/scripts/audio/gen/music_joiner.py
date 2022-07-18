@@ -21,28 +21,40 @@ def join_music(clip1, clip1_cut, clip2, clip2_cut, mix_time, results_dir):
         spec_fn = TorchMelSpectrogramInjector({'n_mel_channels': 256, 'mel_fmax': 11000, 'filter_length': 16000, 'true_normalization': True,
                                                     'normalize': True, 'in': 'in', 'out': 'out'}, {}).cuda()
         cheater_encoder = MusicCheaterLatentInjector({'in': 'in', 'out': 'out'}, {}).cuda()
+
+        """
+        # Original model
         model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
                                                           contraction_dim=512, num_heads=8, num_layers=12, dropout=0,
                                                           use_fp16=False, unconditioned_percentage=0, time_proj=True).eval().cuda()
-        diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [256]), model_mean_type='epsilon',
-                                   model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
-                                   conditioning_free=True, conditioning_free_k=1)
         model.load_state_dict(torch.load('x:/dlas/experiments/train_music_cheater_gen_v5/models/206000_generator_ema.pth'))
+        diffusion_type = 'linear'
+        """
+        model = TransformerDiffusionWithPointConditioning(in_channels=256, out_channels=512, model_channels=1024,
+                                                          contraction_dim=512, num_heads=8, num_layers=32, dropout=0,
+                                                          use_fp16=False, unconditioned_percentage=0, time_proj=False,
+                                                          new_cond=True, regularization=False).eval().cuda()
+        model.load_state_dict(torch.load('x:/dlas/experiments/train_music_cheater_gen_v5_cosine_40_lyr/models/40000_generator_ema.pth'))
+        diffusion_type = 'cosine'
+
+        diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [256]), model_mean_type='epsilon',
+                                   model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule(diffusion_type, 4000),
+                                   conditioning_free=True, conditioning_free_k=1)
         clip1 = load_audio(clip1, 22050).cuda()
         clip1_mel = spec_fn({'in': clip1.unsqueeze(0)})['out']
         clip1_cheater = cheater_encoder({'in': clip1_mel})['out']
         clip1_leadin = clip1_cheater[:,:,-60:]
-        clip1_cheater = clip1_cheater[:,:,-260:-60]
+        clip1_cheater = clip1_cheater[:,:,:-60]
         clip2 = load_audio(clip2, 22050).cuda()
         clip2_mel = spec_fn({'in': clip2.unsqueeze(0)})['out']
         clip2_cheater = cheater_encoder({'in': clip2_mel})['out']
         clip2_leadin = clip2_cheater[:,:,:60]
-        clip2_cheater = clip2_cheater[:,:,60:260]
+        clip2_cheater = clip2_cheater[:,:,60:]
 
         inp = torch.cat([clip1_leadin, torch.zeros(1,256,240, device='cuda'), clip2_leadin], dim=-1)
         mask = torch.ones_like(inp)
         mask[:,:,60:-60] = 0
-        gen_cheater = diffuser.p_sample_loop_with_guidance(model, inp, mask,  # causal=True, causal_slope=4,
+        gen_cheater = diffuser.ddim_sample_loop_with_guidance(model, inp, mask,  # causal=True, causal_slope=4,
                                              model_kwargs={'cond_left': clip1_cheater, 'cond_right': clip2_cheater})
 
         cheater_to_mel = get_cheater_decoder().diff.cuda()
