@@ -23,7 +23,7 @@ def is_sequence(t):
 class SubBlock(nn.Module):
     def __init__(self, inp_dim, contraction_dim, blk_dim, heads, dropout):
         super().__init__()
-        self.dropout = nn.Dropout(p=dropout, inplace=True)
+        self.dropout = nn.Dropout(p=dropout)
         self.blk_emb_proj = nn.Conv1d(blk_dim, inp_dim, 1)
         self.attn = AttentionBlock(inp_dim, out_channels=contraction_dim, num_heads=heads)
         self.attnorm = nn.GroupNorm(8, contraction_dim)
