@@ -57,7 +57,10 @@ def process_folder(folder, base_path, output_path, progress_file, max_duration, 
                 total_progress += 30
         if total_progress > 30:
             combined = torch.cat(to_combine, dim=-1).cuda()
-            mel = produce_mel(combined).cpu().numpy()
+            mel = produce_mel(combined)
+            assert mel.max() < 1.00001, mel.max()
+            assert mel.min() > -1.00001, mel.min()
+            mel = mel.cpu().numpy()
             np.savez(os.path.join(outdir, f'{output_i}'), mel)
             output_i += 1
     report_progress(progress_file, folder)
