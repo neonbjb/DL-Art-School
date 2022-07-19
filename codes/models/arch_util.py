@@ -439,6 +439,32 @@ class ResBlock(nn.Module):
         return self.skip_connection(x) + h
 
 
+def build_local_attention_mask(n, l, fixed_region):
+    """
+    Builds an attention mask that focuses attention on local region
+    Includes provisions for a "fixed_region" at the start of the sequence where full attention weights will be applied.
+    Args:
+        n: Size of returned matrix (maximum sequence size)
+        l: Size of local context (uni-directional, e.g. the total context is l*2)
+        fixed_region: The number of sequence elements at the start of the sequence that get full attention.
+    Returns:
+        A mask that can be applied to AttentionBlock to achieve local attention.
+    """
+    assert l*2 < n, f'Local context must be less than global context. {l}, {n}'
+    o = torch.arange(0,n)
+    c = o.unsqueeze(-1).repeat(1,n)
+    r = o.unsqueeze(0).repeat(n,1)
+    localized = ((-(r-c).abs())+l).clamp(0,l-1) / (l-1)
+    localized[:fixed_region] = 1
+    localized[:, :fixed_region] = 1
+    mask = localized > 0
+    return mask
+
+
+def test_local_attention_mask():
+    print(build_local_attention_mask(9,4,1))
+
+
 class AttentionBlock(nn.Module):
     """
     An attention block that allows spatial positions to attend to each other.
@@ -492,10 +518,11 @@ class AttentionBlock(nn.Module):
 
     def _forward(self, x, mask=None):
         b, c, *spatial = x.shape
-        if len(mask.shape) == 2:
-            mask = mask.unsqueeze(0).repeat(x.shape[0],1,1)
-        if mask.shape[1] != x.shape[-1]:
-            mask = mask[:, :x.shape[-1], :x.shape[-1]]
+        if mask is not None:
+            if len(mask.shape) == 2:
+                mask = mask.unsqueeze(0).repeat(x.shape[0],1,1)
+            if mask.shape[1] != x.shape[-1]:
+                mask = mask[:, :x.shape[-1], :x.shape[-1]]
 
         x = x.reshape(b, c, -1)
         x = self.norm(x)

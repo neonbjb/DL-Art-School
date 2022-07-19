@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.arch_util import ResBlock, TimestepEmbedSequential, AttentionBlock
+from models.arch_util import ResBlock, TimestepEmbedSequential, AttentionBlock, build_local_attention_mask
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import TimestepBlock
 from trainer.networks import register_model
@@ -29,10 +29,11 @@ class SubBlock(nn.Module):
         self.attnorm = nn.GroupNorm(8, contraction_dim)
         self.ff = nn.Conv1d(inp_dim+contraction_dim, contraction_dim, kernel_size=3, padding=1)
         self.ffnorm = nn.GroupNorm(8, contraction_dim)
+        self.mask = build_local_attention_mask(n=4000, l=64, fixed_region=8)
 
     def forward(self, x, blk_emb):
         blk_enc = self.blk_emb_proj(blk_emb)
-        ah = self.dropout(self.attn(torch.cat([blk_enc, x], dim=-1)))
+        ah = self.dropout(self.attn(torch.cat([blk_enc, x], dim=-1), mask=self.mask))
         ah = ah[:,:,blk_emb.shape[-1]:]  # Strip off the blk_emb and re-align with x.
         ah = F.gelu(self.attnorm(ah))
         h = torch.cat([ah, x], dim=1)
