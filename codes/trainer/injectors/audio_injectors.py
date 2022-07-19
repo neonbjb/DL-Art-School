@@ -9,14 +9,21 @@ from trainer.inject import Injector
 from utils.music_utils import get_music_codegen
 from utils.util import opt_get, load_model_from_config, pad_or_truncate
 
+MEL_MIN = -11.512925148010254
 TACOTRON_MEL_MAX = 2.3143386840820312
-TACOTRON_MEL_MIN = -11.512925148010254
+TORCH_MEL_MAX = 4.82
+
+def normalize_torch_mel(mel):
+    return 2 * ((mel - MEL_MIN) / (TORCH_MEL_MAX - MEL_MIN)) - 1
+
+def denormalize_torch_mel(norm_mel):
+    return ((norm_mel+1)/2) * (TORCH_MEL_MAX - MEL_MIN) + MEL_MIN
 
 def normalize_mel(mel):
-    return 2 * ((mel - TACOTRON_MEL_MIN) / (TACOTRON_MEL_MAX - TACOTRON_MEL_MIN)) - 1
+    return 2 * ((mel - MEL_MIN) / (TACOTRON_MEL_MAX - MEL_MIN)) - 1
 
 def denormalize_mel(norm_mel):
-    return ((norm_mel+1)/2)*(TACOTRON_MEL_MAX-TACOTRON_MEL_MIN)+TACOTRON_MEL_MIN
+    return ((norm_mel+1)/2) * (TACOTRON_MEL_MAX - MEL_MIN) + MEL_MIN
 
 class MelSpectrogramInjector(Injector):
     def __init__(self, opt, env):
@@ -83,7 +90,7 @@ class TorchMelSpectrogramInjector(Injector):
                 self.mel_norms = self.mel_norms.to(mel.device)
                 mel = mel / self.mel_norms.unsqueeze(0).unsqueeze(-1)
             if self.true_norm:
-                mel = normalize_mel(mel)
+                mel = normalize_torch_mel(mel)
             return {self.output: mel}
 
 

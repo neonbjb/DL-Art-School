@@ -9,7 +9,7 @@ from tqdm import tqdm
 from models.audio.music.tfdpc_v5 import TransformerDiffusionWithPointConditioning
 from utils.music_utils import get_cheater_decoder, get_mel2wav_v3_model
 from utils.util import load_audio
-from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector, denormalize_mel, pixel_shuffle_1d
+from trainer.injectors.audio_injectors import TorchMelSpectrogramInjector, denormalize_torch_mel, pixel_shuffle_1d
 from trainer.injectors.audio_injectors import MusicCheaterLatentInjector
 from models.diffusion.respace import SpacedDiffusion
 from models.diffusion.respace import space_timesteps
@@ -67,7 +67,7 @@ def join_music_with_cheaters(clip1_cheater, clip2_cheater, results_dir):
                                                             model_kwargs={'codes': chunk_cheater.permute(0, 2, 1)})
         torchvision.utils.save_image((gen_mel + 1) / 2, f'{results_dir}/mel_{i}.png')
 
-        gen_mel_denorm = denormalize_mel(gen_mel)
+        gen_mel_denorm = denormalize_torch_mel(gen_mel)
         output_shape = (1, 16, gen_mel_denorm.shape[-1] * 256 // 16)
         wav = spectral_diffuser.ddim_sample_loop(m2w, output_shape, progress=True,
                                                  model_kwargs={'codes': gen_mel_denorm})

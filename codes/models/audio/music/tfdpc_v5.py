@@ -432,8 +432,8 @@ def inference_tfdpc5_with_cheater():
             spectral_diffuser = SpacedDiffusion(use_timesteps=space_timesteps(4000, [32]), model_mean_type='epsilon',
                                    model_var_type='learned_range', loss_type='mse', betas=get_named_beta_schedule('linear', 4000),
                                    conditioning_free=True, conditioning_free_k=1)
-            from trainer.injectors.audio_injectors import denormalize_mel
-            gen_mel_denorm = denormalize_mel(gen_mel)
+            from trainer.injectors.audio_injectors import
+            gen_mel_denorm = denormalize_torch_mel(gen_mel)
             output_shape = (1,16,gen_mel_denorm.shape[-1]*256//16)
             gen_wav = spectral_diffuser.ddim_sample_loop(m2w, output_shape, model_kwargs={'codes': gen_mel_denorm})
             from trainer.injectors.audio_injectors import pixel_shuffle_1d
