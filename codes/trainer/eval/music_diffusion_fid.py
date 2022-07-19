@@ -151,9 +151,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    x = x.clamp(-s, s) / s
         #    return x
         gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, #denoised_fn=denoising_fn, clip_denoised=False,
-                                              model_kwargs={'truth_mel': mel_norm,
-                                                            'conditioning_input': mel_norm,
-                                                            'disable_diversity': True})
+                                              model_kwargs={'truth_mel': mel_norm})
 
         gen_mel_denorm = denormalize_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
