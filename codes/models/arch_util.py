@@ -492,6 +492,11 @@ class AttentionBlock(nn.Module):
 
     def _forward(self, x, mask=None):
         b, c, *spatial = x.shape
+        if len(mask.shape) == 2:
+            mask = mask.unsqueeze(0).repeat(x.shape[0],1,1)
+        if mask.shape[1] != x.shape[-1]:
+            mask = mask[:, :x.shape[-1], :x.shape[-1]]
+
         x = x.reshape(b, c, -1)
         x = self.norm(x)
         if self.do_activation:
@@ -527,11 +532,10 @@ class QKVAttentionLegacy(nn.Module):
         weight = torch.einsum(
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
-        weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
         if mask is not None:
-            # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
-            mask = mask.repeat(self.n_heads, 1).unsqueeze(1)
-            weight = weight * mask
+            mask = mask.repeat(self.n_heads, 1, 1)
+            weight[mask.logical_not()] = -torch.inf
+        weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
         a = torch.einsum("bts,bcs->bct", weight, v)
 
         return a.reshape(bs, -1, length)
@@ -564,9 +568,8 @@ class QKVAttention(nn.Module):
             (k * scale).view(bs * self.n_heads, ch, length),
         )  # More stable with f16 than dividing afterwards
         if mask is not None:
-            # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
-            mask = mask.repeat(self.n_heads, 1).unsqueeze(1)
-            weight = weight * mask
+            mask = mask.repeat(self.n_heads, 1, 1)
+            weight[mask.logical_not()] = -torch.inf
         weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
         a = torch.einsum("bts,bcs->bct", weight, v.reshape(bs * self.n_heads, ch, length))
         return a.reshape(bs, -1, length)
