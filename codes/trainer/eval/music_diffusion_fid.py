@@ -70,6 +70,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         elif 'from_codes' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
+        elif 'from_codes_quant' == mode:
+            self.diffusion_fn = self.perform_diffusion_from_codes_quant
         elif 'cheater_gen' == mode:
             self.diffusion_fn = self.perform_reconstruction_from_cheater_gen
             self.local_modules['cheater_encoder'] = get_cheater_encoder()
@@ -137,6 +139,34 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
 
+    def perform_diffusion_from_codes_quant(self, audio, sample_rate=22050):
+        real_resampled = audio
+        audio = audio.unsqueeze(0)
+
+        mel = self.spec_fn({'in': audio})['out']
+        mel_norm = normalize_mel(mel)
+        #def denoising_fn(x):
+        #    q9 = torch.quantile(x, q=.95, dim=-1).unsqueeze(-1)
+        #    s = q9.clamp(1, 9999999999)
+        #    x = x.clamp(-s, s) / s
+        #    return x
+        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, #denoised_fn=denoising_fn, clip_denoised=False,
+                                              model_kwargs={'truth_mel': mel_norm,
+                                                            'conditioning_input': mel_norm,
+                                                            'disable_diversity': True})
+
+        gen_mel_denorm = denormalize_mel(gen_mel)
+        output_shape = (1,16,audio.shape[-1]//16)
+        self.spec_decoder = self.spec_decoder.to(audio.device)
+        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'aligned_conditioning': gen_mel_denorm})
+        gen_wav = pixel_shuffle_1d(gen_wav, 16)
+
+        real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
+                                              model_kwargs={'aligned_conditioning': mel})
+        real_wav = pixel_shuffle_1d(real_wav, 16)
+
+        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
     def perform_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
         audio = audio.unsqueeze(0)
 
