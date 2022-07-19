@@ -69,14 +69,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
         elif 'from_codes' == mode:
             self.diffusion_fn = self.perform_diffusion_from_codes
             self.local_modules['codegen'] = get_music_codegen()
-        elif 'from_codes_quant' == mode:
-            self.diffusion_fn = self.perform_diffusion_from_codes_quant
-        elif 'partial_from_codes_quant' == mode:
-            self.diffusion_fn = functools.partial(self.perform_partial_diffusion_from_codes_quant,
-                                                  partial_low=opt_eval['partial_low'],
-                                                  partial_high=opt_eval['partial_high'])
-        elif 'from_codes_quant_gradual_decode' == mode:
-            self.diffusion_fn = self.perform_diffusion_from_codes_quant_gradual_decode
         elif 'cheater_gen' == mode:
             self.diffusion_fn = self.perform_reconstruction_from_cheater_gen
             self.local_modules['cheater_encoder'] = get_cheater_encoder()
@@ -135,87 +127,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
         output_shape = (1,16,audio.shape[-1]//16)
         self.spec_decoder = self.spec_decoder.to(audio.device)
         gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                              model_kwargs={'aligned_conditioning': gen_mel_denorm})
-        gen_wav = pixel_shuffle_1d(gen_wav, 16)
-
-        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
-
-    def perform_diffusion_from_codes_quant(self, audio, sample_rate=22050):
-        real_resampled = audio
-        audio = audio.unsqueeze(0)
-
-        mel = self.spec_fn({'in': audio})['out']
-        mel_norm = normalize_mel(mel)
-        #def denoising_fn(x):
-        #    q9 = torch.quantile(x, q=.95, dim=-1).unsqueeze(-1)
-        #    s = q9.clamp(1, 9999999999)
-        #    x = x.clamp(-s, s) / s
-        #    return x
-        gen_mel = self.diffuser.p_sample_loop(self.model, mel_norm.shape, #denoised_fn=denoising_fn, clip_denoised=False,
-                                              model_kwargs={'truth_mel': mel_norm,
-                                                            'conditioning_input': mel_norm,
-                                                            'disable_diversity': True})
-
-        gen_mel_denorm = denormalize_mel(gen_mel)
-        output_shape = (1,16,audio.shape[-1]//16)
-        self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                              model_kwargs={'aligned_conditioning': gen_mel_denorm})
-        gen_wav = pixel_shuffle_1d(gen_wav, 16)
-
-        real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                              model_kwargs={'aligned_conditioning': mel})
-        real_wav = pixel_shuffle_1d(real_wav, 16)
-
-        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
-
-    def perform_partial_diffusion_from_codes_quant(self, audio, sample_rate=22050, partial_low=0, partial_high=256):
-        real_resampled = audio
-        audio = audio.unsqueeze(0)
-
-        mel = self.spec_fn({'in': audio})['out']
-        mel_norm = normalize_mel(mel)
-        mask = torch.ones_like(mel_norm)
-        mask[:, partial_low:partial_high] = 0  # This is the channel region that the model will predict.
-        gen_mel = self.diffuser.p_sample_loop_with_guidance(self.model,
-                                              guidance_input=mel_norm, mask=mask,
-                                              model_kwargs={'truth_mel': mel,
-                                                            'conditioning_input': torch.zeros_like(mel_norm[:,:,:390]),
-                                                            'disable_diversity': True})
-
-        gen_mel_denorm = denormalize_mel(gen_mel)
-        output_shape = (1,16,audio.shape[-1]//16)
-        self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                              model_kwargs={'aligned_conditioning': gen_mel_denorm})
-        gen_wav = pixel_shuffle_1d(gen_wav, 16)
-
-        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
-
-    def perform_diffusion_from_codes_quant_gradual_decode(self, audio, sample_rate=22050):
-        real_resampled = audio
-        audio = audio.unsqueeze(0)
-
-        mel = self.spec_fn({'in': audio})['out']
-        mel_norm = normalize_mel(mel)
-        guidance = torch.zeros_like(mel_norm)
-        mask = torch.zeros_like(mel_norm)
-        GRADS = 4
-        for k in range(GRADS):
-            gen_mel = self.diffuser.p_sample_loop_with_guidance(self.model,
-                                                                guidance_input=guidance, mask=mask,
-                                                                model_kwargs={'truth_mel': mel,
-                                                                              'conditioning_input': torch.zeros_like(mel_norm[:,:,:390]),
-                                                                              'disable_diversity': True})
-            pk = int(k*(mel_norm.shape[1]/GRADS))
-            ek = int((k+1)*(mel_norm.shape[1]/GRADS))
-            guidance[:, pk:ek] = gen_mel[:, pk:ek]
-            mask[:, :ek] = 1
-
-        gen_mel_denorm = denormalize_mel(gen_mel)
-        output_shape = (1,16,audio.shape[-1]//16)
-        self.spec_decoder = self.spec_decoder.to(audio.device)
-        gen_wav = self.diffuser.p_sample_loop(self.spec_decoder, output_shape,
                                               model_kwargs={'aligned_conditioning': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
@@ -282,87 +193,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
         real_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape, model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
-
-        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
-
-    def perform_fake_ar_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
-        assert self.ddim, "DDIM mode expected for reconstructing cheater gen. Do you like to waste resources??"
-        audio = audio.unsqueeze(0)
-
-        mel = self.spec_fn({'in': audio})['out']
-        mel_norm = normalize_mel(mel)
-        cheater = self.local_modules['cheater_encoder'].to(audio.device)(mel_norm)
-
-        # 1. Generate the cheater latent using the input as a reference.
-        def diffuse(i, ref):
-            mask = torch.zeros_like(ref)
-            mask[:,:,:i] = 1
-            return self.diffuser.p_sample_loop_with_guidance(self.model, ref, mask, model_kwargs={'conditioning_input': cheater})
-        gen_cheater = torch.randn_like(cheater)
-        for i in range(cheater.shape[-1]):
-            gen_cheater = diffuse(i, gen_cheater)
-            if i > 128:
-                # abort early.
-                gen_cheater = gen_cheater[:,:,:128]
-                break
-
-        # 2. Decode the cheater into a MEL. This operation and the next need to be chunked to make them feasible to perform within GPU memory.
-        chunks = torch.split(gen_cheater, 64, dim=-1)
-        gen_wavs = []
-        for chunk in tqdm(chunks):
-            gen_mel = self.cheater_decoder_diffuser.ddim_sample_loop(self.local_modules['cheater_decoder'].diff.to(audio.device), (1,256,chunk.shape[-1]*16), progress=True,
-                                                     model_kwargs={'codes': chunk.permute(0,2,1)})
-
-            # 3. And then the MEL back into a spectrogram
-            output_shape = (1,16,audio.shape[-1]//(16*len(chunks)))
-            self.spec_decoder = self.spec_decoder.to(audio.device)
-            gen_mel_denorm = denormalize_mel(gen_mel)
-            gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                                  model_kwargs={'codes': gen_mel_denorm})
-            gen_wav = pixel_shuffle_1d(gen_wav, 16)
-            gen_wavs.append(gen_wav)
-        gen_wav = torch.cat(gen_wavs, dim=-1)
-
-        """ How to do progressive, causal decoding of the TFD diffuser:
-        MAX_CONTEXT = 64
-        def diffuse(start, len, guidance):
-            mask = torch.zeros_like(guidance)
-            mask[:,:,:(len-start)] = 1
-            return self.cheater_decoder_diffuser.p_sample_loop_with_guidance(self.local_modules['cheater_decoder'].diff.to(audio.device),
-                                                                             guidance_input=guidance, mask=mask,
-                                                                             model_kwargs={'codes': gen_cheater[:,:,start:start+MAX_CONTEXT].permute(0,2,1)})
-        guidance_mel = torch.zeros((1,256,MAX_CONTEXT*16), device=mel.device)
-        gen_mel = torch.zeros((1,256,0), device=mel.device)
-        for i in tqdm(list(range(gen_cheater.shape[-1]))):
-            start = max(0, i-MAX_CONTEXT-1)
-            l = min(16*(MAX_CONTEXT-1), i*16)
-            ngm = diffuse(start, l, guidance_mel)
-            gen_mel = torch.cat([gen_mel, ngm[:,:,l:l+16]], dim=-1)
-            if gen_mel.shape[-1] < guidance_mel.shape[-1]:
-                guidance_mel[:,:,:gen_mel.shape[-1]] = gen_mel
-            else:
-                guidance_mel = gen_mel[:,:,-guidance_mel.shape[-1]:]
-
-        chunks = torch.split(gen_mel, MAX_CONTEXT*16, dim=-1)
-        gen_wavs = []
-        for chunk_mel in tqdm(chunks):
-            # 3. And then the MEL back into a spectrogram
-            output_shape = (1,16,audio.shape[-1]//(16*len(chunks)))
-            self.spec_decoder = self.spec_decoder.to(audio.device)
-            gen_mel_denorm = denormalize_mel(chunk_mel)
-            gen_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                                  model_kwargs={'codes': gen_mel_denorm})
-            gen_wav = pixel_shuffle_1d(gen_wav, 16)
-            gen_wavs.append(gen_wav)
-        gen_wav = torch.cat(gen_wavs, dim=-1)
-        """
-
-        if audio.shape[-1] < 40 * 22050:
-            real_wav = self.spectral_diffuser.p_sample_loop(self.spec_decoder, output_shape,
-                                                  model_kwargs={'codes': mel})
-            real_wav = pixel_shuffle_1d(real_wav, 16)
-        else:
-            real_wav = audio  # TODO: chunk like above.
 
         return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
 
