@@ -30,8 +30,12 @@ class SubBlock(nn.Module):
         self.ff = nn.Conv1d(inp_dim+contraction_dim, contraction_dim, kernel_size=3, padding=1)
         self.ffnorm = nn.GroupNorm(8, contraction_dim)
         self.mask = build_local_attention_mask(n=4000, l=64, fixed_region=8)
+        self.mask_initialized = False
 
     def forward(self, x, blk_emb):
+        if self.mask is not None and not self.mask_initialized:
+            self.mask = self.mask.to(x.device)
+            self.mask_initialized = True
         blk_enc = self.blk_emb_proj(blk_emb)
         ah = self.dropout(self.attn(torch.cat([blk_enc, x], dim=-1), mask=self.mask))
         ah = ah[:,:,blk_emb.shape[-1]:]  # Strip off the blk_emb and re-align with x.

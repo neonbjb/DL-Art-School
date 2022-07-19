@@ -25,12 +25,14 @@ class SubBlock(nn.Module):
         if self.enable_attention_masking:
             # All regions can attend to the first token, which will be the timestep embedding. Hence, fixed_region.
             self.mask = build_local_attention_mask(n=2000, l=48, fixed_region=1)
+            self.mask_initialized = False
         else:
             self.mask = None
 
     def forward(self, x, blk_emb):
-        if self.mask is not None:
+        if self.mask is not None and not self.mask_initialized:
             self.mask = self.mask.to(x.device)
+            self.mask_initialized = True
         blk_enc = self.blk_emb_proj(blk_emb)
         ah = self.dropout(self.attn(torch.cat([blk_enc, x], dim=-1), mask=self.mask))
         ah = ah[:,:,blk_emb.shape[-1]:]  # Strip off the blk_emb and re-align with x.

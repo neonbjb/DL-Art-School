@@ -165,6 +165,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
         return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
+
     def perform_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
         audio = audio.unsqueeze(0)
 
