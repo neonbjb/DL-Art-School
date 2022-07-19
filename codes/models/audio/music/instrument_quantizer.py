@@ -19,28 +19,19 @@ class SelfClassifyingHead(nn.Module):
         self.temperature = init_temperature
         self.dec = Decoder(dim=dim, depth=head_depth, heads=4, ff_dropout=dropout, ff_mult=2, attn_dropout=dropout,
                                                 use_rmsnorm=True, ff_glu=True, do_checkpointing=False)
-        self.quantizer = VectorQuantize(out_dim, classes, codebook_dim=16, use_cosine_sim=False, threshold_ema_dead_code=2,
+        self.quantizer = VectorQuantize(out_dim, classes, use_cosine_sim=False, threshold_ema_dead_code=2,
                                         sample_codebook_temp=init_temperature)
         self.to_output = nn.Linear(dim, out_dim)
         self.to_decoder = nn.Linear(out_dim, dim)
-        self.scale = nn.Linear(dim, 1, bias=False)
-        self.scale.weight.data.zero_()
 
     def do_ar_step(self, x, used_codes):
-        MIN = -12
-
         h = self.dec(x)
         o = self.to_output(h[:, -1])
-        scale = (self.scale(h[:, -1]) + 1)
         q, c, _ = self.quantizer(o, used_codes)
-        q = F.relu(q * scale) + MIN
+        q = torch.sigmoid(q)
         return q, c
 
-    def forward(self, x):
-        with torch.no_grad():
-            # Force one of the codebook weights to zero, allowing the model to "skip" any classes it chooses.
-            self.quantizer._codebook.embed.data[0] = 0
-
+    def forward(self, x, target):
         # manually perform ar regression over sequence_length=self.seq_len
         stack = [x]
         outputs = []
@@ -48,12 +39,22 @@ class SelfClassifyingHead(nn.Module):
         codes = []
         for i in range(self.seq_len):
             q, c = checkpoint(functools.partial(self.do_ar_step, used_codes=codes), torch.stack(stack, dim=1))
-            c_mask = c
-            c_mask[c==0] = -1  # Mask this out because we want code=0 to be capable of being repeated.
-            codes.append(c_mask)
-            stack.append(self.to_decoder(q))
+
             outputs.append(q)
-            results.append(torch.stack(outputs, dim=1).sum(1))
+            output = torch.stack(outputs, dim=1).sum(1)
+
+            # If the addition would strictly make the result worse, set it to 0. Sometimes.
+            if len(results) > 0:
+                worsen = (F.mse_loss(outputs[-1], target, reduction='none').sum(-1) < F.mse_loss(output, target, reduction='none').sum(-1)).float()
+                probabilistic_worsen = torch.rand_like(worsen) * worsen > .5
+                output = output * probabilistic_worsen.unsqueeze(-1)  # This is non-differentiable, but still deterministic.
+                c[probabilistic_worsen] = -1  # Code of -1 means the code was unused.
+                q = q * probabilistic_worsen.unsqueeze(-1)
+                outputs[-1] = q
+
+            codes.append(c)
+            stack.append(self.to_decoder(q))
+            results.append(output)
         return results, torch.cat(codes, dim=0)
 
 
@@ -100,6 +101,10 @@ class InstrumentQuantizer(nn.Module):
         self.total_codes = 0
 
     def forward(self, x):
+        # Normalize x on [0,1]
+        assert x.max() < 1.2 and x.min() > -1.2, f'{x.min()} {x.max()}'
+        x = (x + 1) / 2
+
         b, c, s = x.shape
         px = x.permute(0,2,1)  # B,S,C shape
         f = px.reshape(-1, self.op_dim)
@@ -107,7 +112,7 @@ class InstrumentQuantizer(nn.Module):
         for lyr in self.encoder:
             h = lyr(h)
 
-        reconstructions, codes = self.heads(h)
+        reconstructions, codes = self.heads(h, f)
         reconstruction_losses = torch.stack([F.mse_loss(r.reshape(b, s, c), px) for r in reconstructions])
         r_follow = torch.arange(1, reconstruction_losses.shape[0]+1, device=x.device)
         reconstruction_losses = (reconstruction_losses * r_follow / r_follow.shape[0])
@@ -154,6 +159,6 @@ def register_instrument_quantizer(opt_net, opt):
 
 
 if __name__ == '__main__':
-    inp = torch.randn((4,256,200))
+    inp = torch.randn((4,256,200)).clamp(-1,1)
     model = InstrumentQuantizer(256, 512, 4096, 8, 3)
     model(inp)
