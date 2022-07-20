@@ -350,6 +350,7 @@ class GaussianDiffusion:
             else:
                 cfk = self.conditioning_free_k
             model_output = (1 + cfk) * model_output - cfk * model_output_no_conditioning
+            # TODO: combine variance predictions here similarly.
 
         def process_xstart(x):
             if denoised_fn is not None:
