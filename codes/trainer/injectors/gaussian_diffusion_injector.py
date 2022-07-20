@@ -89,10 +89,10 @@ class GaussianDiffusionInjector(Injector):
                 sampler = self.schedule_sampler
                 self.deterministic_sampler.reset()  # Keep this reset whenever it is not being used, so it is ready to use automatically.
             model_inputs = {k: state[v] if isinstance(v, str) else v for k, v in self.model_input_keys.items()}
-            if self.preprocess_fn is not None:
-                hq = getattr(gen.module, self.preprocess_fn)(hq)
-
             t, weights = sampler.sample(hq.shape[0], hq.device)
+
+            if self.preprocess_fn is not None:
+                hq = getattr(gen.module, self.preprocess_fn)(hq, t, self.diffusion)
             if self.causal_mode:
                 cs, ce = self.causal_slope_range
                 slope = random.random() * (ce-cs) + cs
