@@ -24,7 +24,7 @@ class SubBlock(nn.Module):
         self.ffnorm = nn.GroupNorm(8, contraction_dim)
         if self.enable_attention_masking:
             # All regions can attend to the first token, which will be the timestep embedding. Hence, fixed_region.
-            self.mask = build_local_attention_mask(n=2000, l=48, fixed_region=1)
+            self.mask = build_local_attention_mask(n=4000, l=48, fixed_region=1)
             self.mask_initialized = False
         else:
             self.mask = None

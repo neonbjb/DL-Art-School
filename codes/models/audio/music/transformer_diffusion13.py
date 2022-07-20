@@ -4,6 +4,7 @@ from random import randrange
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.utils
 
 from models.arch_util import ResBlock, TimestepEmbedSequential, AttentionBlock, build_local_attention_mask
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
@@ -38,7 +39,7 @@ class SubBlock(nn.Module):
             self.mask_initialized = True
         blk_enc = self.blk_emb_proj(blk_emb)
         ah = self.dropout(self.attn(torch.cat([blk_enc, x], dim=-1), mask=self.mask))
-        ah = ah[:,:,blk_emb.shape[-1]:]  # Strip off the blk_emb and re-align with x.
+        ah = ah[:,:,blk_enc.shape[-1]:]  # Strip off the blk_emc used for attention and re-align with x.
         ah = F.gelu(self.attnorm(ah))
         h = torch.cat([ah, x], dim=1)
         hf = self.dropout(checkpoint(self.ff, h))
@@ -168,25 +169,21 @@ class TransformerDiffusion(nn.Module):
         }
         return groups
 
-    def input_to_random_resolution_and_window(self, x, x_prior):
+    def input_to_random_resolution_and_window(self, x):
         """
         This function MUST be applied to the target *before* noising. It returns the reduced, re-scoped target as well
-        as caches an internal prior for the rescoped target which will be useud in training.
+        as caches an internal prior for the rescoped target which will be used in training.
         Args:
             x: Diffusion target
-            x_prior: Prior input, which is generally just {x}
         """
-        assert x.shape == x_prior.shape, f'{x.shape} {x_prior.shape}'
-        resolution = randrange(1, self.resolution_steps)
+        resolution = randrange(0, self.resolution_steps)
         resolution_scale = 2 ** resolution
         s = F.interpolate(x, scale_factor=1/resolution_scale, mode='linear', align_corners=True)
-        s_prior = F.interpolate(x_prior, scale_factor=1/resolution_scale, mode='linear', align_corners=True)
         s_diff = s.shape[-1] - self.max_window
         if s_diff > 1:
             start = randrange(0, s_diff)
             s = s[:,:,start:start+self.max_window]
-            s_prior = x_prior[:,:,start:start+self.max_window]
-        s_prior = F.interpolate(s_prior, scale_factor=.25, mode='linear', align_corners=True)
+        s_prior = F.interpolate(s, scale_factor=.25, mode='linear', align_corners=True)
         s_prior = F.interpolate(s_prior, size=(s.shape[-1],), mode='linear', align_corners=True)
         self.preprocessed = (s_prior, torch.tensor([resolution] * x.shape[0], dtype=torch.long, device=x.device))
         return s
@@ -196,16 +193,18 @@ class TransformerDiffusion(nn.Module):
 
         h = x
         if resolution is None:
+            # This is assumed to be training.
             assert self.preprocessed is not None, 'Preprocessing function not called.'
-            h = x
+            assert x_prior is None, 'Provided prior will not be used, instead preprocessing output will be used.'
             h_sub, resolution = self.preprocessed
             self.preprocessed = None
         else:
-            h_sub = F.interpolate(x_prior, scale_factor=4, mode='linear', align_corners=True)
-            assert h.shape == h_sub.shape, f'{h.shape} {h_sub.shape}'
+            assert h.shape[-1] > x_prior.shape[-1] * 3.9, f'{h.shape} {x_prior.shape}'
+            h_sub = F.interpolate(x_prior, size=(x.shape[-1],), mode='linear', align_corners=True)
 
         if conditioning_free:
-            code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1)
+            h_sub = self.unconditioned_prior.repeat(x.shape[0], 1, x.shape[-1])
+            code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
         else:
             MIN_COND_LEN = 200
             MAX_COND_LEN = 1200
@@ -227,8 +226,8 @@ class TransformerDiffusion(nn.Module):
             time_emb = self.time_embed(timestep_embedding(timesteps, self.time_embed_dim))
             res_emb = self.resolution_embed(resolution)
             blk_emb = torch.cat([time_emb.unsqueeze(-1), res_emb.unsqueeze(-1), code_emb], dim=-1)
-            h = torch.cat([h, h_sub], dim=1)
 
+            h = torch.cat([h, h_sub], dim=1)
             h = self.inp_block(h)
             for layer in self.layers:
                 h = checkpoint(layer, h, blk_emb)
