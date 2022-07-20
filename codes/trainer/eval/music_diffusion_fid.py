@@ -232,7 +232,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         mel_norm = normalize_torch_mel(mel)
         #mel_norm = mel_norm[:,:,:448*4]  # restricts first stage to optimal training window.
         conditioning = mel_norm[:,:,:1200]
-        downsampled = F.interpolate(mel_norm, scale_factor=1/16, mode='linear', align_corners=True)
+        downsampled = F.interpolate(mel_norm, scale_factor=1/16, mode='nearest')
         stage1_shape = (1, 256, downsampled.shape[-1]*4)
         sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
         # Chain super-sampling using 2 stages.
