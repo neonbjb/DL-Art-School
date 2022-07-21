@@ -6,7 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.arch_util import ResBlock, TimestepEmbedSequential, AttentionBlock, build_local_attention_mask
+from models.arch_util import ResBlock, TimestepEmbedSequential, AttentionBlock, build_local_attention_mask, cGLU, \
+    RelativeQKBias
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
 from models.diffusion.unet_diffusion import TimestepBlock
 from trainer.networks import register_model
@@ -22,73 +23,73 @@ def is_sequence(t):
 
 
 class SubBlock(nn.Module):
-    def __init__(self, inp_dim, contraction_dim, blk_dim, heads, dropout):
+    def __init__(self, inp_dim, contraction_dim, heads, dropout):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
-        self.blk_emb_proj = nn.Conv1d(blk_dim, inp_dim, 1)
         self.attn = AttentionBlock(inp_dim, out_channels=contraction_dim, num_heads=heads)
+        self.register_buffer('mask', build_local_attention_mask(n=4000, l=64), persistent=False)
+        self.pos_bias = RelativeQKBias(l=64)
+        self.attn_glu = cGLU(contraction_dim)
         self.attnorm = nn.GroupNorm(8, contraction_dim)
         self.ff = nn.Conv1d(inp_dim+contraction_dim, contraction_dim, kernel_size=3, padding=1)
+        self.ff_glu = cGLU(contraction_dim)
         self.ffnorm = nn.GroupNorm(8, contraction_dim)
-        self.mask = build_local_attention_mask(n=4000, l=64, fixed_region=8)
-        self.mask_initialized = False
 
-    def forward(self, x, blk_emb):
-        if self.mask is not None and not self.mask_initialized:
-            self.mask = self.mask.to(x.device)
-            self.mask_initialized = True
-        blk_enc = self.blk_emb_proj(blk_emb)
-        ah = self.dropout(self.attn(torch.cat([blk_enc, x], dim=-1), mask=self.mask))
-        ah = ah[:,:,blk_enc.shape[-1]:]  # Strip off the blk_emc used for attention and re-align with x.
-        ah = F.gelu(self.attnorm(ah))
+    def forward(self, x):
+        ah = self.dropout(self.attn(x, mask=self.mask, qk_bias=self.pos_bias(x.shape[-1])))
+        ah = self.attn_glu(self.attnorm(ah))
         h = torch.cat([ah, x], dim=1)
         hf = self.dropout(checkpoint(self.ff, h))
-        hf = F.gelu(self.ffnorm(hf))
+        hf = self.ff_glu(self.ffnorm(hf))
         h = torch.cat([h, hf], dim=1)
         return h
 
 
 class ConcatAttentionBlock(TimestepBlock):
-    def __init__(self, trunk_dim, contraction_dim, heads, dropout):
+    def __init__(self, trunk_dim, contraction_dim, blk_dim, heads, dropout):
         super().__init__()
+        self.contraction_dim = contraction_dim
         self.prenorm = nn.GroupNorm(8, trunk_dim)
-        self.block1 = SubBlock(trunk_dim, contraction_dim, trunk_dim, heads, dropout)
-        self.block2 = SubBlock(trunk_dim+contraction_dim*2, contraction_dim, trunk_dim, heads, dropout)
+        self.block1 = SubBlock(trunk_dim+blk_dim, contraction_dim, heads, dropout)
+        self.block2 = SubBlock(trunk_dim+blk_dim+contraction_dim*2, contraction_dim, heads, dropout)
         self.out = nn.Conv1d(contraction_dim*4, trunk_dim, kernel_size=1, bias=False)
         self.out.weight.data.zero_()
 
     def forward(self, x, blk_emb):
         h = self.prenorm(x)
-        h = self.block1(h, blk_emb)
-        h = self.block2(h, blk_emb)
-        h = self.out(h[:,x.shape[1]:])
+        h = torch.cat([h, blk_emb.unsqueeze(-1).repeat(1,1,x.shape[-1])], dim=1)
+        h = self.block1(h)
+        h = self.block2(h)
+        h = self.out(h[:,-self.contraction_dim*4:])
         return h + x
 
 
 class ConditioningEncoder(nn.Module):
     def __init__(self,
                  spec_dim,
-                 embedding_dim,
+                 hidden_dim,
+                 out_dim,
                  num_resolutions,
                  attn_blocks=6,
                  num_attn_heads=4,
                  do_checkpointing=False):
         super().__init__()
         attn = []
-        self.init = nn.Conv1d(spec_dim, embedding_dim, kernel_size=5, stride=2)
-        self.resolution_embedding = nn.Embedding(num_resolutions, embedding_dim)
+        self.init = nn.Conv1d(spec_dim, hidden_dim, kernel_size=5, stride=2)
+        self.resolution_embedding = nn.Embedding(num_resolutions, hidden_dim)
         self.resolution_embedding.weight.data.mul(.1)  # Reduces the relative influence of this embedding from the start.
         for a in range(attn_blocks):
-            attn.append(AttentionBlock(embedding_dim, num_attn_heads, do_checkpoint=do_checkpointing))
-            attn.append(ResBlock(embedding_dim, dims=1, checkpointing_enabled=do_checkpointing))
+            attn.append(AttentionBlock(hidden_dim, num_attn_heads, do_checkpoint=do_checkpointing))
+            attn.append(ResBlock(hidden_dim, dims=1, checkpointing_enabled=do_checkpointing))
         self.attn = nn.Sequential(*attn)
-        self.dim = embedding_dim
+        self.out = nn.Linear(hidden_dim, out_dim, bias=False)
+        self.dim = hidden_dim
         self.do_checkpointing = do_checkpointing
 
     def forward(self, x, resolution):
         h = self.init(x) + self.resolution_embedding(resolution).unsqueeze(-1)
         h = self.attn(h)
-        return h[:, :, :5]
+        return self.out(h[:, :, 0])
 
 
 class TransformerDiffusion(nn.Module):
@@ -97,7 +98,6 @@ class TransformerDiffusion(nn.Module):
     """
     def __init__(
             self,
-            time_embed_dim=256,
             resolution_steps=8,
             max_window=384,
             model_channels=1024,
@@ -106,6 +106,9 @@ class TransformerDiffusion(nn.Module):
             in_channels=256,
             input_vec_dim=1024,
             out_channels=512,  # mean and variance
+            time_embed_dim=256,
+            time_proj_dim=64,
+            cond_proj_dim=256,
             num_heads=4,
             dropout=0,
             use_fp16=False,
@@ -128,19 +131,20 @@ class TransformerDiffusion(nn.Module):
         self.time_embed = nn.Sequential(
             linear(time_embed_dim, time_embed_dim),
             nn.SiLU(),
-            linear(time_embed_dim, model_channels),
+            linear(time_embed_dim, time_proj_dim),
         )
         self.prior_time_embed = nn.Sequential(
             linear(time_embed_dim, time_embed_dim),
             nn.SiLU(),
-            linear(time_embed_dim, model_channels),
+            linear(time_embed_dim, time_proj_dim),
         )
-        self.resolution_embed = nn.Embedding(resolution_steps, model_channels)
-        self.conditioning_encoder = ConditioningEncoder(in_channels, model_channels, resolution_steps, num_attn_heads=model_channels//64)
-        self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,5))
+        self.resolution_embed = nn.Embedding(resolution_steps, time_proj_dim)
+        self.conditioning_encoder = ConditioningEncoder(in_channels, model_channels, cond_proj_dim, resolution_steps, num_attn_heads=model_channels//64)
+        self.unconditioned_embedding = nn.Parameter(torch.randn(1,cond_proj_dim))
 
         self.inp_block = conv_nd(1, in_channels+input_vec_dim, model_channels, 3, 1, 1)
-        self.layers = TimestepEmbedSequential(*[ConcatAttentionBlock(model_channels, contraction_dim, num_heads, dropout) for _ in range(num_layers)])
+        self.layers = TimestepEmbedSequential(*[ConcatAttentionBlock(model_channels, contraction_dim, time_proj_dim*3 + cond_proj_dim,
+                                                                     num_heads, dropout) for _ in range(num_layers)])
 
         self.out = nn.Sequential(
             normalization(model_channels),
@@ -246,15 +250,14 @@ class TransformerDiffusion(nn.Module):
 
         # Mask out the conditioning input and x_prior inputs for whole batch elements, implementing something similar to classifier-free guidance.
         if self.training and self.unconditioned_percentage > 0:
-            unconditioned_batches = torch.rand((x.shape[0], 1, 1),
-                                               device=x.device) < self.unconditioned_percentage
-            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(code_emb.shape[0], 1, 1), code_emb)
+            unconditioned_batches = torch.rand((x.shape[0], 1), device=x.device) < self.unconditioned_percentage
+            code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(code_emb.shape[0], 1), code_emb)
 
         with torch.autocast(x.device.type, enabled=self.enable_fp16):
             time_emb = self.time_embed(timestep_embedding(timesteps, self.time_embed_dim))
             prior_time_emb = self.prior_time_embed(timestep_embedding(prior_timesteps, self.time_embed_dim))
             res_emb = self.resolution_embed(resolution)
-            blk_emb = torch.cat([time_emb.unsqueeze(-1), prior_time_emb.unsqueeze(-1), res_emb.unsqueeze(-1), code_emb], dim=-1)
+            blk_emb = torch.cat([time_emb, prior_time_emb, res_emb, code_emb], dim=1)
 
             h = torch.cat([x, x_prior], dim=1)
             h = self.inp_block(h)
@@ -304,5 +307,5 @@ def remove_conditioning(sd_path):
 
 
 if __name__ == '__main__':
-    remove_conditioning('X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr_pre\\models\\12500_generator.pth')
+    #remove_conditioning('X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr_pre\\models\\12500_generator.pth')
     test_tfd()

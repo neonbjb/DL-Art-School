@@ -146,7 +146,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    x = x.clamp(-s, s) / s
         #    return x
         sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
-        gen_mel = sampler(self.model, mel_norm.shape, model_kwargs={'truth_mel': mel_norm})
+        gen_mel = sampler(self.model, mel_norm.shape, model_kwargs={'truth_mel': mel_norm}, eta=.8)
 
         gen_mel_denorm = denormalize_torch_mel(gen_mel)
         output_shape = (1,16,audio.shape[-1]//16)
@@ -230,7 +230,6 @@ class MusicDiffusionFid(evaluator.Evaluator):
         audio = audio.unsqueeze(0)
         mel = self.spec_fn({'in': audio})['out']
         mel_norm = normalize_torch_mel(mel)
-        #mel_norm = mel_norm[:,:,:448*4]  # restricts first stage to optimal training window.
         conditioning = mel_norm[:,:,:1200]
         downsampled = F.interpolate(mel_norm, scale_factor=1/16, mode='nearest')
         stage1_shape = (1, 256, downsampled.shape[-1]*4)
@@ -323,19 +322,34 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 
 if __name__ == '__main__':
+    """
+    # For multilevel SR:
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr.yml', 'generator',
                                        also_load_savepoint=False, strict_load=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr\\models\\22000_generator.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr\\models\\4000_generator.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
                 'diffusion_steps': 128,  # basis: 192
                 'conditioning_free': False, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': False,
-                'diffusion_schedule': 'linear', 'diffusion_type': 'chained_sr',
-                #'causal': True, 'causal_slope': 4,
-                #'partial_low': 128, 'partial_high': 192
+                'diffusion_schedule': 'cosine', 'diffusion_type': 'chained_sr',
     }
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 1, 'device': 'cuda', 'opt': {}}
+    """
+
+    # For TFD+cheater trainer
+    diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd_and_cheater.yml', 'generator',
+                                       also_load_savepoint=False, strict_load=False,
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd14_and_cheater_g2\\models\\20000_generator.pth'
+                                       ).cuda()
+    opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
+                #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
+                'diffusion_steps': 128,  # basis: 192
+                'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': True,
+                'diffusion_schedule': 'linear', 'diffusion_type': 'from_codes_quant',
+    }
+
+
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 6, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     fds = []
     for i in range(2):

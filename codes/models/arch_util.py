@@ -341,6 +341,20 @@ class Downsample(nn.Module):
         return self.op(x)
 
 
+class cGLU(nn.Module):
+    """
+    Gated GELU for channel-first architectures.
+    """
+    def __init__(self, dim_in, dim_out=None):
+        super().__init__()
+        dim_out = dim_in if dim_out is None else dim_out
+        self.proj = nn.Conv1d(dim_in, dim_out * 2, 1)
+
+    def forward(self, x):
+        x, gate = self.proj(x).chunk(2, dim=1)
+        return x * F.gelu(gate)
+
+
 class ResBlock(nn.Module):
     """
     A residual block that can optionally change the number of channels.
@@ -439,7 +453,7 @@ class ResBlock(nn.Module):
         return self.skip_connection(x) + h
 
 
-def build_local_attention_mask(n, l, fixed_region):
+def build_local_attention_mask(n, l, fixed_region=0):
     """
     Builds an attention mask that focuses attention on local region
     Includes provisions for a "fixed_region" at the start of the sequence where full attention weights will be applied.
@@ -463,6 +477,24 @@ def build_local_attention_mask(n, l, fixed_region):
 
 def test_local_attention_mask():
     print(build_local_attention_mask(9,4,1))
+
+
+class RelativeQKBias(nn.Module):
+    """
+    Very simple relative position bias scheme which should be directly added to QK matrix. This bias simply applies to
+    the distance from the given element.
+    """
+    def __init__(self, l, max_positions=4000):
+        super().__init__()
+        self.emb = nn.Parameter(torch.randn(l+1) * .01)
+        o = torch.arange(0,max_positions)
+        c = o.unsqueeze(-1).repeat(1,max_positions)
+        r = o.unsqueeze(0).repeat(max_positions,1)
+        M = ((-(r-c).abs())+l).clamp(0,l)
+        self.register_buffer('M', M, persistent=False)
+
+    def forward(self, n):
+        return self.emb[self.M[:n, :n]].view(1,n,n)
 
 
 class AttentionBlock(nn.Module):
@@ -507,16 +539,22 @@ class AttentionBlock(nn.Module):
         self.x_proj = nn.Identity() if out_channels == channels else conv_nd(1, channels, out_channels, 1)
         self.proj_out = zero_module(conv_nd(1, out_channels, out_channels, 1))
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, qk_bias=None):
         if self.do_checkpoint:
-            if mask is not None:
-                return checkpoint(self._forward, x, mask)
+            if mask is None:
+                if qk_bias is None:
+                    return checkpoint(self._forward, x)
+                else:
+                    assert False, 'unsupported: qk_bias but no mask'
             else:
-                return checkpoint(self._forward, x)
+                if qk_bias is None:
+                    return checkpoint(self._forward, x, mask)
+                else:
+                    return checkpoint(self._forward, x, mask, qk_bias)
         else:
             return self._forward(x, mask)
 
-    def _forward(self, x, mask=None):
+    def _forward(self, x, mask=None, qk_bias=0):
         b, c, *spatial = x.shape
         if mask is not None:
             if len(mask.shape) == 2:
@@ -529,7 +567,7 @@ class AttentionBlock(nn.Module):
         if self.do_activation:
             x = F.silu(x, inplace=True)
         qkv = self.qkv(x)
-        h = self.attention(qkv, mask)
+        h = self.attention(qkv, mask, qk_bias)
         h = self.proj_out(h)
         xp = self.x_proj(x)
         return (xp + h).reshape(b, xp.shape[1], *spatial)
@@ -544,7 +582,7 @@ class QKVAttentionLegacy(nn.Module):
         super().__init__()
         self.n_heads = n_heads
 
-    def forward(self, qkv, mask=None):
+    def forward(self, qkv, mask=None, qk_bias=0):
         """
         Apply QKV attention.
 
@@ -559,6 +597,7 @@ class QKVAttentionLegacy(nn.Module):
         weight = torch.einsum(
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
+        weight = weight + qk_bias
         if mask is not None:
             mask = mask.repeat(self.n_heads, 1, 1)
             weight[mask.logical_not()] = -torch.inf
@@ -577,7 +616,7 @@ class QKVAttention(nn.Module):
         super().__init__()
         self.n_heads = n_heads
 
-    def forward(self, qkv, mask=None):
+    def forward(self, qkv, mask=None, qk_bias=0):
         """
         Apply QKV attention.
 
