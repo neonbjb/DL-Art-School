@@ -232,7 +232,7 @@ class TransformerDiffusion(nn.Module):
         assert torch.all(timesteps - prior_timesteps >= 0), f'Prior timesteps should always be lower (more resolved) than input timesteps. {timesteps}, {prior_timesteps}'
 
         if conditioning_free:
-            code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, 1)
+            code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1)
         else:
             MIN_COND_LEN = 200
             MAX_COND_LEN = 1200
