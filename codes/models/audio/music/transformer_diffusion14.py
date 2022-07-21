@@ -4,63 +4,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.arch_util import AttentionBlock, TimestepEmbedSequential, build_local_attention_mask
+from models.arch_util import TimestepEmbedSequential
 from models.audio.music.encoders import ResEncoder16x
+from models.audio.music.transformer_diffusion13 import ConcatAttentionBlock
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import TimestepBlock
 from trainer.networks import register_model
 from utils.util import checkpoint, print_network
-
-
-class SubBlock(nn.Module):
-    def __init__(self, inp_dim, contraction_dim, blk_dim, heads, dropout, enable_attention_masking=False):
-        super().__init__()
-        self.enable_attention_masking = enable_attention_masking
-        self.dropout = nn.Dropout(p=dropout)
-        self.blk_emb_proj = nn.Conv1d(blk_dim, inp_dim, 1)
-        self.attn = AttentionBlock(inp_dim, out_channels=contraction_dim, num_heads=heads)
-        self.attnorm = nn.GroupNorm(8, contraction_dim)
-        self.ff = nn.Conv1d(inp_dim+contraction_dim, contraction_dim, kernel_size=3, padding=1)
-        self.ffnorm = nn.GroupNorm(8, contraction_dim)
-        if self.enable_attention_masking:
-            # All regions can attend to the first token, which will be the timestep embedding. Hence, fixed_region.
-            self.mask = build_local_attention_mask(n=4000, l=48, fixed_region=1)
-            self.mask_initialized = False
-        else:
-            self.mask = None
-
-    def forward(self, x, blk_emb):
-        if self.mask is not None and not self.mask_initialized:
-            self.mask = self.mask.to(x.device)
-            self.mask_initialized = True
-        blk_enc = self.blk_emb_proj(blk_emb)
-        ah = self.dropout(self.attn(torch.cat([blk_enc, x], dim=-1), mask=self.mask))
-        ah = ah[:,:,blk_emb.shape[-1]:]  # Strip off the blk_emb and re-align with x.
-        ah = F.gelu(self.attnorm(ah))
-        h = torch.cat([ah, x], dim=1)
-        hf = self.dropout(checkpoint(self.ff, h))
-        hf = F.gelu(self.ffnorm(hf))
-        h = torch.cat([h, hf], dim=1)
-        return h
-
-
-class ConcatAttentionBlock(TimestepBlock):
-    def __init__(self, trunk_dim, contraction_dim, heads, dropout, enable_attention_masking=False):
-        super().__init__()
-        self.prenorm = nn.GroupNorm(8, trunk_dim)
-        self.block1 = SubBlock(trunk_dim, contraction_dim, trunk_dim, heads, dropout,
-                               enable_attention_masking=enable_attention_masking)
-        self.block2 = SubBlock(trunk_dim+contraction_dim*2, contraction_dim, trunk_dim, heads, dropout,
-                               enable_attention_masking=enable_attention_masking)
-        self.out = nn.Conv1d(contraction_dim*4, trunk_dim, kernel_size=1, bias=False)
-        self.out.weight.data.zero_()
-
-    def forward(self, x, blk_emb):
-        h = self.prenorm(x)
-        h = self.block1(h, blk_emb)
-        h = self.block2(h, blk_emb)
-        h = self.out(h[:,x.shape[1]:])
-        return h + x
 
 
 class TransformerDiffusion(nn.Module):
@@ -102,13 +51,14 @@ class TransformerDiffusion(nn.Module):
         self.time_embed = nn.Sequential(
             linear(time_embed_dim, time_embed_dim),
             nn.SiLU(),
-            linear(time_embed_dim, model_channels),
+            linear(time_embed_dim, time_embed_dim//4),
         )
 
         self.input_converter = nn.Conv1d(input_vec_dim, model_channels, 1)
         self.unconditioned_embedding = nn.Parameter(torch.randn(1,model_channels,1))
         self.intg = nn.Conv1d(model_channels*2, model_channels, 1)
-        self.layers = TimestepEmbedSequential(*[ConcatAttentionBlock(model_channels, contraction_dim, num_heads, dropout, enable_attention_masking=True) for _ in range(num_layers)])
+        self.layers = TimestepEmbedSequential(*[ConcatAttentionBlock(model_channels, contraction_dim, time_embed_dim//4,
+                                                                     num_heads, dropout) for _ in range(num_layers)])
 
         self.out = nn.Sequential(
             normalization(model_channels),
@@ -128,8 +78,10 @@ class TransformerDiffusion(nn.Module):
     def get_grad_norm_parameter_groups(self):
         attn1 = list(itertools.chain.from_iterable([lyr.block1.attn.parameters() for lyr in self.layers]))
         attn2 = list(itertools.chain.from_iterable([lyr.block2.attn.parameters() for lyr in self.layers]))
-        ff1 = list(itertools.chain.from_iterable([lyr.block1.ff.parameters() for lyr in self.layers]))
-        ff2 = list(itertools.chain.from_iterable([lyr.block2.ff.parameters() for lyr in self.layers]))
+        ff1 = list(itertools.chain.from_iterable([lyr.block1.ff1.parameters() for lyr in self.layers] +
+                                                 [lyr.block1.ff2.parameters() for lyr in self.layers]))
+        ff2 = list(itertools.chain.from_iterable([lyr.block2.ff1.parameters() for lyr in self.layers] +
+                                                 [lyr.block2.ff2.parameters() for lyr in self.layers]))
         blkout_layers = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.layers]))
         groups = {
             'prenorms': list(itertools.chain.from_iterable([lyr.prenorm.parameters() for lyr in self.layers])),
@@ -163,7 +115,7 @@ class TransformerDiffusion(nn.Module):
             code_emb = F.interpolate(code_emb, size=x.shape[-1], mode='nearest')
 
         with torch.autocast(x.device.type, enabled=self.enable_fp16):
-            blk_emb = self.time_embed(timestep_embedding(timesteps, self.time_embed_dim)).unsqueeze(-1)
+            blk_emb = self.time_embed(timestep_embedding(timesteps, self.time_embed_dim))
             x = self.inp_block(x)
 
             x = self.intg(torch.cat([x, code_emb], dim=1))
