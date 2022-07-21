@@ -14,14 +14,6 @@ from trainer.networks import register_model
 from utils.util import checkpoint
 
 
-def is_latent(t):
-    return t.dtype == torch.float
-
-
-def is_sequence(t):
-    return t.dtype == torch.long
-
-
 class SubBlock(nn.Module):
     def __init__(self, inp_dim, contraction_dim, heads, dropout):
         super().__init__()
