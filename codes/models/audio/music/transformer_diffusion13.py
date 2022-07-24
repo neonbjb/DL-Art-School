@@ -147,31 +147,6 @@ class TransformerDiffusion(nn.Module):
 
         self.debug_codes = {}
 
-    def get_grad_norm_parameter_groups(self):
-        attn1 = list(itertools.chain.from_iterable([lyr.block1.attn.parameters() for lyr in self.layers]))
-        attn2 = list(itertools.chain.from_iterable([lyr.block2.attn.parameters() for lyr in self.layers]))
-        ff1 = list(itertools.chain.from_iterable([lyr.block1.ff1.parameters() for lyr in self.layers] +
-                                                 [lyr.block1.ff2.parameters() for lyr in self.layers]))
-        ff2 = list(itertools.chain.from_iterable([lyr.block2.ff1.parameters() for lyr in self.layers] +
-                                                 [lyr.block2.ff2.parameters() for lyr in self.layers]))
-        blkout_layers = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.layers]))
-        groups = {
-            'prenorms': list(itertools.chain.from_iterable([lyr.prenorm.parameters() for lyr in self.layers])),
-            'blk1_attention_layers': attn1,
-            'blk2_attention_layers': attn2,
-            'attention_layers': attn1 + attn2,
-            'blk1_ff_layers': ff1,
-            'blk2_ff_layers': ff2,
-            'ff_layers': ff1 + ff2,
-            'block_out_layers': blkout_layers,
-            'out': list(self.out.parameters()),
-            'x_proj': list(self.inp_block.parameters()),
-            'layers': list(self.layers.parameters()),
-            'time_embed': list(self.time_embed.parameters()),
-            'resolution_embed': list(self.resolution_embed.parameters()),
-        }
-        return groups
-
     def input_to_random_resolution_and_window(self, x, ts, diffuser):
         """
         This function MUST be applied to the target *before* noising. It returns the reduced, re-scoped target as well
@@ -270,6 +245,41 @@ class TransformerDiffusion(nn.Module):
         out = out + extraneous_addition * 0
 
         return out
+
+    def get_grad_norm_parameter_groups(self):
+        attn1 = list(itertools.chain.from_iterable([lyr.block1.attn.parameters() for lyr in self.layers]))
+        attn2 = list(itertools.chain.from_iterable([lyr.block2.attn.parameters() for lyr in self.layers]))
+        ff1 = list(itertools.chain.from_iterable([lyr.block1.ff1.parameters() for lyr in self.layers] +
+                                                 [lyr.block1.ff2.parameters() for lyr in self.layers]))
+        ff2 = list(itertools.chain.from_iterable([lyr.block2.ff1.parameters() for lyr in self.layers] +
+                                                 [lyr.block2.ff2.parameters() for lyr in self.layers]))
+        blkout_layers = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.layers]))
+        groups = {
+            'prenorms': list(itertools.chain.from_iterable([lyr.prenorm.parameters() for lyr in self.layers])),
+            'blk1_attention_layers': attn1,
+            'blk2_attention_layers': attn2,
+            'attention_layers': attn1 + attn2,
+            'blk1_ff_layers': ff1,
+            'blk2_ff_layers': ff2,
+            'ff_layers': ff1 + ff2,
+            'block_out_layers': blkout_layers,
+            'out': list(self.out.parameters()),
+            'x_proj': list(self.inp_block.parameters()),
+            'layers': list(self.layers.parameters()),
+            'time_embed': list(self.time_embed.parameters()),
+            'prior_time_embed': list(self.prior_time_embed.parameters()),
+            'resolution_embed': list(self.resolution_embed.parameters()),
+        }
+        return groups
+
+    def before_step(self, step):
+        scaled_grad_parameters = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.diff.layers]))
+        # Scale back the gradients of the blkout and prenorm layers by a constant factor. These get two orders of magnitudes
+        # higher gradients. Ideally we would use parameter groups, but ZeroRedundancyOptimizer makes this trickier than
+        # directly fiddling with the gradients.
+        for p in scaled_grad_parameters:
+            if hasattr(p, 'grad') and p.grad is not None:
+                p.grad *= .2
 
 
 @register_model
