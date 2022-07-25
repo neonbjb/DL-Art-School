@@ -30,11 +30,13 @@ Unidecode==1.0.22
 tgt == 1.4.4
 pyworld == 0.2.10
 audio2numpy
+SoundFile
 
 # For text stuff
 transformers
 tokenizers
 jiwer  # calculating WER
+omegaconf
 
 # lucidrains stuff
 vector_quantize_pytorch
@@ -43,3 +45,4 @@ rotary-embedding-torch
 axial_positional_embedding
 g-mlp-pytorch
 x-clip
+x_transformers

@@ -483,16 +483,24 @@ class RelativeQKBias(nn.Module):
     """
     Very simple relative position bias scheme which should be directly added to QK matrix. This bias simply applies to
     the distance from the given element.
+
+    If symmetric=False, a different bias is applied to each side of the input element, otherwise the bias is symmetric.
     """
-    def __init__(self, l, max_positions=4000):
+    def __init__(self, l, max_positions=4000, symmetric=True):
         super().__init__()
-        self.emb = nn.Parameter(torch.randn(l+1) * .01)
-        o = torch.arange(0,max_positions)
-        c = o.unsqueeze(-1).repeat(1,max_positions)
-        r = o.unsqueeze(0).repeat(max_positions,1)
-        M = ((-(r-c).abs())+l).clamp(0,l)
+        if symmetric:
+            self.emb = nn.Parameter(torch.randn(l+1) * .01)
+            o = torch.arange(0,max_positions)
+            c = o.unsqueeze(-1).repeat(1,max_positions)
+            r = o.unsqueeze(0).repeat(max_positions,1)
+            M = ((-(r-c).abs())+l).clamp(0,l)
+        else:
+            self.emb = nn.Parameter(torch.randn(l*2+2) * .01)
+            a = torch.arange(0,max_positions)
+            c = a.unsqueeze(-1) - a
+            m = (c >= -l).logical_and(c <= l)
+            M = (l+c+1)*m
         self.register_buffer('M', M, persistent=False)
-        self.initted = False
 
     def forward(self, n):
         # Ideally, I'd return this:

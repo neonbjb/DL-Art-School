@@ -8,7 +8,6 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision  # For debugging, not actually used.
-from x_transformers.x_transformers import RelativePositionBias
 
 from models.audio.music.gpt_music import GptMusicLower
 from models.audio.music.music_quantizer import MusicQuantizer
@@ -291,10 +290,6 @@ class AttentionBlock(nn.Module):
             self.attention = QKVAttentionLegacy(self.num_heads)
 
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
-        if relative_pos_embeddings:
-            self.relative_pos_embeddings = RelativePositionBias(scale=(channels // self.num_heads) ** .5, causal=False, heads=num_heads, num_buckets=32, max_distance=64)
-        else:
-            self.relative_pos_embeddings = None
 
     def forward(self, x, mask=None):
         if self.do_checkpoint:
@@ -306,7 +301,7 @@ class AttentionBlock(nn.Module):
         b, c, *spatial = x.shape
         x = x.reshape(b, c, -1)
         qkv = self.qkv(self.norm(x))
-        h = self.attention(qkv, mask, self.relative_pos_embeddings)
+        h = self.attention(qkv, mask)
         h = self.proj_out(h)
         return (x + h).reshape(b, c, *spatial)
 

@@ -315,14 +315,15 @@ class MusicDiffusionFid(evaluator.Evaluator):
 
 if __name__ == '__main__':
     # For multilevel SR:
+    """
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr.yml', 'generator',
                                        also_load_savepoint=False, strict_load=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr\\models\\18000_generator.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_multilevel_sr_archived_prev2\\models\\18000_generator.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
-                'diffusion_steps': 256,  # basis: 192
-                'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': True,
+                'diffusion_steps': 64,  # basis: 192
+                'conditioning_free': False, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': True,
                 'diffusion_schedule': 'cosine', 'diffusion_type': 'chained_sr',
     }
 
@@ -334,13 +335,12 @@ if __name__ == '__main__':
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
-                'diffusion_steps': 256,  # basis: 192
-                'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': True,
+                'diffusion_steps': 64,  # basis: 192
+                'conditioning_free': False, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': True,
                 'diffusion_schedule': 'cosine', 'diffusion_type': 'from_codes_quant',
     }
-    """
 
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 11, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 12, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     fds = []
     for i in range(2):
