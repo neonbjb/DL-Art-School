@@ -273,7 +273,7 @@ class TransformerDiffusion(nn.Module):
         return groups
 
     def before_step(self, step):
-        scaled_grad_parameters = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.diff.layers]))
+        scaled_grad_parameters = list(itertools.chain.from_iterable([lyr.out.parameters() for lyr in self.layers]))
         # Scale back the gradients of the blkout and prenorm layers by a constant factor. These get two orders of magnitudes
         # higher gradients. Ideally we would use parameter groups, but ZeroRedundancyOptimizer makes this trickier than
         # directly fiddling with the gradients.
