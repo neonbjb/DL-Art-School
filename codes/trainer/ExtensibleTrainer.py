@@ -174,6 +174,8 @@ class ExtensibleTrainer(BaseModel):
                             self.emas[k] = copy.deepcopy(v)
                             if self.ema_on_cpu:
                                 self.emas[k] = self.emas[k].cpu()
+                            if hasattr(v, 'provide_ema'):
+                                v.provide_ema(self.emas[k])
                         found += 1
         assert found == len(self.netsG) + len(self.netsD)
 
