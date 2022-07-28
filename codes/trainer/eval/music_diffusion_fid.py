@@ -137,8 +137,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    s = q9.clamp(1, 9999999999)
         #    x = x.clamp(-s, s) / s
         #    return x
-        perp = self.diffuser.p_sample_loop_for_perplexity(self.model, mel_norm,
-                                                          model_kwargs = {'truth_mel': mel_norm})
+        perp = self.diffuser.p_sample_loop_for_log_perplexity(self.model, mel_norm,
+                                                              model_kwargs = {'truth_mel': mel_norm})
 
         sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
         gen_mel = sampler(self.model, mel_norm.shape, model_kwargs={'truth_mel': mel_norm})
@@ -317,7 +317,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
             self.local_modules[k] = mod.cpu()
         self.spec_decoder = self.spec_decoder.cpu()
 
-        return {"frechet_distance": frechet_distance, "perplexity": perplexity}
+        return {"frechet_distance": frechet_distance, "log_perplexity": perplexity}
 
 
 if __name__ == '__main__':

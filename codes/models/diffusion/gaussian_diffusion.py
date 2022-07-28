@@ -659,7 +659,7 @@ class GaussianDiffusion:
                 img = model_driven_out + guidance_driven_out
         return img
 
-    def p_sample_loop_for_perplexity(
+    def p_sample_loop_for_log_perplexity(
         self,
         model,
         truth,
