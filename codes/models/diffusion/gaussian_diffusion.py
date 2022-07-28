@@ -673,7 +673,7 @@ class GaussianDiffusion:
         indices = list(range(self.num_timesteps))[::-1]
 
         img = noise
-        perp = 1
+        logperp = 1
         for i in tqdm(indices):
             t = th.tensor([i] * shape[0], device=device)
             with th.no_grad():
@@ -687,12 +687,20 @@ class GaussianDiffusion:
                     model_kwargs=model_kwargs,
                 )
                 mean = out["mean"]
-                std = out["log_variance"].exp().sqrt()
+                var = out["log_variance"].exp()
                 q = self.q_sample(truth, t, noise=noise)
-                err = out - q
-                prob = (err - mean) / std
-                perp = prob * perp
-        return perp
+                err = out["sample"] - q
+                def normpdf(x, mean, var):
+                    denom = (2 * math.pi * var)**.5
+                    num = torch.exp(-(x-mean)**2/(2*var))
+                    return num / denom
+
+                logperp = torch.log(normpdf(err, mean, var)) / self.num_timesteps + logperp
+        # Remove -infs, which do happen pretty regularly (and penalize them proportionately).
+        num_infs = torch.isinf(logperp).sum()
+        logperp[torch.isinf(logperp)] = torch.max(logperp) * num_infs * 2
+        print(f'Num infs: : {num_infs}')  # probably should just log this.
+        return -logperp.mean()
 
     def ddim_sample(
         self,

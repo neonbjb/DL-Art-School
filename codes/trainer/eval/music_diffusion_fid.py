@@ -105,7 +105,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                           model_kwargs={'codes': mel})
         gen = pixel_shuffle_1d(gen, self.squeeze_ratio)
 
-        return gen, real_resampled, normalize_torch_mel(self.spec_fn({'in': gen})['out']), normalize_torch_mel(mel), sample_rate
+        return gen, real_resampled, normalize_torch_mel(self.spec_fn({'in': gen})['out']), normalize_torch_mel(mel), sample_rate, 0
 
     def perform_diffusion_from_codes(self, audio, sample_rate=22050):
         real_resampled = audio
@@ -125,7 +125,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                               model_kwargs={'aligned_conditioning': gen_mel_denorm})
         gen_wav = pixel_shuffle_1d(gen_wav, 16)
 
-        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate
+        return gen_wav, real_resampled, gen_mel, mel_norm, sample_rate, torch.tensor([0])
 
     def perform_diffusion_from_codes_quant(self, audio, sample_rate=22050):
         audio = audio.unsqueeze(0)
@@ -137,6 +137,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    s = q9.clamp(1, 9999999999)
         #    x = x.clamp(-s, s) / s
         #    return x
+        perp = self.diffuser.p_sample_loop_for_perplexity(self.model, mel_norm,
+                                                          model_kwargs = {'truth_mel': mel_norm})
+
         sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
         gen_mel = sampler(self.model, mel_norm.shape, model_kwargs={'truth_mel': mel_norm})
 
@@ -152,7 +155,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                               model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
-        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
+        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate, perp
 
     def perform_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
         audio = audio.unsqueeze(0)
@@ -185,7 +188,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                               model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
-        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
+        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate, torch.tensor([0])
 
     def perform_diffusion_from_codes_ar_prior(self, audio, sample_rate=22050):
         audio = audio.unsqueeze(0)
@@ -216,7 +219,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         real_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape, model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
-        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate
+        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate, torch.tensor([0])
 
     def perform_chained_sr(self, audio, sample_rate=22050):
         audio = audio.unsqueeze(0)
@@ -242,7 +245,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         real_wav = self.spectral_diffuser.ddim_sample_loop(self.spec_decoder, output_shape, model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
-        return gen_wav, real_wav.squeeze(0), stage2, mel_norm, sample_rate
+        return gen_wav, real_wav.squeeze(0), stage2, mel_norm, sample_rate, torch.tensor([0])
 
     def project(self, sample, sample_rate):
         sample = torchaudio.functional.resample(sample, sample_rate, 22050)
@@ -278,6 +281,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
         with torch.no_grad():
             gen_projections = []
             real_projections = []
+            perplexities = []
             for i in tqdm(list(range(0, len(self.data), self.skip))):
                 path = self.data[(i + self.env['rank']) % len(self.data)]
                 audio = load_audio(path, 22050).to(self.dev)
@@ -285,7 +289,9 @@ class MusicDiffusionFid(evaluator.Evaluator):
                 #audio = audio[:, :1764000]
                 if self.clip:
                     audio = audio[:, :100000]
-                sample, ref, sample_mel, ref_mel, sample_rate = self.diffusion_fn(audio)
+                sample, ref, sample_mel, ref_mel, sample_rate, perplexity = self.diffusion_fn(audio)
+                # Future note: need to normalize perplexity by the size of the input sample, which are always equal for now but not gauranteed for the future.
+                perplexities.append(perplexity)
 
                 gen_projections.append(self.project(sample, sample_rate).cpu())  # Store on CPU to avoid wasting GPU memory.
                 real_projections.append(self.project(ref, sample_rate).cpu())
@@ -297,6 +303,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
             gen_projections = torch.stack(gen_projections, dim=0)
             real_projections = torch.stack(real_projections, dim=0)
             frechet_distance = torch.tensor(self.compute_frechet_distance(gen_projections, real_projections), device=self.env['device'])
+            perplexity = torch.stack(perplexities, dim=0).mean()
 
             if distributed.is_initialized() and distributed.get_world_size() > 1:
                 distributed.all_reduce(frechet_distance)
@@ -310,7 +317,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
             self.local_modules[k] = mod.cpu()
         self.spec_decoder = self.spec_decoder.cpu()
 
-        return {"frechet_distance": frechet_distance}
+        return {"frechet_distance": frechet_distance, "perplexity": perplexity}
 
 
 if __name__ == '__main__':
@@ -331,16 +338,16 @@ if __name__ == '__main__':
     # For TFD+cheater trainer
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd_and_cheater.yml', 'generator',
                                        also_load_savepoint=False, strict_load=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd14_and_cheater_g2\\models\\56000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd14_and_cheater_g2\\models\\120000_generator_ema.pth'
                                        ).cuda()
     opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
-                'diffusion_steps': 64,  # basis: 192
-                'conditioning_free': False, 'conditioning_free_k': 1, 'use_ddim': True, 'clip_audio': True,
+                'diffusion_steps': 256,
+                'conditioning_free': False, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': True,
                 'diffusion_schedule': 'cosine', 'diffusion_type': 'from_codes_quant',
     }
 
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 12, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 13, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     fds = []
     for i in range(2):
