@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from codes.models.arch_util import ResBlock
-from codes.models.lucidrains.x_transformers import Encoder
-from codes.trainer.networks import register_model
+from models.arch_util import ResBlock
+from models.lucidrains.x_transformers import Encoder
+from trainer.networks import register_model
 
 
 class VitLatent(nn.Module):
