@@ -16,13 +16,16 @@ from tqdm import tqdm
 
 from trainer.injectors.audio_injectors import MusicCheaterLatentInjector
 
+from codes.models.audio.music.transformer_diffusion14 import get_cheater_encoder_v2
+
 
 def report_progress(progress_file, file):
     with open(progress_file, 'a', encoding='utf-8') as f:
         f.write(f'{file}\n')
 
 
-cheater_inj = MusicCheaterLatentInjector({'in': 'in', 'out': 'out'}, {})
+model = get_cheater_encoder_v2().eval().cpu()
+model.load_state_dict(torch.load('../experiments/tfd14_cheater_encoder.pth', map_location=torch.device('cpu')))
 
 
 def process_folder(file, base_path, output_path, progress_file):
@@ -30,7 +33,10 @@ def process_folder(file, base_path, output_path, progress_file):
     os.makedirs(outdir, exist_ok=True)
     with np.load(file) as npz_file:
         mel = torch.tensor(npz_file['arr_0']).cuda().unsqueeze(0)
-        cheater = cheater_inj({'in': mel})['out']
+        global model
+        model = model.cuda()
+        with torch.no_grad():
+            cheater = model(mel)
         np.savez(os.path.join(outdir, os.path.basename(file)), cheater.cpu().numpy())
     report_progress(progress_file, file)
 

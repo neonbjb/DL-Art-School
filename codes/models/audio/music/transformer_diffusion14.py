@@ -143,13 +143,17 @@ class TransformerDiffusionWithCheaterLatent(nn.Module):
         self.diff = TransformerDiffusion(**kwargs)
         self.encoder = ResEncoder16x(256, 1024, 256, checkpointing_enabled=checkpoint_encoder)
 
-    def forward(self, x, timesteps, truth_mel, conditioning_free=False):
+    def forward(self, x, timesteps, truth_mel, conditioning_free=False, cheater=None):
         unused_parameters = []
         encoder_grad_enabled = self.freeze_encoder_until is not None and self.internal_step > self.freeze_encoder_until
         if not encoder_grad_enabled:
             unused_parameters.extend(list(self.encoder.parameters()))
-        with torch.set_grad_enabled(encoder_grad_enabled):
-            proj = self.encoder(truth_mel)
+
+        if cheater is None:
+            with torch.set_grad_enabled(encoder_grad_enabled):
+                proj = self.encoder(truth_mel)
+        else:
+            proj = cheater
 
         for p in unused_parameters:
             proj = proj + p.mean() * 0
@@ -175,6 +179,10 @@ class TransformerDiffusionWithCheaterLatent(nn.Module):
         for p in scaled_grad_parameters:
             if hasattr(p, 'grad') and p.grad is not None:
                 p.grad *= .2
+
+
+def get_cheater_encoder_v2():
+    return ResEncoder16x(256, 1024, 256, checkpointing_enabled=False)
 
 
 @register_model
@@ -221,12 +229,12 @@ def extract_cheater_encoder(in_f, out_f):
     out = {}
     for k, v in p.items():
         if k.startswith('encoder.'):
-            out[k] = v
+            out[k[len('encoder.'):]] = v
     torch.save(out, out_f)
 
 
 if __name__ == '__main__':
     #test_local_attention_mask()
-    #extract_cheater_encoder('X:\\dlas\\experiments\\train_music_diffusion_tfd_and_cheater\\models\\104500_generator_ema.pth', 'X:\\dlas\\experiments\\tfd12_self_learned_cheater_enc.pth', True)
-    test_cheater_model()
+    extract_cheater_encoder('X:\\dlas\\experiments\\tfd14_and_cheater.pth', 'X:\\dlas\\experiments\\tfd14_cheater_encoder.pth')
+    #test_cheater_model()
     #extract_diff('X:\\dlas\experiments\\train_music_diffusion_tfd_cheater_from_scratch\\models\\56500_generator_ema.pth', 'extracted.pth', remove_head=True)
