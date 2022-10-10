@@ -7,7 +7,8 @@ import torch.nn.functional as F
 from torch import autocast
 
 from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import AttentionBlock, TimestepEmbedSequential, TimestepBlock
+from models.diffusion.unet_diffusion import TimestepEmbedSequential, TimestepBlock, QKVAttentionLegacy
+from models.lucidrains.x_transformers import RelativePositionBias
 from trainer.networks import register_model
 from utils.util import checkpoint
 
@@ -17,6 +18,52 @@ def is_latent(t):
 
 def is_sequence(t):
     return t.dtype == torch.long
+
+
+class AttentionBlock(nn.Module):
+    """
+    An attention block that allows spatial positions to attend to each other.
+
+    Originally ported from here, but adapted to the N-d case.
+    https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/models/unet.py#L66.
+    """
+
+    def __init__(
+        self,
+        channels,
+        num_heads=1,
+        num_head_channels=-1,
+        do_checkpoint=True,
+        relative_pos_embeddings=False,
+    ):
+        super().__init__()
+        self.channels = channels
+        self.do_checkpoint = do_checkpoint
+        if num_head_channels == -1:
+            self.num_heads = num_heads
+        else:
+            assert (
+                channels % num_head_channels == 0
+            ), f"q,k,v channels {channels} is not divisible by num_head_channels {num_head_channels}"
+            self.num_heads = channels // num_head_channels
+        self.norm = normalization(channels)
+        self.qkv = nn.Conv1d(channels, channels * 3, 1)
+        # split heads before split qkv
+        self.attention = QKVAttentionLegacy(self.num_heads)
+
+        self.proj_out = zero_module(nn.Conv1d(channels, channels, 1))
+        if relative_pos_embeddings:
+            self.relative_pos_embeddings = RelativePositionBias(scale=(channels // self.num_heads) ** .5, causal=False, heads=num_heads, num_buckets=32, max_distance=64)
+        else:
+            self.relative_pos_embeddings = None
+
+    def forward(self, x, mask=None):
+        b, c, *spatial = x.shape
+        x = x.reshape(b, c, -1)
+        qkv = self.qkv(self.norm(x))
+        h = self.attention(qkv, mask, self.relative_pos_embeddings)
+        h = self.proj_out(h)
+        return (x + h).reshape(b, c, *spatial)
 
 
 class ResBlock(TimestepBlock):
@@ -336,7 +383,7 @@ if __name__ == '__main__':
         start = time()
         model = model.cuda().eval()
         ti = model.timestep_independent(proj, clip, clip.shape[2], False)
-        for k in range(100):
+        for k in range(1000):
             model(clip, ts, precomputed_aligned_embeddings=ti)
         print(f"Elapsed: {time()-start}")
 

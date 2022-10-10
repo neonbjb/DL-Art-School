@@ -11,7 +11,7 @@ from utils.util import opt_get, load_model_from_config, pad_or_truncate
 
 MEL_MIN = -11.512925148010254
 TACOTRON_MEL_MAX = 2.3143386840820312
-TORCH_MEL_MAX = 4.82
+TORCH_MEL_MAX = 4.82  # FYI: this STILL isn't assertive enough...
 
 def normalize_torch_mel(mel):
     return 2 * ((mel - MEL_MIN) / (TORCH_MEL_MAX - MEL_MIN)) - 1

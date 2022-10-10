@@ -19,8 +19,8 @@ class SubBlock(nn.Module):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         self.attn = AttentionBlock(inp_dim, out_channels=contraction_dim, num_heads=heads)
-        self.register_buffer('mask', build_local_attention_mask(n=4000, l=64), persistent=False)
-        self.pos_bias = RelativeQKBias(l=64)
+        self.register_buffer('mask', build_local_attention_mask(n=6000, l=64), persistent=False)
+        self.pos_bias = RelativeQKBias(l=64, max_positions=6000)
         ff_contract = contraction_dim//2
         self.ff1 = nn.Sequential(nn.Conv1d(inp_dim+contraction_dim, ff_contract, kernel_size=1),
                                  nn.GroupNorm(8, ff_contract),

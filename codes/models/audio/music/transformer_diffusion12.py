@@ -609,7 +609,6 @@ def test_vqvae_model():
     o = model(clip, ts, cond)
     pg = model.get_grad_norm_parameter_groups()
 
-    """
     with torch.no_grad():
         proj = torch.randn(2, 100, 512).cuda()
         clip = clip.cuda()
@@ -618,10 +617,9 @@ def test_vqvae_model():
         model = model.cuda().eval()
         model.diff.enable_fp16 = True
         ti = model.diff.timestep_independent(proj, clip.shape[2])
-        for k in range(100):
+        for k in range(1000):
             model.diff(clip, ts, precomputed_code_embeddings=ti)
         print(f"Elapsed: {time()-start}")
-        """
 
 
 def test_multi_vqvae_model():
@@ -690,4 +688,5 @@ def extract_diff(in_f, out_f, remove_head=False):
 if __name__ == '__main__':
     #extract_diff('X:\\dlas\\experiments\\train_music_diffusion_tfd12\\models\\41000_generator_ema.pth', 'extracted_diff.pth', True)
     #test_cheater_model()
-    extract_diff('X:\\dlas\experiments\\train_music_diffusion_tfd_cheater_from_scratch\\models\\56500_generator_ema.pth', 'extracted.pth', remove_head=True)
+    test_vqvae_model()
+    #extract_diff('X:\\dlas\experiments\\train_music_diffusion_tfd_cheater_from_scratch\\models\\56500_generator_ema.pth', 'extracted.pth', remove_head=True)

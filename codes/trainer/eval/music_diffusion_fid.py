@@ -137,8 +137,8 @@ class MusicDiffusionFid(evaluator.Evaluator):
         #    s = q9.clamp(1, 9999999999)
         #    x = x.clamp(-s, s) / s
         #    return x
-        perp = self.diffuser.p_sample_loop_for_log_perplexity(self.model, mel_norm,
-                                                              model_kwargs = {'truth_mel': mel_norm})
+        #perp = self.diffuser.p_sample_loop_for_log_perplexity(self.model, mel_norm,
+        #                                                      model_kwargs = {'truth_mel': mel_norm})
 
         sampler = self.diffuser.ddim_sample_loop if self.ddim else self.diffuser.p_sample_loop
         gen_mel = sampler(self.model, mel_norm.shape, model_kwargs={'truth_mel': mel_norm})
@@ -155,7 +155,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
                                               model_kwargs={'codes': mel})
         real_wav = pixel_shuffle_1d(real_wav, 16)
 
-        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate, perp
+        return gen_wav, real_wav.squeeze(0), gen_mel, mel_norm, sample_rate, torch.tensor([0])
 
     def perform_reconstruction_from_cheater_gen(self, audio, sample_rate=22050):
         audio = audio.unsqueeze(0)
@@ -303,7 +303,7 @@ class MusicDiffusionFid(evaluator.Evaluator):
             gen_projections = torch.stack(gen_projections, dim=0)
             real_projections = torch.stack(real_projections, dim=0)
             frechet_distance = torch.tensor(self.compute_frechet_distance(gen_projections, real_projections), device=self.env['device'])
-            perplexity = torch.stack(perplexities, dim=0).mean()
+            perplexity = torch.stack(perplexities, dim=0).float().mean()
 
             if distributed.is_initialized() and distributed.get_world_size() > 1:
                 distributed.all_reduce(frechet_distance)
@@ -338,16 +338,17 @@ if __name__ == '__main__':
     # For TFD+cheater trainer
     diffusion = load_model_from_config('X:\\dlas\\experiments\\train_music_diffusion_tfd_and_cheater.yml', 'generator',
                                        also_load_savepoint=False, strict_load=False,
-                                       load_path='X:\\dlas\\experiments\\train_music_diffusion_tfd14_and_cheater_g2\\models\\120000_generator_ema.pth'
+                                       load_path='X:\\dlas\\experiments\\tfd14_and_cheater.pth'
                                        ).cuda()
-    opt_eval = {'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
+    opt_eval = {#'path': 'Y:\\split\\yt-music-eval',  # eval music, mostly electronica. :)
                 #'path': 'E:\\music_eval',  # this is music from the training dataset, including a lot more variety.
+                'path': 'Y:\\separated\\tfd14_test',
                 'diffusion_steps': 256,
-                'conditioning_free': False, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': True,
+                'conditioning_free': True, 'conditioning_free_k': 1, 'use_ddim': False, 'clip_audio': True,
                 'diffusion_schedule': 'cosine', 'diffusion_type': 'from_codes_quant',
     }
 
-    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 13, 'device': 'cuda', 'opt': {}}
+    env = {'rank': 0, 'base_path': 'D:\\tmp\\test_eval_music', 'step': 18, 'device': 'cuda', 'opt': {}}
     eval = MusicDiffusionFid(diffusion, opt_eval, env)
     fds = []
     for i in range(2):
