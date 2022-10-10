@@ -304,7 +304,7 @@ class DiffusionTtsFlat(nn.Module):
         assert precomputed_aligned_embeddings is not None or (aligned_conditioning is not None and conditioning_input is not None)
         assert not (return_code_pred and precomputed_aligned_embeddings is not None)  # These two are mutually exclusive.
 
-        unused_params = [list(self.mel_head.parameters())]
+        unused_params = list(self.mel_head.parameters())
         if conditioning_free:
             code_emb = self.unconditioned_embedding.repeat(x.shape[0], 1, x.shape[-1])
             unused_params.extend(list(self.code_converter.parameters()) + list(self.code_embedding.parameters()))
