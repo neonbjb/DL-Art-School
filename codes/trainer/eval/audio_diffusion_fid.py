@@ -170,8 +170,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
                                                                     torch.tensor([text_codes.shape[-1]], device=mel.device),
                                                                     mel_codes,
                                                                     torch.tensor([mel_codes.shape[-1]*mlc], device=mel.device),
-                                                                    text_first=True, raw_mels=None, return_latent=True,
-                                                                    clip_inputs=False)
+                                                                    text_first=True, raw_mels=None, return_latent=True)
         return auto_latents
 
     def tts9_get_dvae_codes(self, mel, text):
