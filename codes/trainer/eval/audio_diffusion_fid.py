@@ -191,7 +191,7 @@ class AudioDiffusionFid(evaluator.Evaluator):
 
         gen_wav = self.local_modules['vocoder'].inference(gen_mel)
         real_dec = self.local_modules['vocoder'].inference(univnet_mel)
-        return gen_wav.float(), real_dec, SAMPLE_RATE
+        return gen_wav.float(), real_dec, gen_mel, univnet_mel, SAMPLE_RATE
 
     def perform_diffusion_ctc(self, audio, codes, text):
         SAMPLE_RATE = 24000
